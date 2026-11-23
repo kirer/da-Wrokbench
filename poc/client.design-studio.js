@@ -11911,15 +11911,19 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         scope.effect(() => ut.register(pickRule), 'dsh-design-studio: chips in messages')
         scope.effect(() => pickCard(t), 'dsh-design-studio: chip card')
       })
+      // 桌面 profile 里可能同时装了独立的 dsh-design-studio。同一个 key 在同一
+      // priority 注册会被 DSH 拒绝并让整个画布挂载失败；内嵌副本降到 110，
+      // 由独立插件（100）优先渲染，没有独立插件时内嵌副本照常生效。
       ctx.effect(() => ctx.slots.inject('conversation.user.text.node', () => ctx.slots.register({
         name: 'conversation.user.text.node',
         key: 'ddp-pick',
-        priority: 100,
+        priority: EMBED === null ? 100 : 110,
       }, ({ node }) => { const c = chipOf(node.data.text, t); return h('span', { className: 'ddp-pickpill', 'data-pick': node.data.text, 'data-i': c ? c.i : 'pick' }, h('span', null, c ? c.label : t('chipOne'))) })), 'dsh-design-studio: chips in messages')
 
       ctx.effect(() => ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
         name: 'conversation.session.header.utilities',
         id: 'dsh-design-studio',
+        priority: EMBED === null ? 0 : 1,
         order: -10,
         locale: NS,
         inject: (sessionId) => ({ sid: sessionId, t, open }),

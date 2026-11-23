@@ -1,6 +1,6 @@
 {
   "name": "dsh-workbench",
-  "version": "0.0.1-poc",
+  "version": "0.0.1-poc.3",
   "private": true,
   "type": "module",
   "description": "DSH 部门研发工作台 POC：Rust 团队服务端（SQLite/JWT/钉钉）、登录与首次引导、多迭代、多人会签、评审/排期/范围、设计/开发/测试/发布链路、技能管理、通知事件、右栏需求 + 内嵌 Design Studio 画布。",

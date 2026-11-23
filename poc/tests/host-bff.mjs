@@ -141,10 +141,13 @@ try {
   const anonymous = await jsonFetch('/dsh-workbench/api/state')
   check('未登录访问 state 返回 401', anonymous.status === 401, `HTTP ${anonymous.status}`)
 
-  const lisiLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', body: { userId: 'lisi' } })
+  const browserLoginHeaders = { origin: bff.base, 'sec-fetch-site': 'same-origin' }
+  const lisiLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', headers: browserLoginHeaders, body: { userId: 'lisi' } })
   check('mock 登录成功', lisiLogin.status === 200 && lisiLogin.data?.user?.id === 'lisi', lisiLogin.text)
   check('登录 Cookie 为 HttpOnly + SameSite=Lax', /HttpOnly/.test(lisiLogin.setCookie) && /SameSite=Lax/.test(lisiLogin.setCookie), lisiLogin.setCookie)
-  check('登录响应不回传 JWT', lisiLogin.data?.token === undefined, lisiLogin.text)
+  check('浏览器登录响应不回传 JWT', lisiLogin.data?.token === undefined, lisiLogin.text)
+  const desktopLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', body: { userId: 'lisi' } })
+  check('桌面端登录响应带回 JWT', typeof desktopLogin.data?.token === 'string' && desktopLogin.data.token !== '', desktopLogin.text)
   const lisiCookie = lisiLogin.cookie
 
   const lisiState = await jsonFetch('/dsh-workbench/api/state', { cookie: lisiCookie })
@@ -163,7 +166,7 @@ try {
   check('认领会话写入本机会话映射', localAfter.users?.lisi?.sessionUsers?.[sessionId] === 'lisi')
   check('local.json 权限为 600', (fs.statSync(mod.__test.localFile()).mode & 0o777) === 0o600)
 
-  const zhangsanLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', body: { userId: 'zhangsan' } })
+  const zhangsanLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', headers: browserLoginHeaders, body: { userId: 'zhangsan' } })
   const crossClaim = await jsonFetch('/dsh-workbench/api/sessions/claim', {
     method: 'POST', cookie: zhangsanLogin.cookie, body: { sessionId }, headers: { origin: bff.base },
   })

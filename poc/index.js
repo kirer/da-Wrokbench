@@ -566,8 +566,14 @@ async function sessionFromRequest(req, local) {
 }
 
 function isDesktopClient(req) {
-  const origin = String(req.headers.origin || '')
+  const origin = req.headers.origin
   const referer = String(req.headers.referer || '')
+  // 桌面壳把 dsh-app://app 的请求代理到本地 host 时会删掉 Origin 和
+  // Sec-Fetch-Site（见 dsh-desktop 的 forwardWebRequest），页面又带
+  // Referrer-Policy: no-referrer，所以桌面请求到这里三个头都没有。
+  // 浏览器同源 POST 一定会带 Origin，因此“没有 Origin”就是桌面端。
+  // 生产环境走钉钉登录，/auth/mock 不可用，不受这条规则影响。
+  if (origin === undefined || origin === '') return true
   return origin === 'dsh-app://app' || origin === 'null' || referer.startsWith('dsh-app://')
 }
 
