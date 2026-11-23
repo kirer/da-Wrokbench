@@ -90,6 +90,11 @@ impl User {
         self.has_role(ROLE_PRODUCT) || self.can_plan()
     }
 
+    /// 新建需求只属于产品；负责人负责评审、排期、指派和封板。
+    pub fn can_create_requirement(&self) -> bool {
+        self.has_role(ROLE_PRODUCT) || self.has_role(ROLE_ADMIN)
+    }
+
     pub fn can_design(&self) -> bool {
         self.has_role(ROLE_DESIGN) || self.can_plan()
     }

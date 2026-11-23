@@ -602,9 +602,9 @@ pub fn create_requirement(
     actor: &User,
     title: &str,
 ) -> Result<(Requirement, Iteration), ApiError> {
-    if !actor.can_product() {
+    if !actor.can_create_requirement() {
         return Err(ApiError::forbidden(format!(
-            "{} 没有创建需求的权限（需要产品/负责人/管理员身份）",
+            "{} 没有创建需求的权限（需要产品/管理员身份）",
             actor.name
         )));
     }

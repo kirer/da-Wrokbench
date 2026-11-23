@@ -167,6 +167,14 @@ try {
   check('local.json 权限为 600', (fs.statSync(mod.__test.localFile()).mode & 0o777) === 0o600)
 
   const zhangsanLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', headers: browserLoginHeaders, body: { userId: 'zhangsan' } })
+  const leadCreate = await jsonFetch('/dsh-workbench/api/requirements', {
+    method: 'POST', cookie: zhangsanLogin.cookie, headers: browserLoginHeaders, body: { title: '负责人不应能建需求' },
+  })
+  check('负责人不能新建需求', leadCreate.status === 403, `HTTP ${leadCreate.status}`)
+  const productCreate = await jsonFetch('/dsh-workbench/api/requirements', {
+    method: 'POST', cookie: lisiCookie, headers: browserLoginHeaders, body: { title: '产品可以新建需求' },
+  })
+  check('产品可以新建需求', productCreate.status === 201, `HTTP ${productCreate.status}`)
   const crossClaim = await jsonFetch('/dsh-workbench/api/sessions/claim', {
     method: 'POST', cookie: zhangsanLogin.cookie, body: { sessionId }, headers: { origin: bff.base },
   })

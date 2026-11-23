@@ -6862,8 +6862,12 @@ window.__ModuleLoader__.load({
       }
 
       const requirements = state.requirements.filter(item => item.iterationId === state.iteration.id)
-      const canCreate = state.currentUser.roles.includes('product') || state.currentUser.roles.includes('lead') || state.currentUser.roles.includes('admin')
-      const canConfig = state.currentUser.roles.includes('lead') || state.currentUser.roles.includes('admin')
+      // 新建迭代是负责人/管理员的动作；新建需求是产品/管理员的动作。
+      // 负责人只做评审、排期、指派和封板，不再显示「新建需求」。
+      const roles = state.currentUser.roles ?? []
+      const canCreateIteration = roles.includes('lead') || roles.includes('admin')
+      const canCreateRequirement = roles.includes('product') || roles.includes('admin')
+      const canConfig = canCreateIteration
       const isAdmin = state.currentUser.roles.includes('admin')
       const selectedRequirement = (state.requirements ?? []).find(item => item.id === selectedRequirementId) ?? null
       const unread = state.unreadNotificationCount ?? (state.notifications ?? []).filter(item => item.read !== true).length
@@ -6941,7 +6945,7 @@ window.__ModuleLoader__.load({
                   onSort: setIterationSort,
                   onOpen: (id) => { void openIteration(id) },
                   onCreate: () => setIterationOpen(true),
-                  canCreate,
+                  canCreate: canCreateIteration,
                 })
               : view === 'iteration'
                 ? h(IterationDetailView, {
@@ -6950,7 +6954,7 @@ window.__ModuleLoader__.load({
                     onBack: () => setView('iterations'),
                     onCreateRequirement: () => setDialogOpen(true),
                     onOpenSettings: () => setIterationManageOpen(true),
-                    canCreate,
+                    canCreate: canCreateRequirement,
                     canConfig,
                     onOpenRequirement: (id) => { void openRequirement(id) },
                     onOpenSession: (sessionId) => openSession(sessionId),
