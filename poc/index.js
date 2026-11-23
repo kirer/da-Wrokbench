@@ -128,6 +128,9 @@ function emptyLocalUser() {
     sessionUsers: {},
     // 已经写过开场白的会话：只在本机记录，避免重复往会话日志里追加消息。
     greetedSessions: {},
+    // 产品原型同步水位：相对路径 -> "size:updatedAt"。原型写在产品本机目录，
+    // 同步成服务端附件后其他角色才看得到，详见 syncOwnPrototypes。
+    prototypeSync: {},
   }
 }
 
@@ -149,6 +152,7 @@ function normalizeLocal(raw) {
         sessionOwners: user.sessionOwners && typeof user.sessionOwners === 'object' ? user.sessionOwners : {},
         sessionUsers: user.sessionUsers && typeof user.sessionUsers === 'object' ? user.sessionUsers : {},
         greetedSessions: user.greetedSessions && typeof user.greetedSessions === 'object' ? user.greetedSessions : {},
+        prototypeSync: user.prototypeSync && typeof user.prototypeSync === 'object' ? user.prototypeSync : {},
       }
     }
   }
@@ -913,12 +917,16 @@ function decorateRequirement(localState, baseDir, state, requirement) {
       workspaceId: mapped?.workspaceId ?? null,
       folderPath: mapped?.folderPath ?? folderPath,
       local: mapped !== undefined,
+      // 同事的会话也能定位（dshSessions 兜底），但「打开右栏」应优先落在自己
+      // 这条会话上，否则会跳到别人的会话里。
+      own: localState.dshSessions?.[mapped?.dshSessionId] !== undefined,
     }
   })
   let primary = null
   if (requirement.primarySessionId) {
     primary = sessions.find(item => item.id === requirement.primarySessionId && item.sessionId) || null
   }
+  if (primary === null) primary = sessions.find(item => item.own && item.sessionId) || null
   if (primary === null) primary = sessions.find(item => item.sessionId) || null
   const decorated = {
     ...requirement,
@@ -952,8 +960,15 @@ function decorateState(data, local, userId) {
 function findMappedRecord(local, userId, dshSessionId) {
   if (typeof dshSessionId !== 'string' || dshSessionId === '') return null
   const user = local.users[userId]
-  if (!user) return null
-  return user.dshSessions?.[dshSessionId] ?? null
+  const own = user?.dshSessions?.[dshSessionId] ?? null
+  if (own !== null) return own
+  // 同事的会话也能读：开发想看看设计会话、测试想看开发会话时，映射在对方名下。
+  // 只借用 recordId 定位需求，路径和附件仍然按当前用户自己的本机目录解析。
+  for (const other of Object.values(local.users)) {
+    const record = other?.dshSessions?.[dshSessionId]
+    if (typeof record === 'string' && record !== '') return record
+  }
+  return null
 }
 
 function findSessionOwner(local, dshSessionId) {
@@ -1119,11 +1134,25 @@ function makeRoute(local, hostCtx = null) {
         if (artifactId !== '') {
           const data = await serverJson(`/artifacts/${encodeURIComponent(artifactId)}`, { token })
           const artifact = data.artifact
-          if (!artifact || artifact.kind !== 'design' || artifact.requirementId !== requirementId) {
-            return json(res, 404, { error: '设计文件不存在或不属于这个需求' })
+          // 测试报告也是需求内的只读交付物，测试右栏要在 iframe 里预览它，
+          // 和设计稿/原型走同一个沙箱路由。
+          const previewableKind = artifact && (
+            artifact.kind === 'design'
+            || artifact.kind === PROTOTYPE_ARTIFACT_KIND
+            || artifact.kind === 'test-report'
+          )
+          if (!previewableKind || artifact.requirementId !== requirementId) {
+            return json(res, 404, { error: '预览文件不存在或不属于这个需求' })
           }
           const content = typeof data.content === 'string' ? data.content : ''
-          const buffer = artifact.encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8')
+          let buffer = artifact.encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8')
+          if (/\.html?$/i.test(String(artifact.name || ''))) {
+            try {
+              buffer = Buffer.from(await inlinePreviewAssets(buffer.toString('utf8'), artifact, token, requirementId), 'utf8')
+            } catch (reason) {
+              console.warn('[dsh-workbench] preview asset inline failed', reason)
+            }
+          }
           return sendDesignPreview(res, buffer, artifact.name, artifact.contentType)
         }
         const relativePath = url.searchParams.get('path') || ''
@@ -1154,6 +1183,65 @@ function makeRoute(local, hostCtx = null) {
           return sendDesignPreview(res, buffer, real, null)
         } catch {
           return json(res, 404, { error: '本机没有这个设计文件' })
+        }
+      }
+
+      // 开发右栏：只读浏览需求目录（各端仓库就在需求目录下）。只列文件名和
+      // 大小，不返回 .git / node_modules / .local 等目录，也不允许越出需求目录。
+      if (req.method === 'GET' && (route === '/requirement-files' || route === '/requirement-file')) {
+        const requirementId = url.searchParams.get('requirementId') || ''
+        const relative = url.searchParams.get('path') || ''
+        if (requirementId === '') return json(res, 400, { error: '缺少需求 ID' })
+        const stateData = await serverJson('/state', { token: session.token })
+        const baseRequirement = (stateData.requirements || []).find(item => item.id === requirementId)
+        if (!baseRequirement) return json(res, 404, { error: '需求不存在' })
+        const baseDir = baseDirFor(local, userId)
+        const folder = folderPathFor(localUser(local, userId), baseDir, stateData, baseRequirement)
+        if (folder === '' || !fs.existsSync(folder)) return json(res, 404, { error: '需求目录不存在' })
+        const target = path.resolve(folder, relative)
+        if (!isInside(folder, target)) return json(res, 403, { error: '路径不在需求目录内' })
+        try {
+          assertNoSymlinkBetween(folder, target)
+          const real = fs.realpathSync(target)
+          const realBase = fs.realpathSync(baseDir)
+          if (!isInside(realBase, real)) return json(res, 403, { error: '路径不在工作台目录内' })
+          if (route === '/requirement-file') {
+            const stat = fs.statSync(real)
+            if (!stat.isFile()) return json(res, 400, { error: '不是文件' })
+            if (stat.size > CODE_PREVIEW_MAX_BYTES) {
+              return json(res, 413, { error: `文件超过 ${Math.round(CODE_PREVIEW_MAX_BYTES / 1000)} KB，不在这里预览` })
+            }
+            return json(res, 200, {
+              path: relative,
+              name: path.basename(real),
+              size: stat.size,
+              content: fs.readFileSync(real, 'utf8'),
+            })
+          }
+          const stat = fs.statSync(real)
+          if (!stat.isDirectory()) return json(res, 400, { error: '不是目录' })
+          const entries = fs.readdirSync(real, { withFileTypes: true })
+            .filter(entry => !CODE_BROWSER_SKIP.has(entry.name))
+            .map((entry) => {
+              const full = path.join(real, entry.name)
+              let size = 0
+              let updatedAt = ''
+              try {
+                const item = fs.statSync(full)
+                size = item.size
+                updatedAt = item.mtime.toISOString()
+              } catch { /* 读不到大小就不显示 */ }
+              return { name: entry.name, dir: entry.isDirectory(), size, updatedAt }
+            })
+            .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1))
+            .slice(0, 500)
+          return json(res, 200, {
+            path: relative,
+            relativePath: path.relative(baseDir, real).split(path.sep).join('/'),
+            entries,
+          })
+        } catch {
+          return json(res, 404, { error: '路径读不到' })
         }
       }
 
@@ -1240,6 +1328,17 @@ function makeRoute(local, hostCtx = null) {
           content: [{ type: 'text', text }],
           source: { kind: 'model', provider: 'dsh-workbench', model: 'workbench-greeting' },
         }
+        // DSH 的会话重放要求 surface 的第一条是受保护的 system/message，否则
+        // 用户第一条消息触发的 system/message 会让整份日志被判为损坏
+        // （SessionFormatError: system/message requires a protected first surface head）。
+        // 手工开场白是 assistant 开头，所以先补一条最小的 system 头；真正完整的
+        // 系统提示词仍由 DSH 在下一个 turn 追加，模型侧只会多一行工作台说明。
+        const surfaceHead = {
+          id: crypto.randomUUID(),
+          role: 'system',
+          content: [{ type: 'text', text: '<workbench_session>研发工作台会话由工作台插件初始化。</workbench_session>' }],
+          source: { kind: 'system-prompt', sections: [] },
+        }
         // 先落盘“尝试过”标记：如果 append 只写进去一半，宁可这次没有开场白，
         // 也不能重试再写一个 turn 1（DSH 重放校验会直接判定会话日志损坏）。
         localState.greetedSessions[dshSessionId] = true
@@ -1253,6 +1352,7 @@ function makeRoute(local, hostCtx = null) {
           live.append([
             ['turn/start', { turn: GREETING_TURN }],
             ['step/start', { turn: GREETING_TURN, step: 1 }],
+            ['system/message', { turn: GREETING_TURN, step: 1, message: surfaceHead }, { surfaceOp: 'append' }],
             ['assistant/message', { turn: GREETING_TURN, step: 1, message, stream: [] }, { surfaceOp: 'append' }],
             ['step/end', { turn: GREETING_TURN, step: 1 }],
             ['turn/end', { turn: GREETING_TURN, reason: { kind: 'completed' } }],
@@ -1270,6 +1370,18 @@ function makeRoute(local, hostCtx = null) {
       if (req.method === 'GET' && route === '/state') {
         ensureBaseDir(local, userId)
         const data = await serverJson('/state', { token: session.token })
+        const localState = localUser(local, userId)
+        const baseDir = baseDirFor(local, userId)
+        // 原型同步失败不影响工作台本身：卡片仍可从服务端附件预览。
+        await syncOwnPrototypes(userId, data, local, localState, baseDir).catch((reason) => {
+          console.warn('[dsh-workbench] prototype sync failed', reason)
+        })
+        await mirrorPrototypesForUser(userId, data, localState, baseDir).catch((reason) => {
+          console.warn('[dsh-workbench] prototype mirror failed', reason)
+        })
+        await syncOwnTestReports(userId, data, local, localState, baseDir).catch((reason) => {
+          console.warn('[dsh-workbench] test report sync failed', reason)
+        })
         return json(res, 200, decorateState(data, local, userId))
       }
 
@@ -1281,7 +1393,14 @@ function makeRoute(local, hostCtx = null) {
         if (!data.requirement) return json(res, 200, { requirement: null })
         const baseDir = baseDirFor(local, userId)
         const stateData = await serverJson('/state', { token: session.token })
-        const requirement = decorateRequirement(localUser(local, userId), baseDir, stateData, data.requirement)
+        const localState = localUser(local, userId)
+        const serverRequirement = (stateData.requirements || []).find(item => item.id === data.requirement.id)
+        if (serverRequirement) {
+          await syncOwnPrototypes(userId, { requirements: [serverRequirement] }, local, localState, baseDir).catch(() => {})
+          await mirrorPrototypesForUser(userId, { requirements: [serverRequirement] }, localState, baseDir).catch(() => {})
+          await syncOwnTestReports(userId, { requirements: [serverRequirement] }, local, localState, baseDir).catch(() => {})
+        }
+        const requirement = decorateRequirement(localState, baseDir, stateData, data.requirement)
         requirement.designFiles = listDesignFiles(requirement.folderPath, baseDir)
         attachWorkingFolders(requirement, baseDir)
         attachDesignScreens(requirement)
@@ -1698,6 +1817,90 @@ const DESIGN_PREVIEW_TYPES = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
+// 设计稿/原型常把样式拆在同目录的 tokens.css / app.css 里。design-preview 是
+// 单文件路由，浏览器按相对路径请求会落到 /dsh-workbench/api/ 下拿不到文件，
+// 预览就成了无样式 HTML。这里把同需求、同目录的本地样式和脚本内联进页面，
+// 只读、只内联同一需求内的文本附件，不碰外部地址。
+const PREVIEW_ASSET_CACHE_TTL_MS = 20_000
+const previewAssetCache = new Map()
+
+async function previewArtifactsFor(requirementId, token) {
+  const cached = previewAssetCache.get(requirementId)
+  if (cached !== undefined && Date.now() - cached.at < PREVIEW_ASSET_CACHE_TTL_MS) {
+    return cached.artifacts
+  }
+  const stateData = await serverJson('/state', { token })
+  const requirement = (stateData.requirements || []).find(item => item.id === requirementId)
+  const artifacts = Array.isArray(requirement?.artifacts) ? requirement.artifacts : []
+  previewAssetCache.set(requirementId, { at: Date.now(), artifacts })
+  return artifacts
+}
+
+function previewAssetRef(dir, ref) {
+  const clean = String(ref || '').trim().split('#')[0].split('?')[0]
+  if (clean === '' || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/)/i.test(clean)) return ''
+  const joined = path.posix.normalize(path.posix.join(dir, clean))
+  if (joined === '' || joined === '..' || joined.startsWith('../')) return ''
+  return joined
+}
+
+async function readPreviewAsset(artifact, token) {
+  const data = await serverJson(`/artifacts/${encodeURIComponent(artifact.id)}`, { token })
+  const content = typeof data.content === 'string' ? data.content : ''
+  if (artifact.encoding === 'base64') return Buffer.from(content, 'base64').toString('utf8')
+  return content
+}
+
+async function inlinePreviewAssets(html, artifact, token, requirementId) {
+  if (!/<link\b[^>]*stylesheet/i.test(html) && !/<script\b[^>]*\bsrc\s*=/i.test(html)) return html
+  let artifacts = []
+  try {
+    artifacts = await previewArtifactsFor(requirementId, token)
+  } catch (reason) {
+    console.warn('[dsh-workbench] preview assets unavailable', reason)
+    return html
+  }
+  const dir = path.posix.dirname(String(artifact.name || '').replace(/\\/g, '/'))
+  const byName = new Map()
+  for (const item of artifacts) {
+    const name = String(item.name || '').replace(/\\/g, '/')
+    if (name !== '' && item.encoding !== 'base64') byName.set(name, item)
+  }
+  const wanted = new Set()
+  const linkRe = /<link\b[^>]*>/gi
+  const scriptRe = /<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>\s*<\/script>/gi
+  let match
+  while ((match = linkRe.exec(html)) !== null) {
+    if (!/\brel\s*=\s*["'][^"']*stylesheet/i.test(match[0])) continue
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(match[0])?.[1] || ''
+    const ref = previewAssetRef(dir, href)
+    if (ref !== '' && byName.has(ref)) wanted.add(ref)
+  }
+  while ((match = scriptRe.exec(html)) !== null) {
+    const ref = previewAssetRef(dir, match[1])
+    if (ref !== '' && byName.has(ref)) wanted.add(ref)
+  }
+  const contents = new Map()
+  await Promise.all([...wanted].map(async (ref) => {
+    try {
+      contents.set(ref, await readPreviewAsset(byName.get(ref), token))
+    } catch (_) { /* 缺文件就保留原标签，页面自己会给出失败提示 */ }
+  }))
+  let out = html.replace(/<link\b[^>]*>/gi, (tag) => {
+    if (!/\brel\s*=\s*["'][^"']*stylesheet/i.test(tag)) return tag
+    const href = /\bhref\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1] || ''
+    const ref = previewAssetRef(dir, href)
+    if (ref === '' || !contents.has(ref)) return tag
+    return `<style data-preview-asset="${ref.replace(/"/g, '&quot;')}">\n${contents.get(ref)}\n</style>`
+  })
+  out = out.replace(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>\s*<\/script>/gi, (tag, src) => {
+    const ref = previewAssetRef(dir, src)
+    if (ref === '' || !contents.has(ref)) return tag
+    return `<script>\n${contents.get(ref)}\n</script>`
+  })
+  return out
+}
+
 function sendDesignPreview(res, buffer, name, declaredType) {
   const ext = path.extname(String(name || '')).toLowerCase()
   const passiveDeclared = new Set([
@@ -1734,6 +1937,13 @@ function sendDesignPreview(res, buffer, name, declaredType) {
 // 交付设计时把本机设计文件正文上传到团队服务端，这样其他设备也能看到同一份
 // 设计稿。单文件限制 1.5 MB，只上传文本类设计资产；失败不阻断交付。
 const DESIGN_UPLOAD_MAX_BYTES = 1_500_000
+// 测试报告是自包含 HTML，内嵌截图后常超过 1.5 MB（S22-002 就是 1.7 MB），
+// 按设计稿的上限同步不上去。服务端文本上限 4 MB，这里留一点余量。
+const TEST_REPORT_MAX_BYTES = 3_900_000
+// 开发右栏只读浏览需求目录时跳过的大型/敏感目录，避免把 node_modules 或
+// .git 整个翻出来，也避免把 .local 凭据显示在界面里。
+const CODE_BROWSER_SKIP = new Set(['.git', 'node_modules', '.local', '.DS_Store', 'dist', 'target', '.next', '.cache'])
+const CODE_PREVIEW_MAX_BYTES = 200_000
 const DESIGN_UPLOAD_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.htm': 'text/html; charset=utf-8',
@@ -1791,6 +2001,210 @@ async function uploadDesignArtifacts(userId, folder, baseDir, requirementId, fil
     }
   }
   return { artifactIds, warnings }
+}
+
+// 产品原型同步：产品同学的原型只写在自己的顶级目录里，评审/设计/开发/测试
+// 的本机没有这些文件，需求全量页就会显示「原型 0 屏」。产品侧把 prototype/
+// 下的文件自动上传成服务端附件（kind=prototype），其他角色的 host 再把最新
+// 版本镜像到自己的 prototype/ 目录；这样原型和设计稿一样全员可见。
+const PROTOTYPE_ARTIFACT_KIND = 'prototype'
+const TEST_REPORT_ARTIFACT_KIND = 'test-report'
+
+async function uploadPrototypeArtifacts(userId, folder, baseDir, requirementId, files) {
+  const uploaded = []
+  const warnings = []
+  if (typeof folder !== 'string' || folder === '' || !Array.isArray(files) || files.length === 0) {
+    return { uploaded, warnings }
+  }
+  let realFolder
+  try {
+    realFolder = fs.realpathSync(folder)
+    const realBase = fs.realpathSync(baseDir)
+    if (!isInside(realBase, realFolder)) {
+      return { uploaded, warnings: ['需求文件夹不在工作台目录内，已跳过原型同步'] }
+    }
+  } catch {
+    return { uploaded, warnings: ['需求文件夹不存在，已跳过原型同步'] }
+  }
+  for (const file of files.slice(0, 30)) {
+    const relativePath = file?.relativePath
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') continue
+    const contentType = DESIGN_UPLOAD_TYPES[path.extname(relativePath).toLowerCase()]
+    if (!contentType) continue
+    try {
+      const target = path.resolve(realFolder, relativePath)
+      assertNoSymlinkBetween(realFolder, target)
+      const real = fs.realpathSync(target)
+      if (!isInside(realFolder, real)) throw new Error('文件不在需求文件夹内')
+      const stat = fs.statSync(real)
+      if (!stat.isFile()) throw new Error('不是普通文件')
+      if (stat.size > DESIGN_UPLOAD_MAX_BYTES) throw new Error('文件超过 1.5 MB')
+      const content = fs.readFileSync(real, 'utf8')
+      // listPrototypeFiles 的 relativePath 已经相对需求目录（含 prototype/），
+      // 再拼一次 PROTOTYPE_DIR 会得到 prototype/prototype/… 的重复前缀。
+      const artifactName = relativePath.split(path.sep).join('/')
+      const result = await serverAs(userId, `/requirements/${encodeURIComponent(requirementId)}/artifacts`, 'POST', {
+        name: artifactName.startsWith(`${PROTOTYPE_DIR}/`) ? artifactName : `${PROTOTYPE_DIR}/${artifactName}`,
+        contentType,
+        content,
+        kind: PROTOTYPE_ARTIFACT_KIND,
+      })
+      if (result?.artifact?.id) {
+        uploaded.push({ relativePath, stamp: `${file.size}:${file.updatedAt}`, artifact: result.artifact })
+      }
+    } catch (reason) {
+      warnings.push(`${relativePath}：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  }
+  return { uploaded, warnings }
+}
+
+// 只有需求的产品负责人本机有原型文件；其他人的 /state 不该触发上传。
+async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
+  const requirements = Array.isArray(data.requirements) ? data.requirements : []
+  if (localState.prototypeSync === undefined || localState.prototypeSync === null) localState.prototypeSync = {}
+  let dirty = false
+  for (const requirement of requirements) {
+    if (requirement.ownerId !== userId) continue
+    let folder = ''
+    try { folder = folderPathFor(localState, baseDir, data, requirement) } catch { continue }
+    if (folder === '' || !fs.existsSync(folder)) continue
+    const files = listPrototypeFiles(folder, baseDir)
+    if (files.length === 0) continue
+    const sync = localState.prototypeSync[requirement.id] ?? {}
+    const pending = files.filter(file => sync[file.relativePath] !== `${file.size}:${file.updatedAt}`)
+    if (pending.length === 0) continue
+    const result = await uploadPrototypeArtifacts(userId, folder, baseDir, requirement.id, pending)
+    for (const item of result.uploaded) {
+      sync[item.relativePath] = item.stamp
+      if (Array.isArray(requirement.artifacts)) requirement.artifacts.push(item.artifact)
+      else requirement.artifacts = [item.artifact]
+    }
+    localState.prototypeSync[requirement.id] = sync
+    dirty = true
+  }
+  if (dirty) saveLocal(local)
+}
+
+// 测试报告和原型一样只存在测试同学本机。测试右栏要把报告给产品和负责人看，
+// 所以在测试同学的 /state 里把 evidence/TEST-REPORT.html 同步成服务端附件。
+// 只同步本人跑过测试的需求，其他需求不会把无关文件传上去。
+function listTestReportFiles(folderPath) {
+  const evidenceDir = path.join(folderPath, 'evidence')
+  return listHtmlFiles(evidenceDir, folderPath, folderPath)
+    .filter(file => /^TEST-REPORT\.html?$/i.test(file.name))
+}
+
+async function uploadTestReportArtifacts(userId, folder, baseDir, requirementId, files) {
+  const uploaded = []
+  const warnings = []
+  let realFolder
+  try {
+    realFolder = fs.realpathSync(folder)
+    const realBase = fs.realpathSync(baseDir)
+    if (!isInside(realBase, realFolder)) return { uploaded, warnings: ['需求文件夹不在工作台目录内，已跳过测试报告同步'] }
+  } catch {
+    return { uploaded, warnings: ['需求文件夹不存在，已跳过测试报告同步'] }
+  }
+  for (const file of files.slice(0, 4)) {
+    const relativePath = file?.relativePath
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') continue
+    const contentType = DESIGN_UPLOAD_TYPES[path.extname(relativePath).toLowerCase()]
+    if (!contentType) continue
+    try {
+      const target = path.resolve(realFolder, relativePath)
+      assertNoSymlinkBetween(realFolder, target)
+      const real = fs.realpathSync(target)
+      if (!isInside(realFolder, real)) throw new Error('文件不在需求文件夹内')
+      const stat = fs.statSync(real)
+      if (!stat.isFile()) throw new Error('不是普通文件')
+      if (stat.size > TEST_REPORT_MAX_BYTES) throw new Error('文件超过 3.9 MB')
+      const content = fs.readFileSync(real, 'utf8')
+      const result = await serverAs(userId, `/requirements/${encodeURIComponent(requirementId)}/artifacts`, 'POST', {
+        name: relativePath.split(path.sep).join('/'),
+        contentType,
+        content,
+        kind: TEST_REPORT_ARTIFACT_KIND,
+      })
+      if (result?.artifact?.id) uploaded.push({ relativePath, stamp: `${file.size}:${file.updatedAt}`, artifact: result.artifact })
+    } catch (reason) {
+      warnings.push(`${relativePath}：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  }
+  return { uploaded, warnings }
+}
+
+async function syncOwnTestReports(userId, data, local, localState, baseDir) {
+  const requirements = Array.isArray(data.requirements) ? data.requirements : []
+  if (localState.testSync === undefined || localState.testSync === null) localState.testSync = {}
+  let dirty = false
+  for (const requirement of requirements) {
+    // 冻结/发布之后服务端不再接受新附件，测试报告只能赶在冻结前同步；
+    // 这里跳过能避免每次 /state 都重试一轮注定失败的请求。
+    if (requirement.status === 'frozen' || requirement.status === 'released') continue
+    const runs = Array.isArray(requirement.testRuns) ? requirement.testRuns : []
+    if (!runs.some(run => run.by === userId)) continue
+    let folder = ''
+    try { folder = folderPathFor(localState, baseDir, data, requirement) } catch { continue }
+    if (folder === '' || !fs.existsSync(folder)) continue
+    const files = listTestReportFiles(folder)
+    if (files.length === 0) continue
+    const sync = localState.testSync[requirement.id] ?? {}
+    const pending = files.filter(file => sync[file.relativePath] !== `${file.size}:${file.updatedAt}`)
+    if (pending.length === 0) continue
+    const result = await uploadTestReportArtifacts(userId, folder, baseDir, requirement.id, pending)
+    if (result.warnings.length > 0) console.warn('[dsh-workbench] 测试报告同步跳过部分文件', result.warnings)
+    for (const item of result.uploaded) {
+      sync[item.relativePath] = item.stamp
+      if (Array.isArray(requirement.artifacts)) requirement.artifacts.push(item.artifact)
+      else requirement.artifacts = [item.artifact]
+    }
+    localState.testSync[requirement.id] = sync
+    dirty = true
+  }
+  if (dirty) saveLocal(local)
+}
+
+// 非产品角色从服务端取最新原型附件，落到自己的 prototype/ 目录，右栏画布和
+// 卡片都按本机文件工作。只写缺失或大小不同的文件，不删多余文件。
+async function mirrorPrototypesForUser(userId, data, localState, baseDir) {
+  const requirements = Array.isArray(data.requirements) ? data.requirements : []
+  for (const requirement of requirements) {
+    if (requirement.ownerId === userId) continue
+    const artifacts = (requirement.artifacts || []).filter(artifact =>
+      artifact.kind === PROTOTYPE_ARTIFACT_KIND
+      && typeof artifact.name === 'string'
+      && /\.html?$/i.test(artifact.name)
+      && path.posix.basename(artifact.name) !== '')
+    if (artifacts.length === 0) continue
+    let folder = ''
+    try { folder = folderPathFor(localState, baseDir, data, requirement) } catch { continue }
+    if (folder === '') continue
+    const latest = new Map()
+    for (const artifact of artifacts) latest.set(path.posix.basename(artifact.name), artifact)
+    for (const [name, artifact] of latest) {
+      if (name.includes('/') || name.includes('\\') || name.startsWith('.')) continue
+      const dir = path.join(folder, PROTOTYPE_DIR)
+      const target = path.join(dir, name)
+      if (!isInside(folder, target)) continue
+      try {
+        if (fs.existsSync(target)) {
+          const stat = fs.statSync(target)
+          if (stat.isFile() && stat.size === artifact.size) continue
+        }
+        const result = await serverAs(userId, `/artifacts/${encodeURIComponent(artifact.id)}`)
+        const content = result?.content
+        if (typeof content !== 'string') continue
+        assertNoSymlinkBetween(folder, dir)
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+        fs.writeFileSync(
+          target,
+          artifact.encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8'),
+          { mode: 0o600 },
+        )
+      } catch { /* 单个文件失败不阻断其它原型同步 */ }
+    }
+  }
 }
 
 function requirementIdForAction(local, actorId, args, exec) {
@@ -1942,8 +2356,9 @@ function registerTools(ctx, local) {
           + `已有原型（${prototypes.length}，prototype/ 只作为需求参考，不参与设计交付）：${prototypeText}。\n`
           + `已有设计文件（${files.length}）：${fileText}。\n`
           + '开始设计：先加载 wb-ui-design 技能；设计稿写进这条需求的 design/ 目录（一屏一个 HTML 文件），'
-          + '不要覆盖 prototype/ 里的需求原型；'
-          + '完成后调用 wb_preview_page 打开第一屏，并用 wb_check_design 自查；交付时调用 workbench_deliver_design。',
+          + '不要覆盖 prototype/ 里的需求原型。右侧「设计」面板会自动跟随 design/ 的文件刷新；'
+          + '不要调用 wb_preview_page / wb_check_design / wb_look_design，也不要打开 Design Studio 的设计台。'
+          + '交付时调用 workbench_deliver_design。',
         )
       },
     ))
@@ -2395,10 +2810,21 @@ const SKILLS = [
       '   - 设计会话里做高保真 → 做**设计稿**：加载 `wb-ui-design` 技能，一屏一个 HTML 写进 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
       '3. 做设计稿且设计未认领、当前身份是设计时，调用 `workbench_claim_design`。',
       '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名不带序号，一屏一个语义化名字。',
-      '5. 写完第一屏就调用 `wb_preview_page` 打开它（右侧画布会实时显示），之后改文件自动刷新。',
-      '6. 设计稿用 `wb_check_design` 在真实尺寸下自查，需要真实截图时用 `wb_look_design`；最多三轮测量-修复。',
+      '5. 不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开 Design Studio 的「设计台」：工作台的「需求」面板会自动把 prototype/ 里的页面显示成原型画布，「设计」面板会自动把 design/ 里的页面显示成设计画布，文件写完自动刷新。wb-ui-design 技能里要求 preview / check 的步骤在本工作台里跳过。',
+      '6. 需要视觉自查时按 ui-design 技能的「自查」清单读源文件检查；最多三轮。',
       '7. 只汇报改动文件、取舍和剩余问题；不要编造原型或设计状态。',
       '8. 设计稿完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
+      '',
+      '## 产品原型（需求会话）的低保真规则',
+      '- 原型是给团队看信息结构、流程和状态的，不是成品 UI。白底、1px 深灰边框、浅灰填充、系统字体，只用黑白灰。',
+      '- 正文优先用灰色占位条或 XXXX，不要写满真实业务长文案；不要品牌色、照片、图标库、阴影、渐变、精致圆角、插画。',
+      '- 每屏顶部标注「需求编号 · 低保真原型 序号/总数」和页面名；页面内用 4-5 个编号标注关键交互。',
+      '- 单文件、内联 CSS/JS，不引用外部资源；桌面按 1440 宽设计；不要写绝对路径。',
+      '- 只写 prototype/，不要写 design/，不要调用交付工具。',
+      '',
+      '## 高保真设计（设计会话）',
+      '- 按需求文档和 prototype/ 的信息结构做 design/，一屏一个 HTML；使用真实中文文案、贴近业务的数据、明确的层级/留白/状态/操作。',
+      '- 不引用外部图片、字体或图标库；需要图片时用内联 SVG 或 data URL。',
       '',
       '页面文案用中文（除非需求明确是海外业务）；内容紧扣需求范围和平台。',
     ].join('\n'),

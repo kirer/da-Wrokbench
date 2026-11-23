@@ -3064,6 +3064,9 @@ pub fn add_artifact(
     check_not_creating(&snap.requirements[index], "上传附件")?;
     let kind = match input.kind.trim() {
         "design" => "design",
+        // 产品原型由产品本机自动同步成附件：原型和设计稿一样要对评审/设计/
+        // 开发/测试可见，不能退化成普通附件。
+        "prototype" => "prototype",
         "test-report" => "test-report",
         _ => "attachment",
     };

@@ -33,6 +33,10 @@ window.__ModuleLoader__.load({
     const TAB_KIND = 'workbench-requirement'
     const DESIGN_TAB_ID = 'workbench-design'
     const DESIGN_TAB_KIND = 'workbench-design'
+    const CODE_TAB_ID = 'workbench-code'
+    const CODE_TAB_KIND = 'workbench-code'
+    const TEST_TAB_ID = 'workbench-test'
+    const TEST_TAB_KIND = 'workbench-test'
     const API = '/dsh-workbench/api/'
     // 桌面端 dsh-app://app 下 Cookie 可能不持久，登录时把 token 存进 localStorage，
     // 之后所有请求带 Authorization: Bearer，服务端两者都接受。
@@ -1073,6 +1077,9 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .endcard2 .risk { font-size: 12px; color: var(--amber); display: flex; align-items: center; gap: 5px; }
 .dsh-wb-design .endcard2 .foot { display: flex; align-items: center; gap: 8px; border-top: 1px dashed var(--line); padding-top: 9px; margin-top: 1px; }
 .dsh-wb-design .endcard2 .foot .upd { font-size: 12px; color: var(--text-3); margin-left: auto; }
+.dsh-wb-design .dsh-wb-mrlink { display: inline-flex; align-items: center; gap: 3px; color: var(--primary); font-size: 12px; text-decoration: none; }
+.dsh-wb-design .dsh-wb-mrlink:hover { text-decoration: underline; }
+.dsh-wb-design .dsh-wb-branch { font-family: var(--font-mono,ui-monospace,SFMono-Regular,monospace); font-size: 11px; color: var(--text-3); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsh-wb-design .narep { border: 1px dashed var(--line-2); border-radius: var(--r-md); padding: 11px 13px; font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 8px; }
 .dsh-wb-design .narep svg { width: 14px; height: 14px; }
 .dsh-wb-design .ob { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 40px 24px; overflow: auto; }
@@ -1140,10 +1147,20 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .shot3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .dsh-wb-design .shot { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
 .dsh-wb-design .shot .img { height: 60px; background: linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 16px, linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%, var(--surface-2); display: flex; align-items: center; justify-content: center; }
+.dsh-wb-design .shot .img.is-live { position: relative; display: block; height: 78px; overflow: hidden; background: #fff; }
+.dsh-wb-design .shot .img.is-live img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.dsh-wb-design .shot .img .dsh-wb-shot-frame { position: absolute; inset: 0; overflow: hidden; }
+.dsh-wb-design .shot .img .dsh-wb-shot-frame iframe { display: block; border: 0; background: #fff; transform-origin: top left; pointer-events: none; }
+.dsh-wb-design .shot .shot-open { position: absolute; inset: 0; z-index: 2; display: block; }
 .dsh-wb-design .shot .img .wf { width: 48px; height: 36px; border: 1px solid var(--line-3); border-radius: 4px; background: var(--surface); display: flex; flex-direction: column; gap: 3px; padding: 5px; }
 .dsh-wb-design .shot .img .wf i { height: 4px; background: var(--line-3); border-radius: 2px; display: block; }
 .dsh-wb-design .shot .img .wf i:first-child { width: 50%; height: 6px; background: var(--primary-line); }
 .dsh-wb-design .shot .cap { padding: 5px 7px; font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 5px; border-top: 1px solid var(--line); }
+.dsh-wb-design .shot .cap .shot-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-wb-design .shot .cap .shot-link { flex: none; margin-left: auto; color: var(--primary); font-size: 11px; text-decoration: none; }
+.dsh-wb-design .shot .cap .shot-link:hover { text-decoration: underline; }
+.dsh-wb-design .shot .shot-note { padding: 0 7px 7px; font-size: 11px; line-height: 1.45; color: var(--text-3); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.dsh-wb-design a.btn { text-decoration: none; }
 .dsh-wb-design .vline { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
 .dsh-wb-design .vline:last-child { border-bottom: 0; }
 .dsh-wb-design .vline .v { font-family: var(--font-mono); color: var(--text-2); width: 26px; }
@@ -1541,6 +1558,96 @@ window.__ModuleLoader__.load({
         h('use', { href: `#i-${name}` }))
     }
 
+    // 需求正文允许写 Markdown：标题、段落、列表、粗体、行内代码、链接、引用、
+    // 代码块。只生成 React 节点、不拼 innerHTML，避免把需求文档当 HTML 执行。
+    function markdownInline(text, keyPrefix) {
+      const nodes = []
+      const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g
+      let last = 0
+      let index = 0
+      let match
+      while ((match = pattern.exec(text)) !== null) {
+        if (match.index > last) nodes.push(text.slice(last, match.index))
+        if (match[1] !== undefined) nodes.push(h('strong', { key: `${keyPrefix}-s${index++}` }, match[1]))
+        else if (match[2] !== undefined) nodes.push(h('code', { key: `${keyPrefix}-c${index++}` }, match[2]))
+        else nodes.push(h('a', { key: `${keyPrefix}-a${index++}`, href: match[4], target: '_blank', rel: 'noreferrer noopener' }, match[3]))
+        last = pattern.lastIndex
+      }
+      if (last < text.length) nodes.push(text.slice(last))
+      return nodes
+    }
+
+    function markdownBlocks(text) {
+      const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n')
+      const blocks = []
+      let index = 0
+      let key = 0
+      while (index < lines.length) {
+        const line = lines[index]
+        if (/^\s*$/.test(line)) { index += 1; continue }
+        if (/^\s*```/.test(line)) {
+          const code = []
+          index += 1
+          while (index < lines.length && !/^\s*```/.test(lines[index])) { code.push(lines[index]); index += 1 }
+          index += 1
+          blocks.push(h('pre', { key: `md-${key++}`, className: 'dsh-wb-md-pre' }, h('code', null, code.join('\n'))))
+          continue
+        }
+        const heading = /^(#{1,6})\s+(.*)$/.exec(line)
+        if (heading) {
+          // 文档嵌在卡片里，标题降两级，避免 # 比卡片标题还大。
+          const level = Math.min(6, heading[1].length + 2)
+          blocks.push(h(`h${level}`, { key: `md-${key++}` }, markdownInline(heading[2].trim(), `h${key}`)))
+          index += 1
+          continue
+        }
+        if (/^\s*>\s?/.test(line)) {
+          const quote = []
+          while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
+            quote.push(lines[index].replace(/^\s*>\s?/, ''))
+            index += 1
+          }
+          blocks.push(h('blockquote', { key: `md-${key++}` }, markdownInline(quote.join(' '), `q${key}`)))
+          continue
+        }
+        const ordered = /^\s*\d+[.)]\s+/.test(line)
+        const unordered = /^\s*[-*+]\s+/.test(line)
+        if (ordered || unordered) {
+          const items = []
+          const itemPattern = ordered ? /^\s*\d+[.)]\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/
+          while (index < lines.length && itemPattern.test(lines[index])) {
+            items.push(h('li', { key: `li-${key++}` }, markdownInline(lines[index].match(itemPattern)[1], `li${key}`)))
+            index += 1
+          }
+          blocks.push(h(ordered ? 'ol' : 'ul', { key: `md-${key++}` }, ...items))
+          continue
+        }
+        const paragraph = []
+        while (index < lines.length
+          && !/^\s*$/.test(lines[index])
+          && !/^(#{1,6})\s+/.test(lines[index])
+          && !/^\s*```/.test(lines[index])
+          && !/^\s*>\s?/.test(lines[index])
+          && !/^\s*\d+[.)]\s+/.test(lines[index])
+          && !/^\s*[-*+]\s+/.test(lines[index])) {
+          paragraph.push(lines[index].trim())
+          index += 1
+        }
+        const children = []
+        paragraph.forEach((part, order) => {
+          if (order > 0) children.push(h('br', { key: `br-${key++}` }))
+          children.push(...markdownInline(part, `p${key}-${order}`))
+        })
+        blocks.push(h('p', { key: `md-${key++}` }, ...children))
+      }
+      return blocks
+    }
+
+    function MarkdownText({ text, className = '' }) {
+      if (String(text ?? '').trim() === '') return null
+      return h('div', { className: `dsh-wb-md ${className}`.trim() }, markdownBlocks(text))
+    }
+
     function ensureDesignIcons() {
       if (typeof document === 'undefined') return
       if (document.querySelector('div[data-dsh-workbench-icons]') !== null) return
@@ -1786,6 +1893,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-plan b{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-weight:500;color:var(--dsw-alias-label-primary)}
 .dsh-wb-iterlabel{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dsw-alias-label-tertiary)}
 .dsh-wb-dialog textarea.dsh-wb-input{height:64px;padding:7px 10px;resize:vertical;line-height:1.5}
+.dsh-wb-dialog textarea.dsh-wb-brief{margin-top:10px;height:112px;font-size:12px}
 .dsh-wb-poc{border:1px dashed var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);padding:10px 11px;margin-top:14px;background:var(--dsw-alias-bg-layer-2)}
 .dsh-wb-poc-h{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:650;color:var(--dsw-alias-label-secondary);margin-bottom:8px}
 .dsh-wb-poc-h .dsh-wb-mock{height:18px;font-size:9px}
@@ -1985,8 +2093,122 @@ window.__ModuleLoader__.load({
 .dsh-wb-gallery-caption{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;padding:6px 10px;border-top:1px solid var(--dsw-alias-border-l1);font-size:10.5px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-bg-layer-1)}
 .dsh-wb-gallery-caption span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @container (max-width: 420px){.dsh-wb-gallery-list{width:150px}}
-.dsh-wb-canvas-pane{position:relative}
+.dsh-wb-canvas-pane{position:relative;display:flex;flex-direction:column;min-height:0}
 .dsh-wb-canvas-content{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+.dsh-wb-req-brief{flex:none;max-height:34vh;overflow:auto;padding:9px 12px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);font-size:12px;line-height:1.6}
+.dsh-wb-header-actions{display:flex;align-items:center;gap:2px}
+.dsh-wb-header-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.dsh-wb-header-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
+.dsh-wb-header-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4b7bf5);outline-offset:1px}
+.dsh-wb-readonly{flex:1;min-height:0;overflow:auto;padding:0 12px 16px;background:var(--dsw-alias-bg-base)}
+.dsh-wb-readonly-banner{display:flex;align-items:center;gap:6px;margin:8px 0 10px;padding:7px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1,transparent);font-size:11px;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-readonly-list{display:flex;flex-direction:column;gap:14px}
+.dsh-wb-readonly-shot{display:flex;flex-direction:column;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;overflow:hidden;background:var(--dsw-alias-bg-layer-1,#fff)}
+.dsh-wb-readonly-head{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.dsh-wb-readonly-name{font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary);font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace)}
+.dsh-wb-readonly-note{font-size:11px;line-height:1.5;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-readonly-shot iframe{width:100%;height:70vh;min-height:420px;border:0;background:#fff}
+.dsh-wb-readonly-title{display:flex;align-items:center;gap:8px;min-width:0}
+.dsh-wb-readonly-quote{margin-left:auto;flex:none}
+.dsh-wb-req-brief-quote{margin-left:auto;flex:none}
+.dsh-wb-draftimg{display:inline-flex;align-items:center}
+.dsh-wb-draftimg-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.dsh-wb-draftimg-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
+.dsh-wb-draftimg-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4b7bf5);outline-offset:1px}
+.dsh-wb-code{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--dsw-alias-bg-base)}
+.dsh-wb-code-head{flex:none;display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.dsh-wb-code-title{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dsh-wb-code-refresh{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.dsh-wb-code-refresh:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
+.dsh-wb-code-refresh:disabled{opacity:.45;cursor:default}
+.dsh-wb-code-folder{font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:10px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsh-wb-code-tasks{flex:none;display:flex;flex-direction:column;gap:5px;padding:7px 12px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1,transparent)}
+.dsh-wb-code-task{border:1px solid var(--dsw-alias-border-l1);border-radius:7px;padding:5px 8px}
+.dsh-wb-code-task-top{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dsw-alias-label-primary)}
+.dsh-wb-code-task-top b{font-weight:650}
+.dsh-wb-code-task-state{margin-left:auto;flex:none;font-size:9.5px;font-weight:650;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-code-task-meta{font-size:10.5px;line-height:1.5;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsh-wb-code-task-meta a{color:var(--dsw-alias-brand-primary,#4b7bf5);text-decoration:none}
+.dsh-wb-code-task-meta a:hover{text-decoration:underline}
+.dsh-wb-code-crumbs{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:1px;padding:5px 12px;border-bottom:1px dashed var(--dsw-alias-border-l1);font-size:11px}
+.dsh-wb-code-crumb{border:0;background:transparent;padding:1px 3px;border-radius:4px;color:var(--dsw-alias-label-secondary);cursor:pointer;font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:10.5px}
+.dsh-wb-code-crumb:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
+.dsh-wb-code-sep{color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary));opacity:.6}
+.dsh-wb-code-body{flex:1;min-height:0;overflow:auto;padding:6px 8px 14px}
+.dsh-wb-code-list{display:flex;flex-direction:column;gap:1px}
+.dsh-wb-code-row{display:flex;align-items:center;gap:7px;width:100%;padding:5px 6px;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;text-align:left}
+.dsh-wb-code-row:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12))}
+.dsh-wb-code-row .ic{flex:none;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-code-row.is-dir .ic{color:var(--dsw-alias-brand-primary,#4b7bf5)}
+.dsh-wb-code-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:11px}
+.dsh-wb-code-meta{flex:none;font-size:9.5px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-code-file{display:flex;flex-direction:column;min-height:100%}
+.dsh-wb-code-file-head{flex:none;display:flex;align-items:center;gap:6px;padding:2px 4px 8px}
+.dsh-wb-code-file-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dsh-wb-code-file-meta{flex:none;font-size:9.5px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-code-file-head .dsh-wb-btn{margin-left:auto;flex:none}
+.dsh-wb-code-pre{margin:0;flex:1;min-height:0;overflow:auto;padding:10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1,transparent);font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:11px;line-height:1.55;white-space:pre;tab-size:2}
+.dsh-wb-test{flex:1;min-height:0;overflow:auto;padding:0 12px 16px;background:var(--dsw-alias-bg-base)}
+.dsh-wb-test .dsh-wb-req-brief{margin:8px -12px 10px;max-height:30vh}
+.dsh-wb-code .dsh-wb-req-brief{max-height:26vh}
+.dsh-wb-test-banner{display:flex;flex-direction:column;gap:3px;margin:8px 0 12px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1,transparent)}
+.dsh-wb-test-banner.is-pass{border-color:var(--dsw-alias-state-success-primary,#3fa66b)}
+.dsh-wb-test-banner.is-fail{border-color:var(--dsw-alias-state-error-primary,#d9534f)}
+.dsh-wb-test-banner.is-run{border-color:var(--dsw-alias-state-business-primary,#4b7bf5)}
+.dsh-wb-test-banner-top{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-primary)}
+.dsh-wb-test-banner-meta{font-size:10.5px;line-height:1.5;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-test-banner-meta a{color:var(--dsw-alias-brand-primary,#4b7bf5);text-decoration:none}
+.dsh-wb-test-sec{margin-bottom:14px}
+.dsh-wb-test-sec h4{display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:11px;font-weight:650;color:var(--dsw-alias-label-primary)}
+.dsh-wb-test-progress{font-size:9.5px;font-weight:600;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-test-checks{display:flex;flex-direction:column;gap:1px}
+.dsh-wb-test-check{display:flex;align-items:flex-start;gap:7px;padding:5px 6px;border-radius:6px;font-size:11.5px;line-height:1.5;color:var(--dsw-alias-label-primary);cursor:pointer}
+.dsh-wb-test-check:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.1))}
+.dsh-wb-test-check input{margin:2px 0 0;flex:none}
+.dsh-wb-test-check.is-done{color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-test-check.is-done span{text-decoration:line-through}
+.dsh-wb-test-empty{font-size:11px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-test-runs{display:flex;flex-direction:column;gap:5px}
+.dsh-wb-test-run{border:1px solid var(--dsw-alias-border-l1);border-radius:7px;padding:5px 8px}
+.dsh-wb-test-run-top{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dsw-alias-label-primary);flex-wrap:wrap}
+.dsh-wb-test-run-top b{font-weight:650;font-size:11px}
+.dsh-wb-test-run-meta{font-size:10px;line-height:1.5;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-test-run .state{flex:none;font-size:9.5px;font-weight:650;padding:1px 5px;border-radius:4px;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12));color:var(--dsw-alias-label-secondary)}
+.dsh-wb-test-run .state.is-passed{color:var(--dsw-alias-state-success-primary,#3fa66b)}
+.dsh-wb-test-run .state.is-failed{color:var(--dsw-alias-state-error-primary,#d9534f)}
+.dsh-wb-test-run .state.is-running{color:var(--dsw-alias-state-business-primary,#4b7bf5)}
+.dsh-wb-test-run-meta code{font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:9.5px}
+.dsh-wb-test-evidence{display:flex;flex-direction:column;gap:6px}
+.dsh-wb-test-evidence-item{border:1px solid var(--dsw-alias-border-l1);border-radius:7px;overflow:hidden}
+.dsh-wb-test-evidence-head{display:flex;align-items:center;gap:6px;padding:6px 8px}
+.dsh-wb-test-evidence-name{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:11px;color:var(--dsw-alias-label-primary)}
+.dsh-wb-test-evidence-head .dsh-wb-btn{flex:none}
+.dsh-wb-test-evidence-frame{width:100%;height:60vh;min-height:320px;border:0;border-top:1px solid var(--dsw-alias-border-l1);background:#fff}
+.dsh-wb-test-cmds{display:flex;flex-direction:column;gap:3px;padding-top:10px;border-top:1px dashed var(--dsw-alias-border-l1);font-size:10.5px;color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary))}
+.dsh-wb-test-cmds code{padding:1px 5px;border-radius:4px;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12));font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:10px;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-req-brief-head{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-req-brief-title{font-weight:600;font-size:12px;color:var(--dsw-alias-label-primary)}
+.dsh-wb-brief-nav{display:inline-flex;align-items:center;gap:4px;margin-left:4px}
+.dsh-wb-brief-nav-btn{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;background:transparent;font-size:10.5px;color:var(--dsw-alias-label-secondary);cursor:pointer}
+.dsh-wb-brief-nav-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
+.dsh-wb-brief-nav-btn .n{font-variant-numeric:tabular-nums;opacity:.7}
+.dsh-wb-req-brief-summary{margin:0 0 6px;font-weight:500;color:var(--dsw-alias-label-primary);white-space:pre-wrap}
+.dsh-wb-req-brief-body{white-space:pre-wrap;color:var(--dsw-alias-label-secondary)}
+.dsh-wb-req-brief details{margin-top:6px;border-top:1px dashed var(--dsw-alias-border-l1);padding-top:6px}
+.dsh-wb-req-brief summary{cursor:pointer;font-size:11px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dsh-wb-req-brief.is-empty{color:var(--dsw-alias-label-tertiary,var(--dsw-alias-label-secondary));font-size:11px}
+.dsh-wb-md p{margin:0 0 6px}
+.dsh-wb-md p:last-child{margin-bottom:0}
+.dsh-wb-md h3,.dsh-wb-md h4,.dsh-wb-md h5,.dsh-wb-md h6{margin:10px 0 5px;font-size:12px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.dsh-wb-md ul,.dsh-wb-md ol{margin:0 0 6px;padding-left:18px}
+.dsh-wb-md li{margin:1px 0}
+.dsh-wb-md code{padding:1px 4px;border-radius:4px;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12));font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:11px}
+.dsh-wb-md pre{margin:6px 0;padding:8px;border-radius:6px;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12));overflow:auto;white-space:pre}
+.dsh-wb-md pre code{padding:0;background:none}
+.dsh-wb-md blockquote{margin:6px 0;padding:2px 0 2px 8px;border-left:2px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));color:var(--dsw-alias-label-secondary)}
+.dsh-wb-md a{color:var(--dsw-alias-brand-primary,#4b7bf5);text-decoration:underline}
+.dsh-wb-req-brief-summary .dsh-wb-md,.dsh-wb-req-brief-body .dsh-wb-md{white-space:normal}
+.dsh-wb-design .spec-item b{display:block;margin-bottom:2px}
 .dsh-wb-canvas-bar{display:flex;align-items:center;gap:8px;flex:none;min-height:38px;padding:5px 6px 5px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1)}
 .dsh-wb-canvas-bar-main{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
 .dsh-wb-canvas-title{font-size:12px;font-weight:650;color:var(--dsw-alias-label-primary)}
@@ -2244,11 +2466,16 @@ window.__ModuleLoader__.load({
 
     function ensureStyles() {
       if (typeof document === 'undefined') return
-      if (document.querySelector('style[data-dsh-workbench]') !== null) return
-      const style = document.createElement('style')
-      style.dataset.dshWorkbench = '1'
-      style.textContent = CSS + '\n' + DESIGN_CSS + '\n' + DESIGN_LOGIN_CSS
-      document.head.appendChild(style)
+      // 插件热更新时旧的 style 标签会留在页面里；直接复用并覆盖内容，
+      // 否则新加的样式永远不生效，界面看起来像“改了但没改”。
+      let style = document.querySelector('style[data-dsh-workbench]')
+      if (style === null) {
+        style = document.createElement('style')
+        style.dataset.dshWorkbench = '1'
+        document.head.appendChild(style)
+      }
+      const text = CSS + '\n' + DESIGN_CSS + '\n' + DESIGN_LOGIN_CSS
+      if (style.textContent !== text) style.textContent = text
       ensureDesignIcons()
     }
 
@@ -2620,7 +2847,7 @@ window.__ModuleLoader__.load({
         `设计状态：${requirement.designStatus}；已有设计文件：${(requirement.designFiles ?? []).length} 个`,
         '',
         '请先加载 wb-ui-design 技能，在这个需求的 design/ 目录里做设计稿（一屏一个 HTML；已有设计文件在需求文件夹根目录时就放它旁边），',
-        '完成后调用 wb_preview_page 打开第一屏，并用 wb_check_design 自查。',
+        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用 Design Studio 的 preview / check 工具。',
       ].join('\n')
     }
 
@@ -2779,7 +3006,7 @@ window.__ModuleLoader__.load({
       }
     }
 
-    async function finishRequirementCreation(ctx, requirement, state) {
+    async function finishRequirementCreation(ctx, requirement, state, brief = '') {
       const iterationDir = String(state.iterationDir ?? state.baseDir).replace(/\/+$/, '')
       const baseDir = String(state.baseDir ?? '').replace(/\/+$/, '')
       // 会话落在迭代目录下，标题就是需求名称；需求自己的原型/设计资料目录由右栏按需创建。
@@ -2796,17 +3023,6 @@ window.__ModuleLoader__.load({
       await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
         const result = await reference.binding.session.rename(requirement.title)
         if (result.ok !== true) throw new Error(result.error?.message || '会话标题设置失败')
-        // 新会话的输入框直接放一份需求描述模板：用户补全后发送，模型就按原型流程出图。
-        const input = ctx.conversation?.input
-        if (input?.requestDraftInitialization !== undefined) {
-          try {
-            input.requestDraftInitialization(reference.binding, {
-              prompt: requirementDescriptionPrompt(requirement, state),
-            })
-          } catch (reason) {
-            console.warn('[dsh-workbench] 需求描述模板写入失败', reason)
-          }
-        }
       })
       // 服务端只保存会话记录，不保存 DSH 会话 ID 和本机路径；两者由 host 半端写进本机映射。
       const recorded = await api(`requirements/${encodeURIComponent(requirement.id)}/sessions`, {
@@ -2823,7 +3039,38 @@ window.__ModuleLoader__.load({
         method: 'POST',
         body: JSON.stringify({ sessionRecordId: recorded.session.id }),
       })
-      return { requirement: body.requirement, sessionId, folderPath, workspaceId }
+      let saved = body.requirement
+      const text = String(brief ?? '').trim()
+      if (text !== '') {
+        // 需求简报直接写进活文档：会话里不用再让用户重复一遍，模型读文档即可。
+        try {
+          const firstLine = text.split('\n').map(line => line.trim())
+            .find(line => line !== '' && !line.startsWith('#')) ?? text.slice(0, 120)
+          const document = await api(`requirements/${encodeURIComponent(requirement.id)}/document`, {
+            method: 'POST',
+            body: JSON.stringify({ summary: firstLine.slice(0, 300), body: text }),
+          })
+          saved = document.requirement ?? saved
+        } catch (reason) {
+          console.warn('[dsh-workbench] 需求简报保存失败', reason)
+        }
+      }
+      // 新会话的输入框放一份模板：有简报时直接按文档出原型；没有时让用户补全。
+      await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
+        const input = ctx.conversation?.input
+        if (input?.requestDraftInitialization === undefined) return
+        try {
+          input.requestDraftInitialization(reference.binding, {
+            prompt: text !== ''
+              ? briefedRequirementPrompt(saved, state)
+              : requirementDescriptionPrompt(saved, state),
+            clearPreviousDraft: true,
+          })
+        } catch (reason) {
+          console.warn('[dsh-workbench] 需求描述模板写入失败', reason)
+        }
+      })
+      return { requirement: saved, sessionId, folderPath, workspaceId }
     }
 
     async function markCreationFailed(requirement, reason) {
@@ -2835,12 +3082,58 @@ window.__ModuleLoader__.load({
       } catch (_) { /* the requirement is already unusable; the next poll shows it */ }
     }
 
+    // 需求详情页的「打开」是预览入口：不管当前身份是谁，都进只读面板。
+    // 需要编辑时，面板里给负责人/设计师一个「改为可编辑」按钮切回来。
+    const readonlyPreviewKeys = new Set()
+    const readonlyPreviewSubs = new Set()
+    function setReadonlyPreview(sessionId, kind, on) {
+      const key = `${sessionId}:${kind}`
+      if (on) readonlyPreviewKeys.add(key)
+      else readonlyPreviewKeys.delete(key)
+      for (const sub of readonlyPreviewSubs) { try { sub() } catch (_) { /* 组件已卸载 */ } }
+    }
+    function useReadonlyPreview(sessionId, kind) {
+      const key = `${sessionId}:${kind}`
+      const [, bump] = useState(0)
+      useEffect(() => {
+        const sub = () => bump(n => n + 1)
+        readonlyPreviewSubs.add(sub)
+        return () => { readonlyPreviewSubs.delete(sub) }
+      }, [key])
+      return readonlyPreviewKeys.has(key)
+    }
+
     function openRightTab(ctx, kind = TAB_KIND) {
       try { ctx.sidebarRight.openTab(kind) } catch (reason) { console.warn('[dsh-workbench] open tab failed', reason) }
     }
 
+    // 用户主动打开过右栏的会话：这些会话不再被「进会话自动带出开发/测试面板」
+    // 覆盖，否则从需求页点「打开原型」后会被自动开的开发目录顶掉。
+    const explicitlyOpenedTabs = new Set()
+
+    // 从工作台页面（不属于某个会话）打开右栏时，必须指定挂到哪条需求的会话上；
+    // 否则 openTab 会落到当前聚焦的会话（比如另一条需求的测试会话）。
+    function openRightTabIn(ctx, sessionId, kind = TAB_KIND, options = {}) {
+      if (typeof sessionId !== 'string' || sessionId === '') { openRightTab(ctx, kind); return }
+      if (options.auto !== true) explicitlyOpenedTabs.add(sessionId)
+      if (options.readonly === true) setReadonlyPreview(sessionId, kind, true)
+      else if (options.readonly === false) setReadonlyPreview(sessionId, kind, false)
+      try {
+        if (typeof ctx.sidebarRight?.openTabIn === 'function') ctx.sidebarRight.openTabIn(sessionId, kind)
+        else ctx.sidebarRight.openTab(kind)
+      } catch (reason) { console.warn('[dsh-workbench] open tab failed', reason) }
+    }
+
     function openDesignTab(ctx) {
       openRightTab(ctx, DESIGN_TAB_KIND)
+    }
+
+    function openCodeTab(ctx) {
+      openRightTab(ctx, CODE_TAB_KIND)
+    }
+
+    function openTestTab(ctx) {
+      openRightTab(ctx, TEST_TAB_KIND)
     }
 
     // 内嵌设计画布只知道“当前会话”，不知道该开需求 tab 还是设计 tab。
@@ -2867,6 +3160,50 @@ window.__ModuleLoader__.load({
         }
       } catch (_) { /* fall through to collapsing the column */ }
       try { ctx.sidebarRight.toggleExpanded() } catch (_) { /* ignore */ }
+    }
+
+    // 会话标题右侧的一对入口图标：需求文档 / 设计稿。只有绑定了工作台
+    // 需求的会话才显示，普通 DSH 聊天不打扰。
+    // 每类会话第一次打开时把对应右栏自动带出来；用户手动关掉后不再反复弹。
+    const autoOpenedSessionTabs = new Set()
+
+    function WorkbenchHeaderActions({ sid, ctx }) {
+      const { requirement } = useRequirementForSession(sid)
+      // 开发会话多一个「开发」入口，测试会话多一个「测试」入口；需求和设计
+      // 所有角色都有，只读/可写由各自的 tab 内容决定。
+      const record = requirement === null ? undefined : (requirement.sessions ?? []).find(item => item.sessionId === sid)
+      const type = record?.type ?? ''
+      useEffect(() => {
+        if (requirement === null || record === undefined) return undefined
+        const kind = type === 'dev' ? CODE_TAB_KIND : type === 'test' ? TEST_TAB_KIND : type === 'design' ? DESIGN_TAB_KIND : null
+        if (kind === null) return undefined
+        const key = `${sid}:${type}`
+        if (autoOpenedSessionTabs.has(key)) return undefined
+        autoOpenedSessionTabs.add(key)
+        // 这条会话可能刚被切过来，openTab 会落到「当前聚焦会话」上；显式指定 sid。
+        // 用户已经自己打开过右栏（比如从需求页点「打开原型」）时不要再抢。
+        const timer = setTimeout(() => {
+          if (explicitlyOpenedTabs.has(sid)) return
+          openRightTabIn(ctx, sid, kind, { auto: true })
+        }, 320)
+        return () => clearTimeout(timer)
+      }, [requirement?.id, record?.type, sid, ctx])
+      if (requirement === null) return null
+      const button = (kind, icon, label) => h('button', {
+        className: 'dsh-wb-header-btn',
+        type: 'button',
+        title: label,
+        'aria-label': label,
+        // 会话顶部图标是工作入口：产品/设计师从这里进就是可写画布，
+        // 顺便清掉需求详情页留下的只读标记。
+        onClick: () => openRightTabIn(ctx, sid, kind, { readonly: false }),
+      }, h(DesignIcon, { name: icon, size: 15 }))
+      return h('div', { className: 'dsh-wb-header-actions' },
+        button(TAB_KIND, 'file', '打开需求右栏'),
+        button(DESIGN_TAB_KIND, 'package', '打开设计右栏'),
+        type === 'dev' ? button(CODE_TAB_KIND, 'code', '打开开发右栏') : null,
+        type === 'test' ? button(TEST_TAB_KIND, 'check-circle', '打开测试右栏') : null,
+      )
     }
 
     function focusComposer() {
@@ -3606,6 +3943,7 @@ window.__ModuleLoader__.load({
 
     function CreateRequirementDialog({ ctx, state, onClose, onCreated, onToast }) {
       const [title, setTitle] = useState('')
+      const [brief, setBrief] = useState('')
       const [busy, setBusy] = useState(false)
       const [step, setStep] = useState('')
       const [error, setError] = useState('')
@@ -3625,7 +3963,7 @@ window.__ModuleLoader__.load({
           const created = await api('requirements', { method: 'POST', body: JSON.stringify({ title: value }) })
           requirement = created.requirement
           setStep('准备迭代目录')
-          const done = await finishRequirementCreation(ctx, requirement, state)
+          const done = await finishRequirementCreation(ctx, requirement, state, brief)
           setStep('打开会话')
           ctx.uiWorkspace.openSession(done.sessionId)
           focusComposer()
@@ -3638,12 +3976,12 @@ window.__ModuleLoader__.load({
           setStep('')
           setBusy(false)
         }
-      }, [title, busy, ctx, onCreated, onToast, state])
+      }, [title, brief, busy, ctx, onCreated, onToast, state])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
           h('h2', { id: modal.titleId }, '新建需求'),
-          h('p', null, `迭代 ${state.iteration.code} · 只需填写需求名称。创建后自动在迭代目录下创建 DSH 会话，并打开右栏的需求与设计面板。`),
+          h('p', null, `迭代 ${state.iteration.code} · 填需求名称；可选的简报会写进需求文档，创建后直接按文档出原型。`),
           h('input', {
             ref: inputRef,
             className: 'dsh-wb-input',
@@ -3653,6 +3991,15 @@ window.__ModuleLoader__.load({
             disabled: busy,
             onChange: (event) => setTitle(event.target.value),
             onKeyDown: (event) => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) void submit() },
+          }),
+          h('textarea', {
+            className: 'dsh-wb-input dsh-wb-brief',
+            value: brief,
+            placeholder: '需求简报（可选）：背景、目标、关键页面、验收标准。写在这里，会话就不用再重复一遍。',
+            rows: 5,
+            maxLength: 12000,
+            disabled: busy,
+            onChange: (event) => setBrief(event.target.value),
           }),
           busy ? h('div', { className: 'dsh-wb-progress' }, h('span', { className: 'dsh-wb-spinner' }), `${step}…`) : null,
           error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
@@ -6339,14 +6686,88 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementPageView({ state, requirement, onBack, onOpenSession, onOpenDesign, onOpenRequirementTab, onNewSession }) {
+    // 需求页的小缩略图：用真实页面 iframe 按卡片宽度等比缩小，不再画线框占位。
+    function DesignThumbFrame({ src, title }) {
+      const box = useRef(null)
+      const [scale, setScale] = useState(0.075)
+      useEffect(() => {
+        const node = box.current
+        if (node === null) return undefined
+        const update = () => {
+          const width = node.clientWidth
+          if (width > 0) setScale(width / 1440)
+        }
+        update()
+        if (typeof ResizeObserver === 'undefined') {
+          window.addEventListener('resize', update)
+          return () => window.removeEventListener('resize', update)
+        }
+        const observer = new ResizeObserver(update)
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [])
+      if (src === '') {
+        return h('div', { className: 'wf' }, h('i'), h('i'), h('i'))
+      }
+      return h('div', { className: 'dsh-wb-shot-frame', ref: box },
+        h('iframe', {
+          src,
+          title,
+          loading: 'lazy',
+          sandbox: 'allow-scripts allow-forms allow-modals',
+          referrerPolicy: 'no-referrer',
+          style: { width: '1440px', height: '1000px', transform: `scale(${scale})` },
+        }),
+      )
+    }
+
+    function RequirementPageView({ ctx, state, requirement, onBack, onOpenSession, onOpenDesign, onOpenTest, onOpenRequirementTab, onNewSession }) {
+      // 页面上的「打开」统一进右栏只读面板：原型走需求面板，设计稿走设计面板。
+      // 产品/设计师在会话里本来就有可写画布，这里不抢他们的编辑入口。
+      // 右栏只能挂在一条 DSH 会话上。需求页不在会话里，点「打开」要先进入这条
+      // 需求在本机的某条会话，再把对应右栏挂上去；否则面板根本不可见。
+      const openPanel = (kind) => {
+        const local = (requirement.sessions ?? []).filter(session => session.sessionId)
+        // 优先自己名下的会话，其次才是同事的（同一需求里可能有多人的开发/测试会话）。
+        const pick = order => {
+          for (const type of order) {
+            const hits = local.filter(session => session.type === type)
+            const hit = hits.find(session => session.own === true) ?? hits[0]
+            if (hit) return hit.sessionId
+          }
+          return (local.find(session => session.own === true) ?? local[0])?.sessionId ?? requirement.sessionId ?? ''
+        }
+        const target = kind === 'design'
+          ? pick(['design', 'requirement', 'dev', 'test'])
+          : kind === 'test'
+            ? pick(['test', 'requirement', 'dev', 'design'])
+            : pick(['requirement', 'design', 'dev', 'test'])
+        const tabKind = kind === 'design' ? DESIGN_TAB_KIND : kind === 'test' ? TEST_TAB_KIND : TAB_KIND
+        const readonly = kind !== 'test'
+        if (typeof target !== 'string' || target === '') {
+          publishCommandToast({ seq: ++commandToastSeq, name: '打开', kind: 'error', text: '这条需求在本机还没有会话，先新建一个会话再打开右栏。' })
+          return
+        }
+        try { ctx.uiWorkspace.openSession(target) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
+        setTimeout(() => openRightTabIn(ctx, target, tabKind, { readonly }), 400)
+      }
+      usePreviewTickets([requirement.id])
       const iteration = (state.iterations ?? []).find(item => item.id === requirement.iterationId)
       const artifacts = Array.isArray(requirement.artifacts) ? requirement.artifacts : []
       const designArtifacts = artifacts.filter(artifact => artifact.kind === 'design')
-      const screens = Math.max(
-        designArtifacts.filter(artifact => /\.html?$/i.test(String(artifact.name || ''))).length,
-        (requirement.designFiles ?? []).length,
-      )
+      // 需求全量页是「已沉淀」视图：设计稿只统计服务端交付附件。
+      // 本机 design/ 文件仍可在设计面板预览，但不能在这里冒充已交付版本。
+      const screens = designArtifacts.filter(artifact => /\.html?$/i.test(String(artifact.name || ''))).length
+      const designDelivered = requirement.designStatus === 'delivered'
+        || (requirement.designVersions ?? []).length > 0
+      // 原型和设计稿是两条独立轨道：prototype/ 是产品原型，design/ 与
+      // 服务端设计附件才是设计交付。需求全量页的「原型」卡必须读产品原型，
+      // 不能拿设计稿数量冒充，否则生成原型后始终显示 0 屏。
+      const prototypeFiles = Array.isArray(requirement.prototypeFiles) ? requirement.prototypeFiles : []
+      const prototypeArtifacts = artifacts.filter(artifact =>
+        artifact.kind === 'prototype'
+        && typeof artifact.name === 'string'
+        && /\.html?$/i.test(artifact.name))
       const images = designArtifacts.filter(artifact => /^image\//i.test(String(artifact.contentType || ''))).length
       const owner = state.users.find(user => user.id === requirement.ownerId)
       const designer = requirement.designerId ? state.users.find(user => user.id === requirement.designerId) : null
@@ -6355,6 +6776,8 @@ window.__ModuleLoader__.load({
       const devTasks = requirement.devTasks ?? []
       const testRuns = requirement.testRuns ?? []
       const latestTest = testRuns[testRuns.length - 1] ?? null
+      const testReportArtifacts = artifacts.filter(artifact => artifact.kind === 'test-report')
+      const testSession = (requirement.sessions ?? []).find(session => session.type === 'test' && session.sessionId)
       const grouped = groupedPlatforms(state.platforms ?? [], state.platformGroups ?? [], requirement.platformIds)
       const includedIds = new Set(requirement.platformIds ?? [])
       const excluded = (state.platforms ?? []).filter(item => item.active !== false && !includedIds.has(item.id))
@@ -6362,13 +6785,164 @@ window.__ModuleLoader__.load({
       const latestVersion = versions[versions.length - 1] ?? null
       const docSummary = String(document?.summary ?? '').trim() || String(latestVersion?.summary ?? '').trim()
       const docBody = String(document?.body ?? '').trim()
-      const designFileEntries = [
-        ...designArtifacts.map(artifact => artifact.name),
-        ...(requirement.designFiles ?? []).map(file => (typeof file === 'string' ? file : (file?.name ?? file?.relativePath ?? ''))),
-      ]
-      const designShotNames = [...new Set(designFileEntries
-        .map(name => String(name ?? '').split(/[\\/]/).pop())
-        .filter(name => name !== ''))].slice(0, 3)
+      const shortName = name => String(name ?? '').split(/[\\/]/).pop()
+      // 需求文档里的「## 原型页面 / ## 设计页面」清单：每屏一行，形如
+      // `1. 01-xxx.html — 页面名：说明`。把它贴到对应缩略图下面，开发看图时
+      // 立刻知道这一屏覆盖什么需求，而不是只看到文件名。
+      const pageNotes = section => {
+        const notes = new Map()
+        let active = false
+        for (const raw of docBody.split('\n')) {
+          const line = raw.trim()
+          if (/^#{1,6}\s/.test(line)) { active = line.replace(/^#{1,6}\s*/, '').includes(section); continue }
+          if (!active) continue
+          const match = line.match(/^\d+[.、]\s*([^\s—–:：]+)\s*[—–:：]\s*(.+)$/)
+          if (match) notes.set(shortName(match[1]), match[2].trim())
+        }
+        return notes
+      }
+      const prototypeNotes = pageNotes('原型页面')
+      const designNotes = pageNotes('设计页面')
+      const previewableDesign = designArtifacts.filter(artifact =>
+        typeof artifact.name === 'string'
+        && (/\.html?$/i.test(artifact.name) || /^image\//i.test(String(artifact.contentType || ''))))
+      const latestDesignVersion = designVersions.length > 0
+        ? Math.max(...designVersions.map(version => Number(version.version) || 0))
+        : 0
+      const currentDesignArtifacts = latestDesignVersion > 0
+        ? previewableDesign.filter(artifact => Number(artifact.designVersion) === latestDesignVersion)
+        : []
+      const designPreviewArtifacts = (currentDesignArtifacts.length > 0 ? currentDesignArtifacts : previewableDesign).slice(0, 3)
+      const designPreviewable = previewableDesign.length
+      const readyPreviewUrl = params => {
+        const entry = previewTickets.get(requirement.id)
+        if (entry === undefined || entry.expiresAt <= Date.now()) return ''
+        return designPreviewUrl(requirement.id, params)
+      }
+      const designPreviewUrlFor = artifact => readyPreviewUrl({ artifactId: artifact.id, name: artifact.name })
+      const firstDesignPreviewUrl = designPreviewArtifacts.length > 0 ? designPreviewUrlFor(designPreviewArtifacts[0]) : ''
+      // 原型和设计稿一样以服务端附件为主：产品本机生成后自动同步，其他角色
+      // 不用拿着产品的目录也能看到同一份原型。本机文件只作为旧数据兜底。
+      const latestPrototypeArtifacts = new Map()
+      for (const artifact of prototypeArtifacts) latestPrototypeArtifacts.set(shortName(artifact.name), artifact)
+      const prototypeItems = latestPrototypeArtifacts.size > 0
+        ? [...latestPrototypeArtifacts.values()].map(artifact => ({
+            key: artifact.id,
+            name: shortName(artifact.name),
+            src: readyPreviewUrl({ artifactId: artifact.id, name: artifact.name }),
+            kind: 'html',
+            updatedAt: artifact.createdAt,
+            note: prototypeNotes.get(shortName(artifact.name)) ?? '',
+          }))
+        : prototypeFiles.map(file => ({
+            key: file.relativePath ?? file.name,
+            name: shortName(file.name ?? file.relativePath ?? '原型'),
+            src: file.relativePath ? readyPreviewUrl({ path: file.relativePath }) : '',
+            kind: 'html',
+            updatedAt: file.updatedAt,
+            note: prototypeNotes.get(shortName(file.name ?? file.relativePath)) ?? '',
+          }))
+      const prototypeScreens = prototypeItems.length
+      // 页面跑在 dsh-app://app 里，直接 target=_blank 打不开；把预览地址换成
+      // 本机 DSH 的 http origin（__DSH_TRANSPORT__.streamBaseUrl），再交给
+      // DSH 右侧栏内置的 browser tab。拿不到时退回系统浏览器。
+      const hostOrigin = (() => {
+        try {
+          const base = window.__DSH_TRANSPORT__?.streamBaseUrl
+          return base ? new URL(base).origin : window.location.origin
+        } catch (_) { return window.location.origin }
+      })()
+      const browserHref = src => {
+        try { return new URL(src, hostOrigin).toString() } catch (_) { return src }
+      }
+      const previewToast = text => publishCommandToast({
+        seq: ++commandToastSeq, name: '预览', kind: 'info', text,
+      })
+      // 预览只走 DSH 内置浏览器：外部浏览器拿不到登录态，也会把工作台地址
+      // 带出桌面端。内置 browser tab 打不开时只提示，不退回系统浏览器。
+      const openInBrowser = src => {
+        if (src === '') return
+        const url = browserHref(src)
+        const openTab = () => {
+          const mounted = ctx.sidebarRight?.mounted?.getSnapshot?.()
+          if (mounted === undefined || mounted === null) return false
+          try {
+            if (requirement.sessionId && typeof ctx.sidebarRight?.openTabIn === 'function') {
+              ctx.sidebarRight.openTabIn(requirement.sessionId, 'browser', { params: { url } })
+            } else if (typeof ctx.sidebarRight?.openTab === 'function') {
+              ctx.sidebarRight.openTab('browser', { params: { url } })
+            } else {
+              return false
+            }
+            return true
+          } catch (reason) {
+            console.warn('[dsh-workbench] open browser tab failed', reason)
+            return false
+          }
+        }
+        if (openTab()) return
+        // 需求页是工作台主面板，右侧栏必须挂在一个 DSH 会话上；先打开需求会话再开
+        // 浏览器 tab，等右侧栏挂载好再重试（和“打开设计”走同一条路径）。
+        if (requirement.sessionId) {
+          try { ctx.uiWorkspace.openSession(requirement.sessionId) } catch (reason) {
+            console.warn('[dsh-workbench] open session for browser failed', reason)
+          }
+          let tries = 0
+          const attempt = () => {
+            if (openTab()) return
+            tries += 1
+            if (tries < 20) { setTimeout(attempt, 200); return }
+            previewToast('DSH 内置浏览器没有打开成功，请先在右侧栏打开一个工作台会话再试。')
+          }
+          setTimeout(attempt, 350)
+          return
+        }
+        previewToast('这条需求还没有绑定会话，无法打开 DSH 内置浏览器。')
+      }
+      // 缩略图的「打开」不再另开浏览器 tab：原型进需求右栏、设计稿进设计右栏，
+      // 和顶部图标走同一个只读/可写面板，身份权限也由面板自己判断。
+      const shotTile = ({ key, name, src, kind, note = '', onOpen }) => {
+        const open = (event) => {
+          if (event !== undefined) event.preventDefault()
+          if (typeof onOpen === 'function') { onOpen(); return }
+          openInBrowser(src)
+        }
+        const openTitle = typeof onOpen === 'function' ? `在右栏打开 ${name}` : `在 DSH 浏览器打开 ${name}`
+        return h('div', { className: 'shot', key },
+        h('div', { className: 'img is-live' },
+          src === ''
+            ? h('div', { className: 'wf' }, h('i'), h('i'), h('i'))
+            : kind === 'image'
+              ? h('img', { src, alt: name, loading: 'lazy' })
+              : h(DesignThumbFrame, { src, title: name }),
+          src !== ''
+            ? h('a', {
+                className: 'shot-open',
+                href: browserHref(src),
+                target: '_blank',
+                rel: 'noopener noreferrer',
+                title: openTitle,
+                'aria-label': openTitle,
+                onClick: open,
+                onAuxClick: open,
+              })
+            : null,
+        ),
+        h('div', { className: 'cap' },
+          h('span', { className: 'shot-name', title: name }, name),
+          src !== ''
+            ? h('a', {
+                className: 'shot-link',
+                href: browserHref(src),
+                target: '_blank',
+                rel: 'noopener noreferrer',
+                onClick: open,
+                onAuxClick: open,
+              }, '打开')
+            : null,
+        ),
+        note !== '' ? h('div', { className: 'shot-note', title: note }, note) : null,
+      ) }
       const logs = []
       for (const version of versions) logs.push({ at: version.at, who: requirement.ownerId, text: `提交需求总述 v${version.version}`, sub: version.summary || '需求提交' })
       for (const version of designVersions) logs.push({ at: version.at, who: version.by ?? requirement.designerId, text: `交付设计 d${version.version}`, sub: version.summary || '设计交付' })
@@ -6398,7 +6972,33 @@ window.__ModuleLoader__.load({
             h('dt', null, '时间'),
             h('dd', null, task?.startedAt || task?.finishedAt ? `${relativeTime(task.startedAt ?? task.finishedAt)}` : '未排期'),
             h('dt', null, '关键产物'),
-            h('dd', null, task?.mrUrl ? 'MR 已提交' : task?.status === 'done' ? '开发完成' : '等待开发产物'),
+            h('dd', null,
+              safeHttpUrl(task?.mrUrl)
+                ? h('a', {
+                    className: 'dsh-wb-mrlink',
+                    href: safeHttpUrl(task?.mrUrl),
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                    title: '在 DSH 浏览器打开 GitLab MR',
+                    onClick: event => {
+                      if (openUrlInDshBrowser(ctx, requirement.sessionId, safeHttpUrl(task?.mrUrl))) event.preventDefault()
+                    },
+                  }, h(DesignIcon, { name: 'branch', size: 12 }), 'MR !' + (safeHttpUrl(task?.mrUrl).match(/merge_requests\/(\d+)/)?.[1] ?? ''))
+                : task?.status === 'done' ? '开发完成（未提交 MR）' : '等待开发产物',
+              safeHttpUrl(task?.pipelineUrl)
+                ? h('a', {
+                    className: 'dsh-wb-mrlink',
+                    href: safeHttpUrl(task?.pipelineUrl),
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                    title: 'GitLab 流水线',
+                    onClick: event => {
+                      if (openUrlInDshBrowser(ctx, requirement.sessionId, safeHttpUrl(task?.pipelineUrl))) event.preventDefault()
+                    },
+                  }, h(DesignIcon, { name: 'check-circle', size: 12 }), '流水线')
+                : null,
+              task?.branch ? h('span', { className: 'dsh-wb-branch', title: '开发分支' }, task.branch) : null,
+            ),
             h('dt', null, '依赖/阻塞'),
             h('dd', null, task?.pipelineStatus === 'failed' ? h(DesignChip, { tone: 'block', glyph: '!' }, '流水线失败') : task ? '无' : '等待认领'),
           ),
@@ -6456,9 +7056,9 @@ window.__ModuleLoader__.load({
               ),
             ),
             h('div', { className: 'spec-line' },
-              docSummary !== '' ? h('p', null, h('b', null, '总述：'), docSummary) : null,
-              docBody !== '' ? h('p', null, h('b', null, '正文：'), docBody) : null,
-              document?.acceptanceCriteria ? h('p', null, h('b', null, '验收：'), document.acceptanceCriteria) : null,
+              docSummary !== '' ? h('div', { className: 'spec-item' }, h('b', null, '总述：'), h(MarkdownText, { text: docSummary })) : null,
+              docBody !== '' ? h('div', { className: 'spec-item' }, h('b', null, '正文：'), h(MarkdownText, { text: docBody })) : null,
+              document?.acceptanceCriteria ? h('div', { className: 'spec-item' }, h('b', null, '验收：'), h(MarkdownText, { text: document.acceptanceCriteria })) : null,
               docSummary === '' && docBody === '' && !document?.acceptanceCriteria
                 ? h('p', { className: 'muted' }, '还没有提交需求总述。产品在会话里完成梳理后，这里会出现沉淀版本。')
                 : null,
@@ -6479,25 +7079,36 @@ window.__ModuleLoader__.load({
               h(DesignIcon, { name: 'workbench' }),
               h('span', { className: 't' }, '原型'),
               h('span', { className: 'r' },
-                h('span', { className: 'badge' }, `原型 ${screens} 屏`),
-                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'external' }), '打开') : null,
+                h('span', { className: 'assignee', title: '原型负责人' },
+                  h(Avatar, { name: owner?.name ?? requirement.ownerId }),
+                  owner?.name ?? requirement.ownerId),
+                h('span', { className: 'badge' }, `原型 ${prototypeScreens} 屏`),
+                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', title: '在需求右栏打开原型', onClick: () => openPanel('prototype') }, h(DesignIcon, { name: 'external' }), '打开') : null,
               ),
             ),
-            screens === 0
+            docSummary !== ''
+              ? h('div', { className: 'tiny muted', style: { margin: '0 0 8px', lineHeight: 1.55 } }, docSummary)
+              : null,
+            prototypeScreens === 0
               ? h('div', { className: 'narep', style: { margin: '2px 0 0' } }, h(DesignIcon, { name: 'workbench' }), h('span', null, '原型尚未生成，产品在会话里出原型后显示预览。'))
-              : h('div', { className: 'canvas-preview' },
-                  h('div', { className: 'bar' }, h('span', { className: 'dots' }, h('i'), h('i'), h('i')), 'prototype'),
-                  h('div', { className: 'stage', style: { height: '80px' } },
-                    h('div', { className: 'wire', style: { width: '118px', height: '60px' } }, h('i'), h('i'), h('i'))),
+              : h('div', { className: 'shot3' },
+                  prototypeItems.slice(0, 3).map(item => shotTile({
+                    key: item.key,
+                    name: item.name,
+                    src: item.src,
+                    kind: item.kind,
+                    note: item.note,
+                    onOpen: () => openPanel('prototype'),
+                  })),
                 ),
-            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '原型版本历史'),
+            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '原型文件'),
             h('div', null,
-              designVersions.length === 0
-                ? h('div', { className: 'tiny muted' }, '设计交付后出现原型版本。')
-                : [...designVersions].slice(-2).reverse().map((version, index) => h('div', { className: 'vline', key: version.version },
-                    h('span', { className: 'v' }, `v${version.version}`),
-                    h('span', { className: 'd' }, version.summary || '设计交付'),
-                    index === 0 ? h('span', { className: 'badge', style: { marginLeft: 'auto' } }, '最新') : null,
+              prototypeItems.length === 0
+                ? h('div', { className: 'tiny muted' }, '产品原型保存到 prototype/ 后显示在这里。')
+                : [...prototypeItems].slice(-3).reverse().map(item => h('div', { className: 'vline', key: item.key },
+                    h('span', { className: 'v' }, 'HTML'),
+                    h('span', { className: 'd' }, item.name),
+                    h('span', { className: 'tiny muted', style: { marginLeft: 'auto' } }, relativeTime(item.updatedAt)),
                   )),
             ),
           ),
@@ -6508,29 +7119,36 @@ window.__ModuleLoader__.load({
               h('span', { className: 'r' },
                 designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), designer.name) : null,
                 h(StatusChip, { kind: 'design', value: requirement.designStatus }),
-                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'external' }), '打开') : null,
+                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', title: '在设计右栏打开设计稿', onClick: () => openPanel('design') }, h(DesignIcon, { name: 'external' }), '打开') : null,
               ),
             ),
-            designShotNames.length === 0
+            designPreviewArtifacts.length === 0
               ? h('div', { className: 'narep', style: { margin: '2px 0 0' } },
                   h(DesignIcon, { name: 'package' }),
-                  h('span', null, screens === 0 ? '设计尚未交付，交付后这里显示设计稿预览。' : '已交付设计稿，但还没有可预览的文件。'),
+                  h('span', null, designDelivered ? '已交付设计稿，但还没有可预览的文件。' : '设计尚未交付，交付后这里显示设计稿预览。'),
                 )
               : h('div', { className: 'shot3' },
-                  designShotNames.map(name => h('div', { className: 'shot', key: name },
-                    h('div', { className: 'img' }, h('div', { className: 'wf' }, h('i'), h('i'), h('i'))),
-                    h('div', { className: 'cap' }, name),
-                  )),
+                  designPreviewArtifacts.map(artifact => shotTile({
+                    key: artifact.id,
+                    name: shortName(artifact.name),
+                    src: designPreviewUrlFor(artifact),
+                    kind: /^image\//i.test(String(artifact.contentType || '')) ? 'image' : 'html',
+                    note: designNotes.get(shortName(artifact.name)) ?? '',
+                    onOpen: () => openPanel('design'),
+                  })),
                 ),
-            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'tag', size: 13 }), `设计组件 · ${screens} 屏 · ${images} 张预览`),
+            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'tag', size: 13 }), `设计组件 · ${screens} 屏 · ${designPreviewable} 个可预览`),
             h('div', { className: 'row gap-2 wrap' },
               h(DesignChip, { tone: 'plain' }, '部门设计系统'),
               h(DesignChip, { tone: 'plain' }, `${(requirement.designVersions ?? []).length} 个交付版本`),
             ),
             requirement.designUpdatedAt ? h('div', { className: 'tiny', style: { color: 'var(--amber)' } }, '设计晚于开发更新，需评估返工。') : null,
-            h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px' } },
+            h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' } },
               h('span', { className: 'tiny muted' }, '设计版本历史见设计会话'),
-              requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', style: { marginLeft: 'auto' }, type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'workbench' }), '进入设计会话') : null,
+              h('span', { style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' } },
+                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => openPanel('design') }, h(DesignIcon, { name: 'package' }), '在设计右栏打开') : null,
+                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'workbench' }), '进入设计会话') : null,
+              ),
             ),
           ),
         ),
@@ -6544,6 +7162,44 @@ window.__ModuleLoader__.load({
               ),
               h('div', { className: 'egrid' }, entry.items.map(platformCard)),
             )),
+        h('div', { className: 'dcard2', key: 'test-card' },
+          h('div', { className: 'ch' },
+            h(DesignIcon, { name: 'shield' }),
+            h('span', { className: 't' }, '测试'),
+            h('span', { className: 'r' },
+              latestTest ? h('span', { className: 'assignee' }, h(Avatar, { name: state.users.find(user => user.id === latestTest.by)?.name ?? latestTest.by }), state.users.find(user => user.id === latestTest.by)?.name ?? latestTest.by) : null,
+              latestTest
+                ? h(DesignChip, { tone: latestTest.status === 'passed' ? 'done' : latestTest.status === 'failed' ? 'block' : 'warn', glyph: latestTest.status === 'passed' ? '✓' : latestTest.status === 'failed' ? '!' : '◷' }, `测试${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status}`)
+                : h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始测试'),
+              testReportArtifacts.length > 0
+                ? h('button', { className: 'btn btn-sm btn-text', type: 'button', title: '在测试右栏打开测试证据', onClick: () => openPanel('test') }, h(DesignIcon, { name: 'external' }), '打开')
+                : null,
+            ),
+          ),
+          latestTest === null
+            ? h('div', { className: 'narep', style: { margin: '2px 0 0' } }, h(DesignIcon, { name: 'shield' }), h('span', null, '还没有测试记录。QA 在测试会话里开始一轮后，这里显示结论和证据。'))
+            : h('div', { className: 'spec-line' },
+                h('div', { className: 'spec-item' }, h('b', null, '最新一轮：'), h(MarkdownText, { text: `${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status} · ${relativeTime(latestTest.finishedAt ?? latestTest.startedAt)}${latestTest.note ? `\n\n${latestTest.note}` : ''}` })),
+                testRuns.length > 1 ? h('div', { className: 'spec-item' }, h('b', null, '测试轮次：'), `${testRuns.length} 轮`) : null,
+              ),
+          h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'file', size: 13 }), `测试证据 · ${testReportArtifacts.length} 份`),
+          h('div', null,
+            testReportArtifacts.length === 0
+              ? h('div', { className: 'tiny muted' }, '测试报告同步到服务端后显示在这里；也可以在测试右栏直接预览。')
+              : [...testReportArtifacts].slice(-3).reverse().map(artifact => h('div', { className: 'vline', key: artifact.id },
+                  h('span', { className: 'v' }, 'HTML'),
+                  h('span', { className: 'd' }, shortName(artifact.name)),
+                  h('span', { className: 'tiny muted', style: { marginLeft: 'auto' } }, relativeTime(artifact.createdAt)),
+                )),
+          ),
+          h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' } },
+            h('span', { className: 'tiny muted' }, '验收标准与逐轮记录在测试右栏'),
+            h('span', { style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' } },
+              testSession ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => openPanel('test') }, h(DesignIcon, { name: 'shield' }), '进入测试会话') : null,
+              testReportArtifacts.length > 0 ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => openPanel('test') }, h(DesignIcon, { name: 'external' }), '打开测试右栏') : null,
+            ),
+          ),
+        ),
         excluded.length > 0
           ? h('div', { className: 'narep', style: { marginBottom: '20px' } },
               h(DesignIcon, { name: 'minus' }), `不涉及：${excluded.map(item => item.name).join('、')}（产品已确认，本需求不改）`)
@@ -6822,13 +7478,23 @@ window.__ModuleLoader__.load({
       const openSession = useCallback((sessionId, kind) => {
         if (typeof sessionId !== 'string' || sessionId === '') return
         try { ctx.uiWorkspace.openSession(sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
-        setTimeout(() => openRightTab(ctx, kind ?? TAB_KIND), 350)
+        // 必须把 tab 挂到目标会话上：openTab 用的是当前聚焦会话，切换还没完成时
+        // 会开到上一条需求的会话里（右栏内容和卡片对不上）。
+        setTimeout(() => openRightTabIn(ctx, sessionId, kind ?? TAB_KIND), 350)
       }, [ctx])
 
       const openSessionFor = useCallback((requirement, kind) => {
+        const findSession = type => (requirement.sessions ?? []).find(session => session.type === type && session.sessionId)?.sessionId
         if (kind === 'design') {
-          const designSession = (requirement.sessions ?? []).find(session => session.type === 'design' && session.sessionId)
-          openSession(designSession?.sessionId ?? requirement.sessionId, DESIGN_TAB_KIND)
+          openSession(findSession('design') ?? requirement.sessionId, DESIGN_TAB_KIND)
+          return
+        }
+        if (kind === 'test') {
+          openSession(findSession('test') ?? requirement.sessionId, TEST_TAB_KIND)
+          return
+        }
+        if (kind === 'dev') {
+          openSession(findSession('dev') ?? requirement.sessionId, CODE_TAB_KIND)
           return
         }
         openSession(requirement.sessionId, TAB_KIND)
@@ -7030,11 +7696,13 @@ window.__ModuleLoader__.load({
                     ? h('div', { className: 'page' },
                         h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到迭代列表重新选择。')))
                     : h(RequirementPageView, {
+                        ctx,
                         state,
                         requirement: selectedRequirement,
                         onBack: () => setView('iteration'),
                         onOpenSession: (sessionId) => openSession(sessionId),
                         onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+                        onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
                         onOpenRequirementTab: (requirement) => openSessionFor(requirement, 'requirement'),
                         onNewSession: (requirement) => setSessionFor(requirement),
                       })
@@ -7389,9 +8057,7 @@ window.__ModuleLoader__.load({
               ),
         ),
         h('div', { className: 'dsh-wb-start-tip' },
-          '画布会跟随 ',
-          h('code', null, 'wb_preview_page'),
-          ' 实时刷新；设计完成后在会话里用 ',
+          '画布会自动跟随设计目录里的文件实时刷新；设计完成后在会话里用 ',
           h('code', null, '/design-deliver'),
           ' 交付，工作台会记录设计版本。',
         ),
@@ -7513,7 +8179,7 @@ window.__ModuleLoader__.load({
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         '',
         `请在这个需求里做产品原型：一屏一个 HTML 写进 ${prototypeDir}，先保证信息结构、关键流程和状态完整，不追求最终视觉。`,
-        '做完调用 wb_preview_page 打开第一屏，原型会显示在右侧「需求」面板的画布里。',
+        '右侧「需求」面板会自动把 prototype/ 里的页面显示成原型画布，不需要开 Design Studio。',
       ].join('\n')
     }
 
@@ -7537,7 +8203,25 @@ window.__ModuleLoader__.load({
         '- 端与交付范围：',
         '',
         '补全后请加载 wb-ui-design 技能，一屏一个 HTML 写进这条需求的设计目录 design/，沿用原型里的信息结构和验收标准。',
-        '写完调用 wb_preview_page 打开第一屏，右侧设计画布会直接出图；完成后用 wb_check_design 自查，再用 /design-deliver 交付。',
+        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用 Design Studio 的 preview / check 工具，再用 /design-deliver 交付。',
+      ].join('\n')
+    }
+
+    // 创建时已经写了需求简报：文档已在工作台里，会话模板只指向文档和产物目录，
+    // 不再让用户把背景、流程、验收标准重复打一遍。
+    function briefedRequirementPrompt(requirement, state) {
+      const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
+        .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
+        .join('；')
+      return [
+        '/design-start',
+        '',
+        `需求：${requirement.code}「${requirement.title}」`,
+        `平台：${platforms || '未设置'}`,
+        '',
+        '需求简报已经写进工作台的活文档，请先调用 workbench_design_context 读取，不要让我再重复描述。',
+        '按文档里的页面和验收标准，在这条需求的原型目录 prototype/ 下生成低保真产品原型，一屏一个 HTML；页面清单没写全时按文档目标补全关键状态。',
+        '只写 prototype/，不要写 design/，不要调用交付工具。右侧「需求」面板会自动显示这些页面。',
       ].join('\n')
     }
 
@@ -7561,7 +8245,7 @@ window.__ModuleLoader__.load({
         '- 验收标准：',
         '',
         '补全后请按描述做产品原型：一屏一个 HTML 写进这条需求的原型目录 prototype/（不是设计稿目录）。',
-        '写完调用 wb_preview_page 打开第一屏，右侧画布会直接出图；原型优先保证信息结构、流程和状态完整，不追求最终视觉。',
+        '右侧「需求」面板会自动显示 prototype/ 里的页面；原型优先保证信息结构、流程和状态完整，不追求最终视觉。',
       ].join('\n')
     }
 
@@ -7584,7 +8268,7 @@ window.__ModuleLoader__.load({
         '- 状态与边界：',
         '- 验收标准：',
         '',
-        '请按我补全后的描述直接做产品原型：一屏一个 HTML 写进 prototype/，写完调用 wb_preview_page 打开第一屏，让右侧画布直接出图。',
+        '请按我补全后的描述直接做产品原型：一屏一个 HTML 写进 prototype/，右侧「需求」面板会自动显示这些页面。',
       ].join('\n')
     }
 
@@ -7725,7 +8409,7 @@ window.__ModuleLoader__.load({
       return groups
     }
 
-    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '' }) {
+    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined }) {
       const studio = useDesignStudio()
       const t = useMemo(() => (studio.runtime ? studio.runtime.makeT(ctx) : key => key), [studio.runtime, ctx])
       const { error, opening } = useCanvasTarget(sid, targetPath)
@@ -7753,7 +8437,7 @@ window.__ModuleLoader__.load({
         }
         try { ctx.uiWorkspace.openSession(work.sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
         // 打开会话后把对应右栏也带出来，否则用户只看到聊天，不知道画布在哪。
-        setTimeout(() => { if (kind === 'design') openDesignTab(ctx); else openRightTab(ctx) }, 260)
+        setTimeout(() => openRightTabIn(ctx, work.sessionId, kind === 'design' ? DESIGN_TAB_KIND : TAB_KIND), 260)
       }, [ctx, kind])
       if (studio.error) {
         return h('div', { className: 'dsh-wb-design-msg' },
@@ -7776,7 +8460,9 @@ window.__ModuleLoader__.load({
           error,
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: onRefresh }, '重试'),
         ) : null,
-        h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork }),
+        // inputActions 是宿主的输入门面：Design Studio 的画笔画标注、点选元素、
+        // 样式修改都靠它“发到对话”，不传就只能退回复制。
+        h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork, inputActions }),
       )
     }
 
@@ -7812,27 +8498,628 @@ window.__ModuleLoader__.load({
       return { path: pathValue, error }
     }
 
-    function RequirementTab({ sid, ctx }) {
+    // 右栏画布旁边必须有需求说明：开发/测试看到的不只是几张图，还能立刻读到
+    // 背景、范围、原型页面和验收标准。画布在下面，说明在上面，一起滚动查看。
+    function RequirementBrief({ requirement, compact = false, sid, ctx, extra = null }) {
+      if (requirement === null) return null
+      const doc = requirement.document ?? {}
+      const summary = String(doc.summary ?? '').trim()
+      const body = String(doc.body ?? '').trim()
+      const criteria = String(doc.acceptanceCriteria ?? '').trim()
+      if (summary === '' && body === '' && criteria === '') {
+        return h('div', { className: 'dsh-wb-req-brief is-empty' },
+          '需求文档还没写。先让产品在需求会话里补全背景、目标和验收标准，开发才能对着原型实现。')
+      }
+
+      const quote = () => {
+        const text = [
+          `〔需求〕${requirement.code}「${requirement.title}」`,
+          summary,
+          body,
+          criteria !== '' ? `验收标准：\n${criteria}` : '',
+        ].filter(part => String(part).trim() !== '').join('\n\n')
+        void quoteIntoComposer(ctx, sid, text).then((ok) => {
+          publishCommandToast({
+            seq: ++commandToastSeq,
+            name: '引用',
+            kind: ok ? 'info' : 'error',
+            text: ok ? '需求说明已引用到输入框。' : '没能放进输入框，点一下聊天输入框再试。',
+          })
+        })
+      }
+      // 设计师、开发、测试在各自会话里就能原地切到原型 / 设计稿 / 测试证据，
+      // 不用回研发工作台再找一遍。四个右栏共用这一条导航。
+      const artifacts = Array.isArray(requirement.artifacts) ? requirement.artifacts : []
+      // 同一屏在每次同步时都会追加一条附件，计数按文件名去重，避免「原型 8」这种假数字。
+      const countOf = kind => new Set(artifacts
+        .filter(artifact => artifact.kind === kind && /\.html?$/i.test(String(artifact.name || '')))
+        .map(artifact => String(artifact.name).split('/').pop())).size
+      const navChip = (kind, label, count, tabKind) => h('button', {
+        className: 'dsh-wb-brief-nav-btn',
+        type: 'button',
+        title: `在右栏打开${label}`,
+        onClick: () => openRightTabIn(ctx, sid, tabKind),
+      }, h(DesignIcon, { name: kind, size: 12 }), label, h('span', { className: 'n' }, String(count)))
+      const nav = ctx !== undefined && ctx !== null
+        ? h('div', { className: 'dsh-wb-brief-nav' },
+            navChip('workbench', '原型', countOf('prototype'), TAB_KIND),
+            navChip('package', '设计稿', countOf('design'), DESIGN_TAB_KIND),
+            navChip('shield', '测试证据', countOf('test-report'), TEST_TAB_KIND),
+          )
+        : null
+      return h('div', { className: 'dsh-wb-req-brief' },
+        h('div', { className: 'dsh-wb-req-brief-head' },
+          h('span', { className: 'dsh-wb-req-brief-title' }, '需求说明'),
+          summary !== '' ? h('span', null, `需求 v${doc.version ?? 1}`) : null,
+          nav,
+          extra,
+          sid !== undefined && sid !== ''
+            ? h('button', {
+                className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-req-brief-quote',
+                type: 'button',
+                title: '把需求说明作为引用放进输入框',
+                onClick: quote,
+              }, '引用到对话')
+            : null,
+        ),
+        summary !== '' ? h('div', { className: 'dsh-wb-req-brief-summary' }, h(MarkdownText, { text: summary })) : null,
+        !compact && body !== '' ? h('div', { className: 'dsh-wb-req-brief-body' }, h(MarkdownText, { text: body })) : null,
+        !compact && criteria !== ''
+          ? h('details', null,
+              h('summary', null, '验收标准'),
+              h('div', { className: 'dsh-wb-req-brief-body' }, h(MarkdownText, { text: criteria })),
+            )
+          : null,
+      )
+    }
+
+    function documentPageNotes(body, section) {
+      const notes = new Map()
+      let active = false
+      for (const raw of String(body ?? '').split('\n')) {
+        const line = raw.trim()
+        if (/^#{1,6}\s/.test(line)) { active = line.replace(/^#{1,6}\s*/, '').includes(section); continue }
+        if (!active) continue
+        const match = line.match(/^\d+[.、]\s*([^\s—–:：]+)\s*[—–:：]\s*(.+)$/)
+        if (match) notes.set(String(match[1]).split(/[\\/]/).pop(), match[2].trim())
+      }
+      return notes
+    }
+
+    // 没有编辑权限的角色（开发、测试、评审）在同一个右栏里看只读预览：
+    // 每屏一个沙箱 iframe，和需求说明一起滚动，不挂 Design Studio 的编辑画布。
+    function ReadonlyPreviewPanel({ requirement, kind, sid, ctx, ownerHint = false }) {
+      usePreviewTickets([requirement.id])
+      const doc = requirement.document ?? {}
+      const notes = documentPageNotes(doc.body, kind === 'design' ? '设计页面' : '原型页面')
+      const artifacts = (requirement.artifacts ?? []).filter(artifact =>
+        artifact.kind === kind
+        && typeof artifact.name === 'string'
+        && /\.html?$/i.test(artifact.name))
+      const latest = new Map()
+      for (const artifact of artifacts) latest.set(artifact.name.split('/').pop(), artifact)
+      const items = [...latest.values()]
+      const what = kind === 'design' ? '设计稿' : '产品原型'
+      const who = kind === 'design' ? '设计师' : '产品负责人'
+      // 负责人/设计师从需求详情页点进来也是预览态：告诉他自己有编辑权、怎么切回去，
+      // 而不是用「只有…可以修改」把他挡在门外。
+      const banner = ownerHint
+        ? `${what}只读预览。你是${who}，点右上角「改为可编辑」回到画布。`
+        : `${what}只读预览：只有${who}可以修改。`
+      const quote = (name) => {
+        const note = notes.get(name) ?? ''
+        const lines = [
+          `〔${what}〕${requirement.code}「${requirement.title}」· ${name}`,
+          note,
+        ].filter(line => line.trim() !== '')
+        void quoteIntoComposer(ctx, sid, lines.join('\n')).then((ok) => {
+          publishCommandToast({
+            seq: ++commandToastSeq,
+            name: '引用',
+            kind: ok ? 'info' : 'error',
+            text: ok ? '已引用到输入框，接着说要改什么就行。' : '没能放进输入框，点一下聊天输入框再试。',
+          })
+        })
+      }
+      return h('div', { className: 'dsh-wb-readonly' },
+        h('div', { className: 'dsh-wb-readonly-banner' },
+          h(DesignIcon, { name: 'lock', size: 13 }),
+          banner),
+        items.length === 0
+          ? h('div', { className: 'dsh-wb-design-msg' }, `${what}还没有交付，交付后这里显示只读预览。`)
+          : h('div', { className: 'dsh-wb-readonly-list' },
+              items.map(artifact => h('section', { className: 'dsh-wb-readonly-shot', key: artifact.id },
+                h('div', { className: 'dsh-wb-readonly-head' },
+                  h('div', { className: 'dsh-wb-readonly-title' },
+                    h('span', { className: 'dsh-wb-readonly-name' }, artifact.name.split('/').pop()),
+                    sid !== undefined && sid !== ''
+                      ? h('button', {
+                          className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-readonly-quote',
+                          type: 'button',
+                          title: '把这一屏作为引用放进输入框',
+                          onClick: () => quote(artifact.name.split('/').pop()),
+                        }, '引用到对话')
+                      : null,
+                  ),
+                  notes.get(artifact.name.split('/').pop())
+                    ? h('span', { className: 'dsh-wb-readonly-note' }, notes.get(artifact.name.split('/').pop()))
+                    : null,
+                ),
+                h('iframe', {
+                  src: designPreviewUrl(requirement.id, { artifactId: artifact.id, name: artifact.name }),
+                  title: artifact.name,
+                  loading: 'lazy',
+                  sandbox: 'allow-scripts allow-forms allow-modals',
+                  referrerPolicy: 'no-referrer',
+                }),
+              ))),
+      )
+    }
+
+    function humanBytes(bytes) {
+      const size = Number(bytes) || 0
+      if (size < 1024) return `${size} B`
+      if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`
+      return `${(size / 1024 / 1024).toFixed(1)} MB`
+    }
+
+    // 把一段文字作为引用块插进这个 DSH 会话的输入框（和 Design Studio 的
+    // “发到对话”同一个输入门面）：用户看到的是引用，发出去模型拿到完整文字。
+    async function quoteIntoComposer(ctx, sessionId, text) {
+      const body = String(text ?? '').trim()
+      if (body === '' || typeof sessionId !== 'string' || sessionId === '') return false
+      try {
+        return await ctx.sessions.using(sessionId, { source: 'workbench' }, (reference) => {
+          const input = ctx.conversation?.input
+          const actx = reference?.binding?.ctx
+          if (input === null || input === undefined || actx === undefined || actx === null) return false
+          if (typeof input.for !== 'function') return false
+          try {
+            const sessionInput = input.for(actx)
+            if (sessionInput === null || sessionInput === undefined) return false
+            if (typeof sessionInput.insertQuote === 'function') {
+              if (!sessionInput.insertQuote(body)) return false
+            } else if (typeof sessionInput.setDraft === 'function') {
+              sessionInput.setDraft(body)
+            } else {
+              return false
+            }
+            try { sessionInput.focus?.() } catch { /* 焦点失败不影响已经插入的引用 */ }
+            return true
+          } catch (reason) {
+            console.warn('[dsh-workbench] 引用到对话失败', reason)
+            return false
+          }
+        })
+      } catch (reason) {
+        console.warn('[dsh-workbench] 引用到对话失败', reason)
+        return false
+      }
+    }
+
+    // 外部链接（MR、缺陷单）优先丢给 DSH 内置浏览器 tab，和预览保持一致；
+    // 内置 tab 打不开时调用方回落成普通链接。
+    function openUrlInDshBrowser(ctx, sessionId, url) {
+      const href = typeof url === 'string' ? url : ''
+      if (!/^https?:\/\//i.test(href)) return false
+      const openTab = () => {
+        try {
+          if (typeof sessionId === 'string' && sessionId !== '' && typeof ctx.sidebarRight?.openTabIn === 'function') {
+            ctx.sidebarRight.openTabIn(sessionId, 'browser', { params: { url: href } })
+            return true
+          }
+          if (typeof ctx.sidebarRight?.openTab === 'function') {
+            ctx.sidebarRight.openTab('browser', { params: { url: href } })
+            return true
+          }
+        } catch (reason) {
+          console.warn('[dsh-workbench] open browser tab failed', reason)
+        }
+        return false
+      }
+      // 需求详情页不在会话里，右侧栏没有挂载点：先进入这条需求的会话再开浏览器 tab，
+      // 否则 tab 注册成功但看不见（和「打开原型」走同一条路径）。
+      const mounted = ctx.sidebarRight?.mounted?.getSnapshot?.()
+      if (mounted === undefined || mounted === null) {
+        if (typeof sessionId !== 'string' || sessionId === '') return false
+        try { ctx.uiWorkspace.openSession(sessionId) } catch (reason) {
+          console.warn('[dsh-workbench] open session for browser failed', reason)
+        }
+        let tries = 0
+        const attempt = () => {
+          if (openTab()) return
+          tries += 1
+          if (tries < 20) setTimeout(attempt, 200)
+        }
+        setTimeout(attempt, 400)
+        return true
+      }
+      return openTab()
+    }
+
+    // 开发右栏：只读浏览需求目录里的各端代码仓库。开发在会话里改代码，
+    // 右栏看到的是同一份目录，不额外提供写入入口，避免和会话里的改动打架。
+    function CodeTab({ sid, ctx }) {
+      const { requirement } = useRequirementForSession(sid)
+      const { state } = useWorkbench()
+      const requirementId = requirement?.id ?? ''
+      const [dir, setDir] = useState('')
+      const [listing, setListing] = useState(null)
+      const [file, setFile] = useState(null)
+      const [busy, setBusy] = useState(false)
+      const [err, setErr] = useState('')
+
+      const loadDir = useCallback(async (next) => {
+        if (requirementId === '') return
+        setBusy(true)
+        setErr('')
+        try {
+          const result = await api(`requirement-files?requirementId=${encodeURIComponent(requirementId)}&path=${encodeURIComponent(next)}`)
+          setListing(result)
+          setDir(typeof result.path === 'string' ? result.path : next)
+          setFile(null)
+        } catch (reason) {
+          setErr(reason instanceof Error ? reason.message : String(reason))
+        } finally {
+          setBusy(false)
+        }
+      }, [requirementId])
+
+      useEffect(() => {
+        setFile(null)
+        setListing(null)
+        setErr('')
+        setDir('')
+        if (requirementId !== '') void loadDir('')
+      }, [requirementId, loadDir])
+
+      const openEntry = useCallback((entry) => {
+        const next = dir === '' ? entry.name : `${dir}/${entry.name}`
+        if (entry.dir) { void loadDir(next); return }
+        void (async () => {
+          setBusy(true)
+          setErr('')
+          try {
+            const result = await api(`requirement-file?requirementId=${encodeURIComponent(requirementId)}&path=${encodeURIComponent(next)}`)
+            setFile(result)
+          } catch (reason) {
+            setErr(reason instanceof Error ? reason.message : String(reason))
+          } finally {
+            setBusy(false)
+          }
+        })()
+      }, [dir, requirementId, loadDir])
+
+      const users = state?.users ?? []
+      const platforms = state?.platforms ?? []
+      const devTasks = requirement?.devTasks ?? []
+      const taskBlock = devTasks.length === 0 ? null : h('div', { className: 'dsh-wb-code-tasks' },
+        devTasks.map((task) => {
+          const assignee = task.assigneeId ? users.find(user => user.id === task.assigneeId) : null
+          const mrUrl = safeHttpUrl(task.mrUrl)
+          return h('div', { className: 'dsh-wb-code-task', key: task.id ?? task.platformId },
+            h('div', { className: 'dsh-wb-code-task-top' },
+              h('b', null, platformName(platforms, task.platformId)),
+              h('span', { className: 'dsh-wb-code-task-state' }, DEV_STATUS_LABELS[task.status] ?? task.status),
+            ),
+            h('div', { className: 'dsh-wb-code-task-meta' },
+              assignee?.name ?? '未指派',
+              task.branch ? ` · ${task.branch}` : '',
+              mrUrl ? ' · ' : '',
+              mrUrl ? h('a', {
+                href: mrUrl,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+                onClick: (event) => {
+                  if (openUrlInDshBrowser(ctx, sid, mrUrl)) event.preventDefault()
+                },
+              }, 'MR') : null,
+            ),
+          )
+        }),
+      )
+
+      const crumbParts = dir === '' ? [] : dir.split('/').filter(part => part !== '')
+      const crumbs = h('div', { className: 'dsh-wb-code-crumbs' },
+        h('button', { className: 'dsh-wb-code-crumb', type: 'button', onClick: () => { void loadDir('') } }, '需求目录'),
+        crumbParts.map((part, index) => {
+          const target = crumbParts.slice(0, index + 1).join('/')
+          return h('span', { className: 'dsh-wb-code-crumb-wrap', key: target },
+            h('span', { className: 'dsh-wb-code-sep' }, '/'),
+            h('button', { className: 'dsh-wb-code-crumb', type: 'button', onClick: () => { void loadDir(target) } }, part),
+          )
+        }),
+      )
+
+      let body
+      if (requirement === null) {
+        body = h('div', { className: 'dsh-wb-design-msg' },
+          h('b', null, '这个会话还没有绑定需求'),
+          '从需求卡片新开一个开发会话，右栏就会显示这条需求的代码目录。')
+      } else if (err !== '' && file === null && listing === null) {
+        body = h('div', { className: 'dsh-wb-design-msg' },
+          h('b', null, '目录读取失败'),
+          err,
+          h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => { void loadDir(dir) } }, '重试'),
+        )
+      } else if (file !== null) {
+        // 只读文件内容；二进制文件（图片等）不硬塞进 <pre>。
+        const binary = file.content.includes('\u0000')
+        body = h('div', { className: 'dsh-wb-code-file' },
+          h('div', { className: 'dsh-wb-code-file-head' },
+            h(DesignIcon, { name: 'file', size: 13 }),
+            h('span', { className: 'dsh-wb-code-file-name' }, file.name),
+            h('span', { className: 'dsh-wb-code-file-meta' }, humanBytes(file.size)),
+            h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => setFile(null) }, '返回目录'),
+          ),
+          binary
+            ? h('div', { className: 'dsh-wb-design-msg' }, '这是二进制文件，不在这里预览。')
+            : h('pre', { className: 'dsh-wb-code-pre' }, h('code', null, file.content)),
+        )
+      } else if (listing === null) {
+        body = h('div', { className: 'dsh-wb-design-msg' }, h('span', { className: 'dsh-wb-spinner' }), '正在读取需求目录…')
+      } else if (listing.entries.length === 0) {
+        body = h('div', { className: 'dsh-wb-design-msg' }, '这个目录是空的。')
+      } else {
+        body = h('div', { className: 'dsh-wb-code-list' },
+          listing.entries.map(entry => h('button', {
+            className: `dsh-wb-code-row${entry.dir ? ' is-dir' : ''}`,
+            key: entry.name,
+            type: 'button',
+            title: entry.name,
+            onClick: () => openEntry(entry),
+          },
+            h(DesignIcon, { name: entry.dir ? 'folder' : 'file', size: 13 }),
+            h('span', { className: 'dsh-wb-code-name' }, entry.name),
+            h('span', { className: 'dsh-wb-code-meta' }, entry.dir ? '' : humanBytes(entry.size)),
+          )),
+        )
+      }
+
+      return h('div', { className: 'dsh-wb-code' },
+        // 开发在写代码时就能读到需求、跳到原型和设计稿，不用回研发工作台。
+        requirement !== null ? h(RequirementBrief, { requirement, compact: true, sid, ctx }) : null,
+        h('div', { className: 'dsh-wb-code-head' },
+          h('div', { className: 'dsh-wb-code-title' },
+            h(DesignIcon, { name: 'code', size: 14 }),
+            '开发目录',
+            busy ? h('span', { className: 'dsh-wb-spinner' }) : null,
+            h('button', {
+              className: 'dsh-wb-code-refresh',
+              type: 'button',
+              title: '刷新目录',
+              onClick: () => { void loadDir(dir) },
+              disabled: busy || requirement === null,
+            }, h(DesignIcon, { name: 'refresh', size: 12 })),
+          ),
+          h('div', { className: 'dsh-wb-code-folder', title: requirement?.folderPath ?? '' },
+            requirement?.folderPath ?? '需求目录还没有创建'),
+        ),
+        taskBlock,
+        err !== '' && listing !== null ? h('div', { className: 'dsh-wb-notice is-error' }, err) : null,
+        crumbs,
+        h('div', { className: 'dsh-wb-code-body' }, body),
+      )
+    }
+
+    function acceptanceChecklist(text) {
+      const items = []
+      for (const raw of String(text ?? '').split('\n')) {
+        const line = raw.trim()
+        if (line === '') continue
+        const item = /^(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s*)?(.*)$/.exec(line)
+        if (item !== null && item[1].trim() !== '') { items.push(item[1].trim()); continue }
+        // 需求文档里的验收标准经常直接写 “AC1 ……” 而不加列表符号，也要能勾选。
+        if (/^AC\d+/i.test(line)) items.push(line)
+      }
+      return items
+    }
+
+    // 测试右栏：QA 真正需要在一屏里看四件事——验收标准能勾、测试记录、
+    // 测试证据、开发交付物。状态写入仍走 /wb-test 命令，这里只做只读汇总，
+    // 勾选仅是本机的测试清单进度，不回写团队服务端。
+    function TestTab({ sid, ctx }) {
+      const { requirement } = useRequirementForSession(sid)
+      const { state } = useWorkbench()
+      const requirementId = requirement?.id ?? ''
+      usePreviewTickets(requirement === null ? [] : [requirement.id])
+      const [checked, setChecked] = useState({})
+      const [evidenceOpen, setEvidenceOpen] = useState('')
+
+      useEffect(() => {
+        setEvidenceOpen('')
+        if (requirementId === '') { setChecked({}); return }
+        try {
+          const saved = window.localStorage.getItem(`dshWorkbenchTestCheck:${requirementId}`)
+          const parsed = saved === null ? null : JSON.parse(saved)
+          setChecked(parsed !== null && typeof parsed === 'object' ? parsed : {})
+        } catch {
+          setChecked({})
+        }
+      }, [requirementId])
+
+      const toggleItem = (index) => {
+        setChecked((previous) => {
+          const next = { ...previous, [index]: !previous[index] }
+          try {
+            window.localStorage.setItem(`dshWorkbenchTestCheck:${requirementId}`, JSON.stringify(next))
+          } catch { /* 本机存储被禁用时只保留在内存里 */ }
+          return next
+        })
+      }
+
+      const users = state?.users ?? []
+      const doc = requirement?.document ?? {}
+      const criteria = acceptanceChecklist(doc.acceptanceCriteria)
+      const doneCount = criteria.reduce((total, _item, index) => total + (checked[index] ? 1 : 0), 0)
+      const testRuns = Array.isArray(requirement?.testRuns) ? requirement.testRuns : []
+      const ordered = [...testRuns].reverse()
+      const latest = ordered.length > 0 ? ordered[0] : null
+      const latestBy = latest?.by ? users.find(user => user.id === latest.by) : null
+      const latestUrl = latest === null ? '' : safeHttpUrl(latest.bugUrl)
+      const devTasks = requirement?.devTasks ?? []
+      const evidence = (requirement?.artifacts ?? []).filter(artifact =>
+        artifact.kind === 'test-report'
+        && typeof artifact.name === 'string')
+      const latestKind = latest === null
+        ? 'idle'
+        : latest.status === 'passed' ? 'pass' : latest.status === 'failed' ? 'fail' : 'run'
+
+      let body
+      if (requirement === null) {
+        body = h('div', { className: 'dsh-wb-design-msg' },
+          h('b', null, '这个会话还没有绑定需求'),
+          '从需求卡片新开一个测试会话，右栏就会显示这条需求的验收标准和测试记录。')
+      } else {
+        body = h('div', { className: 'dsh-wb-test-body' },
+          h('div', { className: `dsh-wb-test-banner is-${latestKind}` },
+            h('div', { className: 'dsh-wb-test-banner-top' },
+              h(DesignIcon, { name: latestKind === 'pass' ? 'check-circle' : latestKind === 'fail' ? 'alert' : 'shield', size: 14 }),
+              h('b', null, latest === null ? '还没有测试记录' : `最新一轮：测试${TEST_STATUS_LABELS[latest.status] ?? latest.status}`),
+            ),
+            latest === null
+              ? h('span', { className: 'dsh-wb-test-banner-meta' }, '在测试会话里用 /wb-test start 开始一轮，pass / fail 记录结果。')
+              : h('span', { className: 'dsh-wb-test-banner-meta' },
+                  `${latestBy?.name ?? latest.by} · ${relativeTime(latest.finishedAt ?? latest.startedAt)}`,
+                  latest.note ? ` · ${latest.note}` : '',
+                  latestUrl
+                    ? h('a', {
+                        href: latestUrl,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        onClick: (event) => {
+                          if (openUrlInDshBrowser(ctx, sid, latestUrl)) event.preventDefault()
+                        },
+                      }, ' · 缺陷单')
+                    : null,
+                ),
+          ),
+
+          h('section', { className: 'dsh-wb-test-sec' },
+            h('h4', null,
+              '验收标准',
+              criteria.length > 0 ? h('span', { className: 'dsh-wb-test-progress' }, `${doneCount}/${criteria.length}`) : null,
+            ),
+            criteria.length === 0
+              ? h(MarkdownText, { text: doc.acceptanceCriteria })
+              : h('div', { className: 'dsh-wb-test-checks' },
+                  criteria.map((item, index) => h('label', {
+                    className: `dsh-wb-test-check${checked[index] ? ' is-done' : ''}`,
+                    key: `${index}:${item.slice(0, 24)}`,
+                  },
+                    h('input', {
+                      type: 'checkbox',
+                      checked: Boolean(checked[index]),
+                      onChange: () => toggleItem(index),
+                    }),
+                    h('span', null, markdownInline(item, `chk${index}`)),
+                  )),
+                ),
+          ),
+
+          h('section', { className: 'dsh-wb-test-sec' },
+            h('h4', null, '开发交付物'),
+            devTasks.length === 0
+              ? h('div', { className: 'dsh-wb-test-empty' }, '还没有开发任务。')
+              : h('div', { className: 'dsh-wb-test-runs' },
+                  devTasks.map((task) => {
+                    const assignee = task.assigneeId ? users.find(user => user.id === task.assigneeId) : null
+                    return h('div', { className: 'dsh-wb-test-run', key: task.id ?? task.platformId },
+                      h('div', { className: 'dsh-wb-test-run-top' },
+                        h('b', null, platformName(state?.platforms ?? [], task.platformId)),
+                        h('span', { className: 'state' }, DEV_STATUS_LABELS[task.status] ?? task.status),
+                      ),
+                      h('div', { className: 'dsh-wb-test-run-meta' },
+                        assignee?.name ?? '未指派',
+                        task.branch ? h('code', null, ` ${task.branch}`) : null,
+                        task.mrUrl ? ' · MR 已提交' : '',
+                      ),
+                    )
+                  })),
+          ),
+
+          h('section', { className: 'dsh-wb-test-sec' },
+            h('h4', null, '测试证据', evidence.length > 0 ? h('span', { className: 'dsh-wb-test-progress' }, `${evidence.length}`) : null),
+            evidence.length === 0
+              ? h('div', { className: 'dsh-wb-test-empty' }, '还没有测试报告。测试会话里产出的报告会同步到这里。')
+              : h('div', { className: 'dsh-wb-test-evidence' },
+                  evidence.map(artifact => {
+                    const previewable = /\.html?$/i.test(artifact.name)
+                    return h('div', { className: 'dsh-wb-test-evidence-item', key: artifact.id },
+                      h('div', { className: 'dsh-wb-test-evidence-head' },
+                        h(DesignIcon, { name: 'file', size: 13 }),
+                        h('span', { className: 'dsh-wb-test-evidence-name' }, artifact.name.split('/').pop()),
+                        h('span', { className: 'dsh-wb-test-run-meta' }, humanBytes(artifact.size)),
+                        previewable
+                          ? h('button', {
+                              className: 'dsh-wb-btn dsh-wb-btn--sm',
+                              type: 'button',
+                              onClick: () => setEvidenceOpen(current => current === artifact.id ? '' : artifact.id),
+                            }, evidenceOpen === artifact.id ? '收起' : '预览')
+                          : null,
+                      ),
+                      previewable && evidenceOpen === artifact.id
+                        ? h('iframe', {
+                            className: 'dsh-wb-test-evidence-frame',
+                            src: designPreviewUrl(requirement.id, { artifactId: artifact.id, name: artifact.name }),
+                            title: artifact.name,
+                            sandbox: 'allow-scripts allow-forms allow-modals',
+                            referrerPolicy: 'no-referrer',
+                          })
+                        : null,
+                    )
+                  })),
+          ),
+
+          h('section', { className: 'dsh-wb-test-sec' },
+            h('h4', null, `测试记录${ordered.length > 0 ? ` · ${ordered.length}` : ''}`),
+            ordered.length === 0
+              ? h('div', { className: 'dsh-wb-test-empty' }, '还没有测试轮次。')
+              : h('div', { className: 'dsh-wb-test-runs' },
+                  ordered.map(run => h('div', { className: 'dsh-wb-test-run', key: run.id },
+                    h('div', { className: 'dsh-wb-test-run-top' },
+                      h('span', { className: `state is-${run.status}` }, TEST_STATUS_LABELS[run.status] ?? run.status),
+                      h('b', null, users.find(user => user.id === run.by)?.name ?? run.by),
+                      h('span', { className: 'dsh-wb-test-run-meta' }, relativeTime(run.finishedAt ?? run.startedAt)),
+                    ),
+                    run.note ? h('div', { className: 'dsh-wb-test-run-meta' }, run.note) : null,
+                  ))),
+          ),
+
+          h('div', { className: 'dsh-wb-test-cmds' },
+            h('div', null, h('code', null, '/wb-test start'), ' 开始一轮测试'),
+            h('div', null, h('code', null, '/wb-test pass 说明'), ' 记录通过'),
+            h('div', null, h('code', null, '/wb-test fail 说明 https://缺陷链接'), ' 记录不通过'),
+          ),
+        )
+      }
+
+      return h('div', { className: 'dsh-wb-test' },
+        requirement !== null ? h(RequirementBrief, { requirement, compact: true, sid, ctx }) : null,
+        body,
+      )
+    }
+
+    function RequirementTab({ sid, ctx, inputActions }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
       const [claimError, setClaimError] = useState('')
       const [blankAttempt, setBlankAttempt] = useState(0)
       useClaimSession(sid, actorId, setClaimError)
-      // 设计师打开自己的设计会话时，右栏默认落到设计画布；需求/开发会话仍看原型。
-      useEffect(() => {
-        if (requirement === null || state?.currentUser?.activeRole !== 'design') return undefined
-        const current = (requirement.sessions ?? []).find(session => session.sessionId === sid)
-        if (!current || current.type !== 'design') return undefined
-        const timer = setTimeout(() => openDesignTab(ctx), 220)
-        return () => clearTimeout(timer)
-      }, [requirement?.id, requirement?.sessions?.length, sid, state?.currentUser?.activeRole, ctx])
       const prototypePath = requirement?.prototypePath ?? ''
       const prototypeFiles = requirement?.prototypeFiles ?? []
       const hasPrototype = prototypeFiles.length > 0
+        || (requirement?.artifacts ?? []).some(artifact => artifact.kind === 'prototype' && /\.html?$/i.test(String(artifact.name || '')))
       const sessionRecord = (requirement?.sessions ?? []).find(item => item.sessionId === sid)
       const isDesignSession = sessionRecord?.type === 'design'
-      const blank = useBlankCanvas(requirement, blankAttempt, 'prototype', !isDesignSession)
+      // 只有产品负责人能改原型；其他角色在同一个右栏里看只读预览。
+      const ownerCanEdit = requirement !== null && requirement !== undefined
+        && state?.currentUser?.id === requirement.ownerId
+      // 从需求详情页点「打开」进来的是预览：产品也先只读，要改再点「改为可编辑」。
+      const readonlyPreview = useReadonlyPreview(sid, TAB_KIND)
+      const canEditPrototype = ownerCanEdit && !readonlyPreview
+      const blank = useBlankCanvas(requirement, blankAttempt, 'prototype', !isDesignSession && canEditPrototype)
       const retryBlank = useCallback(() => setBlankAttempt(n => n + 1), [])
 
       let body
@@ -7846,20 +9133,24 @@ window.__ModuleLoader__.load({
         )
       } else if (requirement === null) {
         // 这个会话还没有关联需求：仍然给 Design Studio 的首页。
-        body = h(DesignStudioCanvas, { sid, ctx, targetPath: '', onRefresh: () => { void reload() } })
+        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: '', onRefresh: () => { void reload() } })
+      } else if (hasPrototype) {
+        body = canEditPrototype
+          ? h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: prototypePath, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
+          : h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
+      } else if (!canEditPrototype) {
+        body = h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
       } else if (isDesignSession) {
         // 同一个 DSH 会话只能有一个画布目标。设计会话的画布归「设计」面板，
-        // 需求面板再挂一个画布会把 design/ 和 prototype/ 抢到同一个预览里。
+        // 需求面板再挂一个可写画布会把 design/ 和 prototype/ 抢到同一个预览里。
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '这是设计会话'),
           '设计稿画布在「设计」面板里；需求原型不在这里重复打开，避免两个画布互相覆盖。',
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => openDesignTab(ctx) }, '打开设计画布'),
         )
-      } else if (hasPrototype) {
-        body = h(DesignStudioCanvas, { sid, ctx, targetPath: prototypePath, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
       } else if (blank.path !== '') {
         // 新建需求后直接开一张空白画布，模型出第一屏时右栏会切到真正的原型目录。
-        body = h(DesignStudioCanvas, { sid, ctx, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
+        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
       } else if (blank.error !== '') {
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '空白画布没有创建'),
@@ -7870,9 +9161,24 @@ window.__ModuleLoader__.load({
         body = h('div', { className: 'dsh-wb-design-msg' }, h('span', { className: 'dsh-wb-spinner' }), '正在准备空白画布…')
       }
 
-      // 需求侧栏只放画布：标题和原型工具栏收进 Design Studio 自己的画布头里。
+      // 需求说明在上、原型画布在下：开发/测试读得到需求，也看得到原型。
       return h('div', { className: 'dsh-wb-design dsh-wb-canvas-pane' },
         claimError !== '' ? h('div', { className: 'dsh-wb-notice is-error' }, claimError) : null,
+        requirement !== null
+          ? h(RequirementBrief, {
+              requirement,
+              sid,
+              ctx,
+              extra: ownerCanEdit && readonlyPreview
+                ? h('button', {
+                    className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
+                    type: 'button',
+                    title: '切回可编辑画布',
+                    onClick: () => setReadonlyPreview(sid, TAB_KIND, false),
+                  }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
+                : null,
+            })
+          : null,
         h('div', { className: 'dsh-wb-canvas-content' }, body),
       )
     }
@@ -8013,8 +9319,9 @@ window.__ModuleLoader__.load({
     function designPreviewUrl(requirementId, item) {
       if (!requirementId || !item) return ''
       const params = new URLSearchParams({ requirementId })
+      const relativePath = item.relativePath || item.path
       if (item.artifactId) params.set('artifactId', item.artifactId)
-      else if (item.relativePath) params.set('path', item.relativePath)
+      else if (relativePath) params.set('path', relativePath)
       else return ''
       const entry = previewTickets.get(requirementId)
       if (entry !== undefined && entry.expiresAt > Date.now()) params.set('ticket', entry.ticket)
@@ -8135,7 +9442,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DesignTab({ sid, ctx }) {
+    function DesignTab({ sid, ctx, inputActions }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -8160,7 +9467,14 @@ window.__ModuleLoader__.load({
           ? requirement.folderPath
           : ensuredDesign
       const backToSession = useCallback(() => { closeOwnTab(ctx, DESIGN_TAB_KIND); focusComposer() }, [ctx])
-      const blank = useBlankCanvas(requirement, blankAttempt, 'design', isDesignSession)
+      // 只有被指派的设计师能改设计稿；其他角色看只读预览。
+      const readonlyPreview = useReadonlyPreview(sid, DESIGN_TAB_KIND)
+      const designerCanEdit = requirement !== null && requirement !== undefined
+        && state?.currentUser?.id === requirement.designerId
+        && isDesignSession
+      // 从需求详情页点「打开」进来的是预览：设计师也先只读。
+      const canEditDesign = designerCanEdit && !readonlyPreview
+      const blank = useBlankCanvas(requirement, blankAttempt, 'design', isDesignSession && canEditDesign)
       const retryBlank = useCallback(() => setBlankAttempt(n => n + 1), [])
 
       useEffect(() => {
@@ -8184,23 +9498,29 @@ window.__ModuleLoader__.load({
           '从研发工作台的迭代里点“进入会话”，或先在会话中提交需求。',
         )
       } else if (!isDesignSession) {
-        // 需求/开发/测试会话不应该在这里创建 design/ 或抢同一个 DS 画布目标。
-        body = h('div', { className: 'dsh-wb-design-msg' },
-          h('b', null, '当前会话不是设计会话'),
-          designSession
-            ? '这条需求的画布属于设计会话；进入设计会话后再打开设计面板。'
-            : '这条需求还没有设计会话。需要设计时，从研发工作台新建一个设计会话。',
-          designSession
-            ? h('button', {
-                className: 'dsh-wb-btn dsh-wb-btn--sm',
-                type: 'button',
-                onClick: () => {
-                  ctx.uiWorkspace.openSession(designSession.sessionId)
-                  setTimeout(() => openDesignTab(ctx), 260)
-                },
-              }, '进入设计会话')
-            : null,
-        )
+        // 非设计会话不给编辑画布：有交付稿就只读预览，没有就提示去设计会话。
+        const hasDesignArtifacts = (requirement.artifacts ?? []).some(artifact =>
+          artifact.kind === 'design' && /\.html?$/i.test(String(artifact.name || '')))
+        body = hasDesignArtifacts
+          ? h(ReadonlyPreviewPanel, { requirement, kind: 'design', sid, ctx, ownerHint: designerCanEdit })
+          : h('div', { className: 'dsh-wb-design-msg' },
+              h('b', null, '当前会话不是设计会话'),
+              designSession
+                ? '这条需求的画布属于设计会话；进入设计会话后再打开设计面板。'
+                : '这条需求还没有设计会话。需要设计时，从研发工作台新建一个设计会话。',
+              designSession
+                ? h('button', {
+                    className: 'dsh-wb-btn dsh-wb-btn--sm',
+                    type: 'button',
+                    onClick: () => {
+                      ctx.uiWorkspace.openSession(designSession.sessionId)
+                      setTimeout(() => openRightTabIn(ctx, designSession.sessionId, DESIGN_TAB_KIND), 260)
+                    },
+                  }, '进入设计会话')
+                : null,
+            )
+      } else if (!canEditDesign) {
+        body = h(ReadonlyPreviewPanel, { requirement, kind: 'design', sid, ctx, ownerHint: designerCanEdit })
       } else if (mode === 'delivered') {
         body = h(DeliveredGallery, {
           requirement,
@@ -8213,6 +9533,7 @@ window.__ModuleLoader__.load({
         body = h(DesignStudioCanvas, {
           sid,
           ctx,
+          inputActions,
           targetPath: blank.path,
           kind: 'design',
           currentWorkId: requirement.id,
@@ -8230,6 +9551,7 @@ window.__ModuleLoader__.load({
         body = h(DesignStudioCanvas, {
           sid,
           ctx,
+          inputActions,
           targetPath,
           kind: 'design',
           currentWorkId: requirement.id,
@@ -8237,10 +9559,80 @@ window.__ModuleLoader__.load({
         })
       }
 
-      // 设计右栏和需求右栏同一套逻辑：只放画布，标题与工具栏都收进 Design Studio 自己的画布头。
+      // 设计右栏在画布上方保留一条需求摘要，设计师不用切回需求页也能看到要解决的问题。
       return h('div', { className: 'dsh-wb-design dsh-wb-canvas-pane' },
         claimError !== '' ? h('div', { className: 'dsh-wb-notice is-error' }, claimError) : null,
+        requirement !== null
+          ? h(RequirementBrief, {
+              requirement,
+              compact: true,
+              sid,
+              ctx,
+              extra: designerCanEdit && readonlyPreview
+                ? h('button', {
+                    className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
+                    type: 'button',
+                    title: '切回可编辑画布',
+                    onClick: () => setReadonlyPreview(sid, DESIGN_TAB_KIND, false),
+                  }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
+                : null,
+            })
+          : null,
         h('div', { className: 'dsh-wb-canvas-content' }, body),
+      )
+    }
+
+    // DSH 输入框原生支持粘贴图片，但没有显式的「草稿图」入口。这里补一个：
+    // 选图后构造一次粘贴事件交给 DSH 自己的 file intake，附件草稿的创建、
+    // 预览、删除仍然完全走宿主逻辑，插件不额外存文件。
+    function ComposerDraftImage() {
+      const fileRef = useRef(null)
+      const onPick = (event) => {
+        const file = event.target.files && event.target.files[0] ? event.target.files[0] : null
+        event.target.value = ''
+        if (file === null) return
+        if (!/^image\/(png|jpeg|webp|gif)$/i.test(file.type)) {
+          publishCommandToast({ seq: ++commandToastSeq, name: '草稿图', kind: 'error', text: '只支持 PNG、JPEG、WebP、GIF 图片。' })
+          return
+        }
+        const editor = document.querySelector('[data-lexical-editor="true"]')
+        if (editor === null) {
+          publishCommandToast({ seq: ++commandToastSeq, name: '草稿图', kind: 'error', text: '没找到聊天输入框，先打开一个会话。' })
+          return
+        }
+        try {
+          const transfer = new DataTransfer()
+          transfer.items.add(file)
+          let paste
+          try {
+            paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transfer })
+          } catch {
+            paste = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
+            Object.defineProperty(paste, 'clipboardData', { value: transfer })
+          }
+          editor.focus()
+          editor.dispatchEvent(paste)
+          publishCommandToast({ seq: ++commandToastSeq, name: '草稿图', kind: 'info', text: '草稿图已放进输入框，补一句说明再发送。' })
+        } catch (reason) {
+          console.warn('[dsh-workbench] 草稿图放进输入框失败', reason)
+          publishCommandToast({ seq: ++commandToastSeq, name: '草稿图', kind: 'error', text: '没能放进输入框，也可以直接把图片拖进输入框。' })
+        }
+      }
+      return h('span', { className: 'dsh-wb-draftimg' },
+        h('button', {
+          className: 'dsh-wb-draftimg-btn',
+          type: 'button',
+          title: '添加草稿图（图片）',
+          'aria-label': '添加草稿图',
+          onClick: () => { if (fileRef.current !== null) fileRef.current.click() },
+        }, h(DesignIcon, { name: 'upload', size: 14 })),
+        h('input', {
+          ref: fileRef,
+          type: 'file',
+          accept: 'image/png,image/jpeg,image/webp,image/gif',
+          style: { display: 'none' },
+          onChange: onPick,
+        }),
       )
     }
 
@@ -8382,18 +9774,13 @@ window.__ModuleLoader__.load({
         }
       }, 'dsh-workbench: design studio chunk')
 
+      // 需求/设计不再挂在右栏「新建」菜单里和 工作区文件/上下文 抢位置；
+      // 入口放到会话标题右侧的一对图标上，tab 定义仍然保留给 openTab 使用。
       ctx.effect(() => ctx.sidebarRightTabs.register({
         id: TAB_ID,
         kind: TAB_KIND,
         title: () => '需求',
         keepMounted: true,
-        guide: [{
-          id: 'open',
-          order: 28,
-          title: () => '需求',
-          description: () => '需求文档、验收标准、评审、开发、测试与发布进度',
-          icon: GuideIcon,
-        }],
       }), 'dsh-workbench: requirement tab')
 
       ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
@@ -8407,13 +9794,6 @@ window.__ModuleLoader__.load({
         kind: DESIGN_TAB_KIND,
         title: () => '设计',
         keepMounted: true,
-        guide: [{
-          id: 'open',
-          order: 29,
-          title: () => '设计',
-          description: () => '设计版本、原型和预览图，团队里每个人看到同一份交付稿',
-          icon: DesignGuideIcon,
-        }],
       }), 'dsh-workbench: design tab')
 
       ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
@@ -8422,12 +9802,52 @@ window.__ModuleLoader__.load({
         inject: (sessionId) => ({ sid: sessionId }),
       }, (props) => h(DesignTab, { ...props, ctx }))), 'dsh-workbench: design tab body')
 
+      ctx.effect(() => ctx.sidebarRightTabs.register({
+        id: CODE_TAB_ID,
+        kind: CODE_TAB_KIND,
+        title: () => '开发',
+        keepMounted: true,
+      }), 'dsh-workbench: code tab')
+
+      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+        name: 'sidebar.right.pane.tab',
+        key: CODE_TAB_ID,
+        inject: (sessionId) => ({ sid: sessionId }),
+      }, (props) => h(CodeTab, { ...props, ctx }))), 'dsh-workbench: code tab body')
+
+      ctx.effect(() => ctx.sidebarRightTabs.register({
+        id: TEST_TAB_ID,
+        kind: TEST_TAB_KIND,
+        title: () => '测试',
+        keepMounted: true,
+      }), 'dsh-workbench: test tab')
+
+      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+        name: 'sidebar.right.pane.tab',
+        key: TEST_TAB_ID,
+        inject: (sessionId) => ({ sid: sessionId }),
+      }, (props) => h(TestTab, { ...props, ctx }))), 'dsh-workbench: test tab body')
+
+      ctx.effect(() => ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
+        name: 'conversation.session.header.actions',
+        id: 'dsh-workbench.header-actions',
+        order: 30,
+        inject: (sessionId) => ({ sid: sessionId }),
+      }, (props) => h(WorkbenchHeaderActions, { ...props, ctx }))), 'dsh-workbench: session header actions')
+
       // 会话开场的固定一句：需求会话空白时让宿主写一条真实的 assistant 消息。
       ctx.effect(() => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
         name: 'conversation.input.dock',
         id: 'dsh-workbench.greeting',
         order: 20,
       }, (props) => h(RequirementGreeting, { ...props, ctx }))), 'dsh-workbench: session greeting')
+
+      // 聊天框左侧的「草稿图」入口：复用 DSH 原生图片粘贴/附件链路。
+      ctx.effect(() => ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+        name: 'conversation.input.left',
+        id: 'dsh-workbench.draft-image',
+        order: 40,
+      }, ComposerDraftImage)), 'dsh-workbench: composer draft image')
 
       ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay',
