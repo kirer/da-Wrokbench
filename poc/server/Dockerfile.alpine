@@ -1,0 +1,39 @@
+# 面向离线/受限网络的 kiri 构建变体：使用镜像内已有的 rust:alpine + alpine:3.20，
+# 并通过 rsproxy 稀疏源替换 crates.io 下载地址（kiri 内 static.crates.io 不可达）。
+FROM rust:alpine AS build
+
+RUN apk add --no-cache build-base perl
+
+# cargo 源替换：index.crates.io 可达但 static.crates.io 被拒，改走 rsproxy。
+RUN mkdir -p "${CARGO_HOME}" && printf '%s\n' \
+    '[source.crates-io]' \
+    'replace-with = "rsproxy-sparse"' \
+    '[source.rsproxy-sparse]' \
+    'registry = "sparse+https://rsproxy.cn/index/"' \
+    > "${CARGO_HOME}/config.toml"
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo build --release --locked
+
+FROM alpine:3.20 AS runtime
+
+# 运行阶段不联网装包：用 busybox 自带的 adduser/wget，避免慢速 apk 源拖死构建。
+RUN adduser -D -u 10001 -h /data workbench \
+    && mkdir -p /data \
+    && chown workbench:workbench /data
+
+COPY --from=build /app/target/release/dsh-workbench-server /usr/local/bin/dsh-workbench-server
+
+USER workbench
+WORKDIR /data
+ENV DATABASE_PATH=/data/workbench.db
+ENV PORT=3210
+ENV WORKBENCH_BIND_ADDR=0.0.0.0
+EXPOSE 3210
+VOLUME ["/data"]
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null "http://127.0.0.1:${PORT}/health" || exit 1
+
+ENTRYPOINT ["dsh-workbench-server"]

@@ -34,7 +34,19 @@ window.__ModuleLoader__.load({
     const DESIGN_TAB_ID = 'workbench-design'
     const DESIGN_TAB_KIND = 'workbench-design'
     const API = '/dsh-workbench/api/'
-    const DS_API = '/dsh-design-studio/api/'
+    // 桌面端 dsh-app://app 下 Cookie 可能不持久，登录时把 token 存进 localStorage，
+    // 之后所有请求带 Authorization: Bearer，服务端两者都接受。
+    const TOKEN_KEY = 'dshWorkbenchAuthToken'
+    function readToken() {
+      try { return String(window.localStorage.getItem(TOKEN_KEY) || '') } catch (_) { return '' }
+    }
+    function writeToken(token) {
+      try {
+        if (typeof token === 'string' && token !== '') window.localStorage.setItem(TOKEN_KEY, token)
+        else window.localStorage.removeItem(TOKEN_KEY)
+      } catch (_) { /* 无 localStorage 时退回 Cookie */ }
+    }
+    const DS_API = '/dsh-workbench-design/api/'
     // 内嵌的 Design Studio 画布按 package-local chunk 懒加载；加载完再渲染右栏 tab。
     let designStudioState = { runtime: null, error: null }
     const designStudioListeners = new Set()
@@ -673,6 +685,77 @@ window.__ModuleLoader__.load({
 @container (max-width: 380px){.dsh-wb-rqbar-chips{display:none}.dsh-wb-rqbar-btn{padding:0 6px}}
 @media (max-width:1180px){.dsh-wb-stats{grid-template-columns:repeat(4,minmax(0,1fr))}.dsh-wb-top{flex-wrap:wrap}.dsh-wb-top-main{flex-basis:100%}.dsh-wb-top-actions{width:100%;justify-content:flex-start;flex-wrap:wrap;margin-left:0}}
 @media (max-width:900px){.dsh-wb-grid{grid-template-columns:1fr}.dsh-wb-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-wb-dev-grid{grid-template-columns:1fr}.dsh-wb-skill-body{grid-template-columns:1fr}.dsh-wb-skill-list{max-height:240px}}
+
+/* =========================================================================
+   与 design/ 设计系统对齐（tokens.css + app.css）。
+   插件跑在 DSH 内，读不到 design/ 的样式，所以把设计 token 映射到 DSH 语义变量上，
+   并统一页面留白、卡片、表格、按钮、头像、进度条等组件尺寸与配色。
+   ========================================================================= */
+.dsh-wb-page,.dsh-wb-navbar,.dsh-wb-auth,.dsh-wb-start,.dsh-wb-overlay,.dsh-wb-dialog,.dsh-wb-toast-region,.dsh-wb-command-toast,.dsh-wb-rqbar{
+  --dsw-alias-bg-base:#151517;
+  --dsw-alias-bg-layer-1:#232326;
+  --dsw-alias-bg-layer-2:#2a2a2e;
+  --dsw-alias-bg-layer-3:#333338;
+  --dsw-alias-border-l1:#2b2b30;
+  --dsw-alias-border-l2:#36363c;
+  --dsw-alias-border-l3:#46474d;
+  --dsw-alias-border-selected:#6f9bf0;
+  --dsw-alias-label-primary:#ededef;
+  --dsw-alias-label-secondary:#adb0b8;
+  --dsw-alias-label-tertiary:#9a9aa2;
+  --dsw-alias-brand-primary:#6f9bf0;
+  --dsw-alias-button-primary-fill:#3563cc;
+  --dsw-alias-button-primary-hover:#3f6fd6;
+  --dsw-alias-interactive-bg-hover:#2a2a2e;
+  --dsw-alias-state-success-primary:#5cc79a;
+  --dsw-alias-state-success-secondary:rgba(92,199,154,.4);
+  --dsw-alias-state-success-tertiary:rgba(92,199,154,.14);
+  --dsw-alias-state-business-primary:#82a8f3;
+  --dsw-alias-state-business-secondary:rgba(111,155,240,.4);
+  --dsw-alias-state-business-tertiary:rgba(111,155,240,.12);
+  --dsw-alias-state-warn-label:#e2b768;
+  --dsw-alias-state-warn-secondary:rgba(226,183,104,.4);
+  --dsw-alias-state-warn-tertiary:rgba(226,183,104,.14);
+  --dsw-alias-state-error-primary:#ef8a8a;
+  --dsw-alias-state-error-secondary:rgba(239,138,138,.4);
+  --dsw-alias-state-error-tertiary:rgba(239,138,138,.14);
+  --dsw-radius-sm:6px;--dsw-radius-md:8px;--dsw-radius-lg:10px;
+  font-family:"Inter",-apple-system,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",system-ui,sans-serif;
+}
+.dsh-wb-page{background:#151517;color:#ededef}
+.dsh-wb-content{padding:22px 28px 40px;max-width:1240px}
+.dsh-wb-title{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.dsh-wb-title-sub{font-size:12px;color:#adb0b8}
+.dsh-wb-eyebrow{color:#9a9aa2}
+.dsh-wb-stat{background:#232326;border:1px solid #2b2b30;border-radius:8px;padding:12px 14px}
+.dsh-wb-stat-label{font-size:11px;color:#9a9aa2}
+.dsh-wb-stat-value{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.dsh-wb-btn{height:32px;font-size:13px;border-radius:6px;border:1px solid #36363c;background:#2a2a2e;color:#ededef}
+.dsh-wb-btn:hover:not(:disabled){background:#333338;border-color:#46474d}
+.dsh-wb-btn--primary{background:#3563cc;border-color:#3563cc;color:#fff;font-weight:600}
+.dsh-wb-btn--primary:hover:not(:disabled){background:#3f6fd6;border-color:#3f6fd6}
+.dsh-wb-btn--ghost{background:transparent;border-color:transparent;color:#adb0b8}
+.dsh-wb-navbar{background:#151517;border-bottom:1px solid #2b2b30;min-height:52px;padding:0 24px;gap:18px}
+.dsh-wb-nav button{height:36px;font-size:13px;color:#9a9aa2}
+.dsh-wb-nav button:hover{background:#232326;color:#ededef}
+.dsh-wb-nav button.is-active{background:transparent;box-shadow:inset 0 -2px 0 #6f9bf0;border-radius:0;color:#ededef;font-weight:600}
+.dsh-wb-nav-logo{font-size:14px}
+.dsh-wb-iter-kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.dsh-wb-iter-table{border:1px solid #2b2b30;border-radius:8px;background:#232326}
+.dsh-wb-iter-tr{gap:10px;padding:11px 12px}
+.dsh-wb-iter-tr.is-head{background:#191919;font-size:11px;color:#9a9aa2;font-weight:500;letter-spacing:.03em}
+.dsh-wb-iter-tr.is-row:hover{background:#2a2a2e}
+.dsh-wb-iter-code,.dsh-wb-iter-dates,.dsh-wb-code{color:#9a9aa2}
+.dsh-wb-iter-name b{font-size:13px;font-weight:500;color:#ededef}
+.dsh-wb-iter-name em{font-size:11px;color:#9a9aa2}
+.dsh-wb-avatar{width:20px;height:20px;background:#3d5c8f;color:#fff;border:1px solid rgba(255,255,255,.08);font-size:11px}
+.dsh-wb-progress{height:5px;background:#333338}
+.dsh-wb-progress span{background:#6f9bf0}
+.dsh-wb-seg{padding:2px;background:#2a2a2e;border:1px solid #2b2b30;border-radius:6px}
+.dsh-wb-seg button{height:26px;font-size:12px;border-radius:4px;color:#adb0b8}
+.dsh-wb-seg button.is-on{background:#232326;color:#ededef;box-shadow:0 1px 2px rgba(0,0,0,.35);font-weight:500}
+.dsh-wb-chip{height:20px;border-radius:4px;font-size:11px;font-weight:500}
+.dsh-wb-input,.dsh-wb-select{background:#232326;border:1px solid #36363c;height:32px;border-radius:6px;color:#ededef}
 `
 
     function ensureStyles() {
@@ -698,7 +781,12 @@ window.__ModuleLoader__.load({
 
     async function api(path, options = {}) {
       const { timeoutMs = 20000, signal: externalSignal, ...rest } = options
-      const headers = { ...(rest.body === undefined ? {} : { 'content-type': 'application/json' }), ...(rest.headers || {}) }
+      const token = readToken()
+      const headers = {
+        ...(rest.body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(token !== '' ? { authorization: `Bearer ${token}` } : {}),
+        ...(rest.headers || {}),
+      }
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), timeoutMs)
       const forwardAbort = () => controller.abort()
@@ -709,8 +797,9 @@ window.__ModuleLoader__.load({
       try {
         const response = await fetch(API + path, { ...rest, headers, credentials: 'same-origin', signal: controller.signal })
         const body = await response.json().catch(() => ({}))
-        if (response.status === 401 && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('dsh-workbench:unauthorized'))
+        if (response.status === 401) {
+          writeToken('')
+          if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('dsh-workbench:unauthorized'))
         }
         if (!response.ok) throw new ApiError(body.error || `HTTP ${response.status}`, response.status)
         return body
@@ -796,7 +885,8 @@ window.__ModuleLoader__.load({
         setBusy(true)
         setError('')
         try {
-          await api('auth/mock', { method: 'POST', body: JSON.stringify({ userId }) })
+          const result = await api('auth/mock', { method: 'POST', body: JSON.stringify({ userId }) })
+          if (result && typeof result.token === 'string' && result.token !== '') writeToken(result.token)
           broadcastAuthChange()
           await refresh()
           return true
@@ -812,6 +902,7 @@ window.__ModuleLoader__.load({
         setBusy(true)
         try {
           await api('auth/logout', { method: 'POST', body: '{}' })
+          writeToken('')
           broadcastAuthChange()
           await refresh()
         } catch (reason) {
@@ -1012,8 +1103,8 @@ window.__ModuleLoader__.load({
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         `设计状态：${requirement.designStatus}；已有设计文件：${(requirement.designFiles ?? []).length} 个`,
         '',
-        '请先加载 ui-design 技能，在这个需求文件夹里做设计稿（一屏一个 HTML），',
-        '完成后调用 preview_page 打开第一屏，并用 check_design 自查。',
+        '请先加载 wb-ui-design 技能，在这个需求文件夹里做设计稿（一屏一个 HTML），',
+        '完成后调用 wb_preview_page 打开第一屏，并用 wb_check_design 自查。',
       ].join('\n')
     }
 
@@ -4620,7 +4711,7 @@ window.__ModuleLoader__.load({
         ),
         h('div', { className: 'dsh-wb-start-tip' },
           '画布会跟随 ',
-          h('code', null, 'preview_page'),
+          h('code', null, 'wb_preview_page'),
           ' 实时刷新；设计完成后在会话里用 ',
           h('code', null, '/design-deliver'),
           ' 交付，工作台会记录设计版本。',
@@ -4701,7 +4792,7 @@ window.__ModuleLoader__.load({
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         '',
         '请在这个需求里做产品原型：把一屏一个 HTML 写进 prototype/ 目录，先保证信息结构、关键流程和状态完整，不追求最终视觉；',
-        '做完调用 preview_page 打开第一屏，原型会显示在右侧「需求」面板的画布里。',
+        '做完调用 wb_preview_page 打开第一屏，原型会显示在右侧「需求」面板的画布里。',
       ].join('\n')
     }
 
@@ -4717,8 +4808,8 @@ window.__ModuleLoader__.load({
         `设计稿目录：${requirement.designPath ?? 'design/'}`,
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         '',
-        '请先加载 ui-design 技能，在 design/ 目录里做高保真设计稿（一屏一个 HTML），沿用需求里的原型和验收标准；',
-        '完成后调用 preview_page 打开第一屏，用 check_design 自查，再在会话里用 /design-deliver 交付。',
+        '请先加载 wb-ui-design 技能，在 design/ 目录里做高保真设计稿（一屏一个 HTML），沿用需求里的原型和验收标准；',
+        '完成后调用 wb_preview_page 打开第一屏，用 wb_check_design 自查，再在会话里用 /design-deliver 交付。',
       ].join('\n')
     }
 

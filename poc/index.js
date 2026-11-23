@@ -508,8 +508,12 @@ function assertSameOrigin(req) {
   const method = req.method || 'GET'
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return
   const origin = req.headers.origin
-  if (typeof origin === 'string' && origin !== '') {
-    if (origin === 'null' || origin !== requestOrigin(req)) {
+  // 桌面端 DSH 的渲染层跑在 dsh-app://app 自定义协议下（见 dsh-desktop 主进程），
+  // 同源 fetch 的 Origin 是 "dsh-app://app"，也可能是字面量 "null"。这些都不是跨站，
+  // 放行；只对真正的 http(s) 跨站 Origin 做比对拒绝。下面的 Sec-Fetch-Site 仍会挡住
+  // 明确的跨站写请求（cross-site）。
+  if (typeof origin === 'string' && /^https?:\/\//i.test(origin)) {
+    if (origin !== requestOrigin(req)) {
       throw httpError(403, '跨站写请求已被拒绝')
     }
   }
@@ -531,7 +535,13 @@ function safeReturnTo(req, raw) {
 }
 
 async function sessionFromRequest(req, local) {
-  const token = parseCookies(req)[AUTH_COOKIE]
+  // 桌面端渲染层在 dsh-app://app 自定义协议下运行时，Set-Cookie 可能不落地；
+  // 因此同时接受 Authorization: Bearer <token>（客户端登录后存 localStorage）。
+  let token = parseCookies(req)[AUTH_COOKIE]
+  if (typeof token !== 'string' || token === '') {
+    const auth = String(req.headers.authorization || '')
+    if (/^Bearer\s+/i.test(auth)) token = auth.replace(/^Bearer\s+/i, '').trim()
+  }
   if (typeof token !== 'string' || token === '') return null
   const result = await serverRaw('/auth/session', { token })
   if (!result.ok || result.data?.authenticated !== true) return null
@@ -560,9 +570,9 @@ function issueAuthCookie(res, payload) {
     const maxAge = Number.isFinite(Number(payload.expiresIn)) ? Number(payload.expiresIn) : 7 * 24 * 60 * 60
     appendCookie(res, serializeCookie(AUTH_COOKIE, payload.token, maxAge))
   }
-  const body = { ...payload }
-  delete body.token
-  return body
+  // 同时把 token 返回给客户端：桌面端 dsh-app://app 下 Cookie 可能不持久，
+  // 客户端会把它存进 localStorage 并在请求里带 Authorization: Bearer。
+  return { ...payload }
 }
 
 // ---------------------------------------------------------------------------
@@ -1392,8 +1402,8 @@ function registerTools(ctx, local) {
           + `设计人员 ${requirement.designerId ?? '未认领'}，平台 ${platformNames(state, requirement.platformIds)}。\n`
           + `需求文件夹：${folder || '尚未创建'}。\n`
           + `已有设计文件（${files.length}）：${fileText}。\n`
-          + '开始设计：先加载 ui-design 技能；设计稿写入需求文件夹（一屏一个 HTML 文件）；'
-          + '完成后调用 preview_page 打开第一屏，并用 check_design 自查；交付时调用 workbench_deliver_design。',
+          + '开始设计：先加载 wb-ui-design 技能；设计稿写入需求文件夹（一屏一个 HTML 文件）；'
+          + '完成后调用 wb_preview_page 打开第一屏，并用 wb_check_design 自查；交付时调用 workbench_deliver_design。',
         )
       },
     ))
@@ -1841,10 +1851,10 @@ const SKILLS = [
       '',
       '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹和已有设计文件。',
       '2. 如果设计未认领且当前身份是设计，调用 `workbench_claim_design`。',
-      '3. 加载 `ui-design` 技能，按它的流程和自查清单做设计。',
+      '3. 加载 `wb-ui-design` 技能，按它的流程和自查清单做设计。',
       '4. 设计稿写进需求文件夹，一屏一个 HTML 文件；先看已有文件，避免覆盖用户手改的内容。',
-      '5. 写完第一屏就调用 `preview_page` 打开它（右侧「需求」画布会实时显示），之后改文件会自动刷新。',
-      '6. 用 `check_design` 在真实尺寸下自查；需要看真实截图时用 `look_design`。最多三轮测量-修复。',
+      '5. 写完第一屏就调用 `wb_preview_page` 打开它（右侧「需求」画布会实时显示），之后改文件会自动刷新。',
+      '6. 用 `wb_check_design` 在真实尺寸下自查；需要看真实截图时用 `wb_look_design`。最多三轮测量-修复。',
       '7. 只汇报改动文件、设计取舍和剩余问题；不要编造设计状态。',
       '8. 设计完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
       '',
