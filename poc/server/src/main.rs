@@ -67,8 +67,9 @@ async fn main() {
         "WORKBENCH_INTERNAL_TOKEN",
         "dsh-workbench-poc-internal-token",
     );
-    const KNOWN_WEAK_SECRETS: [&str; 3] = [
+    const KNOWN_WEAK_SECRETS: [&str; 4] = [
         "dsh-workbench-poc-server-secret-change-me",
+        "dsh-workbench-poc-internal-token",
         "change-me-to-a-long-random-string",
         "change-me-to-another-long-random-string",
     ];
@@ -88,6 +89,23 @@ async fn main() {
     {
         panic!("钉钉登录需要 DINGTALK_CLIENT_ID / DINGTALK_CLIENT_SECRET");
     }
+    let gitlab_webhook_secret = env_opt("GITLAB_WEBHOOK_SECRET");
+    if production
+        && env_opt("GITLAB_BASE_URL").is_some()
+        && gitlab_webhook_secret.as_deref().map_or(true, |secret| {
+            secret.len() < 32 || KNOWN_WEAK_SECRETS.contains(&secret)
+        })
+    {
+        panic!("配置 GitLab 后，生产环境必须设置至少 32 字符的随机 GITLAB_WEBHOOK_SECRET");
+    }
+    let mut token_ttl_seconds: i64 = env_value("WORKBENCH_TOKEN_TTL_SECONDS", "604800")
+        .parse()
+        .unwrap_or(604800);
+    if token_ttl_seconds <= 0 {
+        panic!("WORKBENCH_TOKEN_TTL_SECONDS 必须是正整数");
+    }
+    // 最长 30 天；没有吊销机制时，过长 TTL 等于把退出登录变成摆设。
+    token_ttl_seconds = token_ttl_seconds.min(30 * 24 * 60 * 60);
     if !production
         && (auth_secret == "dsh-workbench-poc-server-secret-change-me"
             || internal_token == "dsh-workbench-poc-internal-token")
@@ -126,6 +144,9 @@ async fn main() {
         dingtalk_api_base: env_value("DINGTALK_API_BASE", "https://oapi.dingtalk.com")
             .trim_end_matches('/')
             .to_string(),
+        dingtalk_oauth_base: env_value("DINGTALK_OAUTH_BASE", "https://api.dingtalk.com")
+            .trim_end_matches('/')
+            .to_string(),
         dingtalk_default_roles: env_value("DINGTALK_DEFAULT_ROLES", "dev")
             .split(',')
             .map(str::trim)
@@ -143,18 +164,9 @@ async fn main() {
         ),
         gitlab_base_url: env_opt("GITLAB_BASE_URL"),
         gitlab_token: env_opt("GITLAB_TOKEN"),
-        gitlab_webhook_secret: env_opt("GITLAB_WEBHOOK_SECRET"),
+        gitlab_webhook_secret,
         gitlab_default_branch: env_value("GITLAB_DEFAULT_BRANCH", "main"),
-        token_ttl_seconds: env_value("WORKBENCH_TOKEN_TTL_SECONDS", "604800")
-            .parse()
-            .unwrap_or(604800),
-        database_path: if database_url.is_some() {
-            "postgres".to_string()
-        } else {
-            database_path.clone()
-        },
-        port,
-        allowed_origins: allowed_origins.clone(),
+        token_ttl_seconds,
         allow_remote_internal,
     };
 

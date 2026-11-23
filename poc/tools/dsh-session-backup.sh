@@ -17,6 +17,8 @@
 # restore / clear-* 会先自动退出 DeepSeek Harness（⌘Q 同效），
 # 再自动做一份 pre-restore / pre-clear 备份；项目目录本身不会被删除。
 set -euo pipefail
+# 备份包含会话正文和本机路径，只允许当前用户读写。
+umask 077
 
 DSH_HOME=${DSH_HOME:-"$HOME/.dsh"}
 DSH_HOME=${DSH_HOME%/}
@@ -72,16 +74,24 @@ prune_backups() {
   local pruned
   pruned=$(ls -1t "$BACKUP_DIR"/dsh-sessions-*.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)) || true)
   if [[ -n "$pruned" ]]; then
-    echo "$pruned" | while IFS= read -r file; do [[ -n "$file" ]] && rm -f "$file"; done
+    echo "$pruned" | while IFS= read -r file; do
+      [[ -n "$file" ]] || continue
+      rm -f "$file" "$file.manifest.txt"
+    done
   fi
 }
 
 cmd_backup() {
-  local label=${1:-manual}
-  local stamp name
+  local label
+  label=$(printf '%s' "${1:-manual}" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-40)
+  [[ -n "$label" ]] || label=manual
+  local stamp name tmp manifest
   stamp=$(date +%Y%m%d-%H%M%S)
   name="dsh-sessions-$stamp-$label.tar.gz"
+  tmp="$BACKUP_DIR/.$name.partial"
+  manifest="$BACKUP_DIR/$name.manifest.txt"
   mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR"
   local items=()
   local item
   for item in "${STATE_ITEMS[@]}"; do
@@ -91,12 +101,25 @@ cmd_backup() {
     echo "没有可备份的 DSH 状态：$DSH_HOME" >&2
     return 1
   fi
-  tar -czf "$BACKUP_DIR/$name" -C "$DSH_HOME" "${items[@]}"
+  rm -f "$tmp"
+  if ! tar -czf "$tmp" -C "$DSH_HOME" "${items[@]}"; then
+    rm -f "$tmp"
+    echo "备份打包失败，未写入正式备份：$DSH_HOME" >&2
+    return 1
+  fi
+  if ! tar -tzf "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    echo "备份校验失败，未写入正式备份：$DSH_HOME" >&2
+    return 1
+  fi
+  chmod 600 "$tmp"
   {
     echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "dsh_home=$DSH_HOME"
     echo "items=${items[*]}"
-  } > "$BACKUP_DIR/$name.manifest.txt"
+  } > "$manifest"
+  chmod 600 "$manifest"
+  mv -f "$tmp" "$BACKUP_DIR/$name"
   echo "已备份到 $BACKUP_DIR/$name"
   prune_backups
 }
@@ -128,12 +151,21 @@ cmd_restore() {
     echo "不是有效的 DSH 会话备份（缺少 storages/workspace.json）：$archive" >&2
     exit 1
   fi
+  if tar -tzf "$archive" | awk 'BEGIN { bad = 0 } /^\// || /(^|\/)\.\.(\/|$)/ { bad = 1 } END { exit bad }'; then
+    :
+  else
+    echo "备份包含越界路径，拒绝恢复：$archive" >&2
+    exit 1
+  fi
   if [[ "$yes" != "--yes" ]]; then
     local answer
     read -r -p "将用 $archive 覆盖 $DSH_HOME 的会话状态（先自动备份当前状态），继续？[y/N] " answer
     [[ "$answer" == [yY]* ]] || { echo "已取消"; exit 1; }
   fi
-  cmd_backup pre-restore || echo "警告：恢复前的当前状态备份失败，继续恢复" >&2
+  if ! cmd_backup pre-restore; then
+    echo "恢复前的当前状态备份失败，已中止恢复（不会破坏现有会话）。" >&2
+    exit 1
+  fi
   RESTORE_TMP=$(mktemp -d)
   tar -xzf "$archive" -C "$RESTORE_TMP"
   local item
@@ -182,8 +214,19 @@ PYEOF
 cmd_clear_workbench_sessions() {
   local yes=${1:-}
   require_app_closed
-  if [[ ! -d "$WORKBENCH_BASE" ]]; then
-    echo "工作台顶级文件夹不存在：$WORKBENCH_BASE" >&2
+  if [[ -z "$WORKBENCH_BASE" || "$WORKBENCH_BASE" != /* || ! -d "$WORKBENCH_BASE" ]]; then
+    echo "工作台顶级文件夹无效或不存在：$WORKBENCH_BASE" >&2
+    exit 1
+  fi
+  WORKBENCH_BASE=$(cd "$WORKBENCH_BASE" && pwd -P)
+  case "$WORKBENCH_BASE" in
+    /|"$HOME"|"$DSH_HOME")
+      echo "拒绝把 $WORKBENCH_BASE 当作工作台顶级文件夹清理，请设置更具体的 WORKBENCH_BASE。" >&2
+      exit 1
+      ;;
+  esac
+  if [[ ! -f "$DSH_HOME/storages/workspace.json" ]]; then
+    echo "DSH 工作区注册表不存在：$DSH_HOME/storages/workspace.json" >&2
     exit 1
   fi
   if [[ "$yes" != "--yes" ]]; then
@@ -191,7 +234,10 @@ cmd_clear_workbench_sessions() {
     read -r -p "将删除 $WORKBENCH_BASE 下的 DSH 工作区与会话（先自动备份），继续？[y/N] " answer
     [[ "$answer" == [yY]* ]] || { echo "已取消"; exit 1; }
   fi
-  cmd_backup pre-clear || echo "警告：清理前的备份失败，继续清理" >&2
+  if ! cmd_backup pre-clear; then
+    echo "清理前的备份失败，已中止清理（不会删除会话）。" >&2
+    exit 1
+  fi
   python3 -I - "$DSH_HOME" "$WORKBENCH_BASE" <<'PYEOF'
 import json
 import os
@@ -330,12 +376,19 @@ PYEOF
 cmd_clear_all_sessions() {
   local yes=${1:-}
   require_app_closed
+  if [[ ! -f "$DSH_HOME/storages/workspace.json" ]]; then
+    echo "DSH 工作区注册表不存在：$DSH_HOME/storages/workspace.json" >&2
+    exit 1
+  fi
   if [[ "$yes" != "--yes" ]]; then
     local answer
     read -r -p "将清空所有项目的 DSH 工作区与会话（先自动备份，项目目录本身不动），继续？[y/N] " answer
     [[ "$answer" == [yY]* ]] || { echo "已取消"; exit 1; }
   fi
-  cmd_backup pre-clear-all || echo "警告：清理前的备份失败，继续清理" >&2
+  if ! cmd_backup pre-clear-all; then
+    echo "清理前的备份失败，已中止清理（不会删除会话）。" >&2
+    exit 1
+  fi
   python3 -I - "$DSH_HOME" <<'PYEOF'
 import json
 import os

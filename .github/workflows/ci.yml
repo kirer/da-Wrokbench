@@ -6,13 +6,25 @@ on:
       - 'poc/server/**'
       - 'poc/index.js'
       - 'poc/client.js'
-      - 'poc/tests/host-bff.mjs'
+      - 'poc/client.design-studio.js'
+      - 'poc/design-studio/**'
+      - 'poc/tests/**'
+      - 'poc/tools/**'
+      - 'poc/package.json'
       - 'poc/docker-compose.yml'
       - 'poc/deploy/**'
       - 'poc/e2e/**'
+      - 'docs/**'
       - '.github/workflows/ci.yml'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workbench-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   server-api:
@@ -32,6 +44,11 @@ jobs:
           node-version: 22
       - name: 构建
         run: cargo build --locked
+      - name: 服务端单元测试
+        run: cargo test --locked
+      - name: 客户端语法检查
+        working-directory: poc
+        run: node --check index.js && node --check client.js && node --check client.design-studio.js
       - name: API 回归
         run: |
           DATABASE_PATH="$RUNNER_TEMP/workbench-api.db" PORT=3210 ./target/debug/dsh-workbench-server &
@@ -55,6 +72,20 @@ jobs:
           path: |
             poc/server/test-results/
             poc/server/target/debug/dsh-workbench-server
+
+  plugin-package:
+    name: 插件打包冒烟
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm pack --dry-run
+      - run: node --check client.design-studio.js
 
   docker:
     name: Docker 镜像构建

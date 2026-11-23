@@ -36,11 +36,19 @@ const AUTH_COOKIE = `dsh-workbench-auth${authCookieSuffix()}`
 const AUTH_STATE_COOKIE = `dsh-workbench-oauth-state${authCookieSuffix()}`
 const SERVER_URL = String(process.env.WORKBENCH_SERVER_URL || 'http://127.0.0.1:3210').replace(/\/+$/, '')
 const INTERNAL_TOKEN = String(process.env.WORKBENCH_INTERNAL_TOKEN || 'dsh-workbench-poc-internal-token')
-const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+// 与 Rust 服务端保持一致：只有 development/dev/test 算开发环境，其他值
+// （包括 production、staging、拼写错误）都按生产处理，避免绕过默认密钥检查。
+const APP_ENV = String(process.env.APP_ENV || process.env.NODE_ENV || 'development').trim().toLowerCase()
+const IS_PRODUCTION = !['development', 'dev', 'test'].includes(APP_ENV)
+const ALLOW_REMOTE_BFF = envFlag(process.env.WORKBENCH_ALLOW_REMOTE_BFF)
 const LOCAL_VERSION = 1
 
 if (IS_PRODUCTION && INTERNAL_TOKEN === 'dsh-workbench-poc-internal-token') {
   throw new Error('生产环境必须设置 WORKBENCH_INTERNAL_TOKEN，并与 Rust 服务端保持一致')
+}
+
+function envFlag(value) {
+  return ['1', 'true', 'yes'].includes(String(value ?? '').trim().toLowerCase())
 }
 
 let baseDirOverride = null
@@ -75,11 +83,28 @@ function localFile() {
   return path.join(dshHome(), 'cache', 'dsh-workbench-poc', 'local.json')
 }
 
+function unsafeBaseDirReason(value) {
+  const resolved = path.resolve(value)
+  if (resolved === path.parse(resolved).root) return '不能使用文件系统根目录'
+  const home = path.resolve(os.homedir())
+  if (resolved === home) return '不能直接使用用户主目录'
+  // 不只拒绝这些目录本身，也拒绝它们的子目录：把顶级文件夹设成
+  // ~/.ssh/keys 会把私钥目录暴露给预览和文件夹接口。
+  const sensitive = ['.ssh', '.dsh', '.aws', '.config', '.gnupg', '.kube', '.docker']
+    .map(name => path.join(home, name))
+  if (sensitive.some(dir => isInside(dir, resolved))) return '不能使用用户主目录下的配置/密钥目录'
+  return ''
+}
+
 function defaultBaseDir() {
-  if (baseDirOverride !== null) return baseDirOverride
-  return process.env.DSH_WORKBENCH_BASE && process.env.DSH_WORKBENCH_BASE.trim() !== ''
-    ? path.resolve(process.env.DSH_WORKBENCH_BASE)
-    : path.join(os.homedir(), 'DSH-Workbench')
+  const raw = baseDirOverride !== null
+    ? baseDirOverride
+    : process.env.DSH_WORKBENCH_BASE && process.env.DSH_WORKBENCH_BASE.trim() !== ''
+      ? path.resolve(process.env.DSH_WORKBENCH_BASE)
+      : path.join(os.homedir(), 'DSH-Workbench')
+  const reason = unsafeBaseDirReason(raw)
+  if (reason !== '') throw new Error(`工作台顶级文件夹不安全：${reason}（${raw}）`)
+  return raw
 }
 
 function slugTitle(title) {
@@ -101,11 +126,13 @@ function emptyLocalUser() {
     // DSH 会话 -> 用户。会话第一次从工作台打开时由浏览器带 Cookie 认领；
     // 工具/命令只按这个映射解析身份，不再使用进程级“最后登录用户”。
     sessionUsers: {},
+    // 已经写过开场白的会话：只在本机记录，避免重复往会话日志里追加消息。
+    greetedSessions: {},
   }
 }
 
 function normalizeLocal(raw) {
-  const data = raw && typeof raw === 'object' ? raw : {}
+  const data = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   data.version = LOCAL_VERSION
   if (!data.users || typeof data.users !== 'object') data.users = {}
   for (const userId of Object.keys(data.users)) {
@@ -121,6 +148,7 @@ function normalizeLocal(raw) {
         dshSessions: user.dshSessions && typeof user.dshSessions === 'object' ? user.dshSessions : {},
         sessionOwners: user.sessionOwners && typeof user.sessionOwners === 'object' ? user.sessionOwners : {},
         sessionUsers: user.sessionUsers && typeof user.sessionUsers === 'object' ? user.sessionUsers : {},
+        greetedSessions: user.greetedSessions && typeof user.greetedSessions === 'object' ? user.greetedSessions : {},
       }
     }
   }
@@ -130,14 +158,37 @@ function normalizeLocal(raw) {
 function loadLocal() {
   const file = localFile()
   try {
-    return normalizeLocal(JSON.parse(fs.readFileSync(file, 'utf8')))
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    // 合法 JSON 也可能是数组/标量；直接 spread 会写出 `[]` 并丢掉全部映射。
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('local.json 顶层不是对象')
+    }
+    if (parsed.users !== undefined && (!parsed.users || typeof parsed.users !== 'object' || Array.isArray(parsed.users))) {
+      throw new Error('local.json 的 users 不是对象')
+    }
+    return normalizeLocal(parsed)
   } catch (reason) {
     if (fs.existsSync(file)) {
-      console.error('[dsh-workbench] local.json 无法解析，已备份并重建', reason)
+      console.error('[dsh-workbench] local.json 结构无效，已备份并重建', reason)
       try { fs.copyFileSync(file, `${file}.corrupt-${Date.now()}`) } catch { /* best effort */ }
     }
     return normalizeLocal(null)
   }
+}
+
+let localStamp = 0
+
+// 同一台机器可能跑多个 DSH 进程（headless/容器/桌面），local.json 不是单写者。
+// 每次读写前按 mtime 重新载入，避免一个进程用旧映射把另一个进程刚写入的会话覆盖掉。
+function refreshLocal(local) {
+  try {
+    const stat = fs.statSync(localFile())
+    if (stat.mtimeMs === localStamp) return
+    const fresh = loadLocal()
+    for (const key of Object.keys(local)) delete local[key]
+    Object.assign(local, fresh)
+    localStamp = stat.mtimeMs
+  } catch { /* 文件不存在或暂时不可读：保留当前内存状态 */ }
 }
 
 function saveLocal(data) {
@@ -147,6 +198,7 @@ function saveLocal(data) {
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 })
   fs.renameSync(tmp, file)
   try { fs.chmodSync(file, 0o600) } catch { /* best effort */ }
+  try { localStamp = fs.statSync(file).mtimeMs } catch { localStamp = 0 }
 }
 
 function localUser(data, userId) {
@@ -156,9 +208,11 @@ function localUser(data, userId) {
 
 function baseDirFor(local, userId) {
   const user = localUser(local, userId)
-  return user.topLevelFolder !== null && user.topLevelFolder !== undefined && user.topLevelFolder !== ''
-    ? path.resolve(user.topLevelFolder)
-    : defaultBaseDir()
+  if (user.topLevelFolder !== null && user.topLevelFolder !== undefined && user.topLevelFolder !== '') {
+    const stored = path.resolve(user.topLevelFolder)
+    if (unsafeBaseDirReason(stored) === '') return stored
+  }
+  return defaultBaseDir()
 }
 
 function ensureBaseDir(local, userId) {
@@ -194,13 +248,40 @@ function assertNoSymlinkBetween(root, target) {
   }
 }
 
+const WINDOWS_RESERVED_SEGMENT = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i
+
+function assertLocalFolderInside(base, value, label = '目录') {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw httpError(400, `缺少${label}`)
+  }
+  const resolved = path.resolve(value)
+  if (!isInside(base, resolved)) throw httpError(403, `${label}必须位于本机顶级文件夹内`)
+  assertNoSymlinkBetween(base, resolved)
+  if (fs.existsSync(resolved)) {
+    let realBase
+    let realTarget
+    try {
+      realBase = fs.realpathSync(base)
+      realTarget = fs.realpathSync(resolved)
+    } catch {
+      throw httpError(403, `${label}无法解析真实路径`)
+    }
+    if (!isInside(realBase, realTarget)) throw httpError(403, `${label}的真实路径不在工作台内`)
+  }
+  return resolved
+}
+
 function safeSegment(value, fallback = '未命名') {
-  const cleaned = String(value ?? '')
+  let cleaned = String(value ?? '')
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 80)
+    // Windows 不接受尾随空格/点，也不接受 CON、NUL、COM1 这类设备名。
+    // 目录还会在 macOS/Linux 上被共享，所以统一按最严格规则处理。
+    cleaned = cleaned.replace(/[. ]+$/g, '').trim()
   if (cleaned === '' || cleaned === '.' || cleaned === '..') return fallback
+  if (WINDOWS_RESERVED_SEGMENT.test(cleaned)) cleaned = `_${cleaned}`
   return cleaned
 }
 
@@ -213,16 +294,14 @@ function resolveAndCreateTopFolder(input, local, userId) {
       ? path.join(os.homedir(), raw.slice(2))
       : raw
   const resolved = path.resolve(expanded)
-  if (resolved === path.parse(resolved).root) throw httpError(403, '不能把文件系统根目录作为工作台顶级文件夹')
-  const home = path.resolve(os.homedir())
-  const sensitive = [home, path.join(home, '.ssh'), path.join(home, '.dsh'), path.join(home, '.aws'), path.join(home, '.config')]
-  if (sensitive.includes(resolved)) {
-    throw httpError(403, '顶级文件夹必须是一个专用目录，不能直接使用用户主目录或系统配置目录')
-  }
+  const unsafe = unsafeBaseDirReason(resolved)
+  if (unsafe !== '') throw httpError(403, `顶级文件夹不安全：${unsafe}`)
   const allowedRoots = [os.homedir(), defaultBaseDir(), baseDirFor(local, userId)]
-  const allowed = allowedRoots.some(root => isInside(root, resolved))
-  if (!allowed) throw httpError(403, '顶级文件夹必须位于本机用户目录内')
-  assertNoSymlinkBetween(os.homedir(), resolved)
+  const containingRoot = allowedRoots.find(root => isInside(root, resolved))
+  if (containingRoot === undefined) throw httpError(403, '顶级文件夹必须位于本机用户目录内')
+  // 从真正包含目标的根开始逐级查符号链接；不能用 os.homedir() 硬锚定，
+  // 否则 DSH_WORKBENCH_BASE 指向 /workbench 这类家目录外路径时会被误拒。
+  assertNoSymlinkBetween(containingRoot, resolved)
   fs.mkdirSync(resolved, { recursive: true })
   if (!fs.statSync(resolved).isDirectory()) throw httpError(400, '顶级文件夹路径不是目录')
   // mkdir 之后再按真实路径校验一次，覆盖“目标是已存在的 symlink”这种情况。
@@ -270,6 +349,30 @@ function ensureRequirementFolder(parent, name, local, userId, unique = false) {
 const DESIGN_FILE_SKIP = new Set(['node_modules', '.git', '.dsh', 'exports', 'refs', 'dist', 'build', 'prototype', 'design'])
 const PROTOTYPE_DIR = 'prototype'
 const DESIGN_DIR = 'design'
+// 新建需求后右栏先摆一张空白画布。文件名以 _ 开头，Design Studio 和工作台扫描
+// 都把它当草稿忽略，真正开始做原型后不会混进「原型作品」列表。
+const BLANK_CANVAS_NAME = '_canvas.html'
+const BLANK_CANVAS_HTML = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>空白画布</title>
+<style>
+html,body{height:100%;margin:0}
+body{display:grid;place-items:center;background:#fff;color:#8a8f98;font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.blank{text-align:center}
+.blank b{display:block;font-size:15px;font-weight:600;color:#5f6672}
+.blank span{display:block;margin-top:6px;font-size:12px;color:#9aa0aa}
+</style>
+</head>
+<body><div class="blank"><b>空白画布</b><span>在会话里描述需求，第一屏会出现在这里。</span></div></body>
+</html>
+`
+const BLANK_DESIGN_HTML = BLANK_CANVAS_HTML.replace(
+  '在会话里描述需求，第一屏会出现在这里。',
+  '在设计会话里描述设计稿，第一屏会出现在这里。',
+)
 
 function listHtmlFiles(dirPath, baseDir, relativeBase) {
   if (typeof dirPath !== 'string' || dirPath.trim() === '') return []
@@ -292,7 +395,8 @@ function listHtmlFiles(dirPath, baseDir, relativeBase) {
     let entries
     try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue
+      // 和 Design Studio 一致：. 开头是隐藏文件，_ 开头是草稿 / 空白画布占位，都不算一屏。
+      if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue
       const full = path.join(dir, entry.name)
       if (entry.isDirectory()) {
         if (!DESIGN_FILE_SKIP.has(entry.name)) walk(full, depth + 1)
@@ -363,6 +467,8 @@ async function serverRaw(route, options = {}) {
     response = await fetch(`${SERVER_URL}${route}`, {
       method: options.method || 'GET',
       headers,
+      // 不跟随跳转：内部令牌是机器凭据，不能因为上游返回 3xx 就把它转发到别的主机。
+      redirect: 'manual',
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       signal: AbortSignal.timeout(20000),
     })
@@ -371,12 +477,30 @@ async function serverRaw(route, options = {}) {
     const timeout = reason?.name === 'TimeoutError' || reason?.name === 'AbortError'
     throw httpError(timeout ? 504 : 503, timeout ? '团队服务端响应超时' : '团队服务端不可用')
   }
+  if (response.status >= 300 && response.status < 400) {
+    throw httpError(502, '团队服务端返回了不允许的跳转')
+  }
   const declared = Number(response.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > 12 * 1024 * 1024) {
     throw httpError(502, '团队服务端响应过大')
   }
-  const text = await response.text()
-  if (Buffer.byteLength(text) > 12 * 1024 * 1024) throw httpError(502, '团队服务端响应过大')
+  // 不能先 response.text() 再检查大小：分块/压缩响应会先被完整读进内存。
+  const chunks = []
+  let total = 0
+  if (response.body !== null) {
+    const reader = response.body.getReader()
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > 12 * 1024 * 1024) {
+        await reader.cancel().catch(() => {})
+        throw httpError(502, '团队服务端响应过大')
+      }
+      chunks.push(Buffer.from(value))
+    }
+  }
+  const text = Buffer.concat(chunks).toString('utf8')
   let data = {}
   if (text.trim() !== '') {
     try { data = JSON.parse(text) } catch { data = { error: `团队服务端返回了非 JSON 响应（${response.status}）` } }
@@ -402,6 +526,24 @@ async function authConfig() {
     ...config,
     defaultBaseDir: defaultBaseDir(),
   }
+}
+
+// 远端（反代/容器）只用于登录，不应拿到宿主机目录。顶级文件夹和每个需求的
+// folderPath 都只在本机回环请求里返回。
+function withoutLocalPaths(payload) {
+  if (payload === null || typeof payload !== 'object') return payload
+  const copy = { ...payload }
+  delete copy.baseDir
+  delete copy.defaultBaseDir
+  if (copy.user && typeof copy.user === 'object') {
+    copy.user = {
+      ...copy.user,
+      onboarding: copy.user.onboarding && typeof copy.user.onboarding === 'object'
+        ? { ...copy.user.onboarding, topLevelFolder: null }
+        : copy.user.onboarding,
+    }
+  }
+  return copy
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +578,7 @@ function mintPreviewTicket(userId, requirementId, token) {
 
 function verifyPreviewTicket(ticket) {
   if (typeof ticket !== 'string' || ticket === '') return null
+  sweepPreviewTickets(Date.now())
   const entry = previewTickets.get(ticket)
   if (entry === undefined) return null
   if (entry.expiresAt <= Date.now()) {
@@ -522,10 +665,39 @@ function readJson(req) {
       if (settled) return
       settled = true
       if (body.trim() === '') return resolve({})
-      try { resolve(JSON.parse(body)) } catch { reject(httpError(400, '请求体不是合法 JSON')) }
+      try {
+        const parsed = JSON.parse(body)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          reject(httpError(400, '请求体必须是 JSON 对象'))
+          return
+        }
+        resolve(parsed)
+      } catch { reject(httpError(400, '请求体不是合法 JSON')) }
     })
     req.on('error', (reason) => { if (!settled) { settled = true; reject(reason) } })
   })
+}
+
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
+
+function trustedHostname(rawHost) {
+  // Host 头是客户端可控的：不要用它推导同源目标或 OAuth 回调地址。
+  // DSH host 只在本机回环上提供服务；需要额外主机名时显式配置白名单。
+  const host = String(rawHost ?? '').split(',')[0].trim()
+  if (host === '' || /[\s/@\\]/.test(host) || host.includes('://')) return null
+  let hostname = ''
+  try {
+    hostname = new URL(`http://${host}`).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+  if (LOOPBACK_HOSTNAMES.has(hostname)) return host
+  const allowed = String(process.env.WORKBENCH_ALLOWED_HOSTS ?? '')
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean)
+  if (allowed.includes(host.toLowerCase()) || allowed.includes(hostname)) return host
+  return null
 }
 
 function requestOrigin(req) {
@@ -534,9 +706,10 @@ function requestOrigin(req) {
   if (typeof process.env.WORKBENCH_PUBLIC_URL === 'string' && process.env.WORKBENCH_PUBLIC_URL.trim() !== '') {
     try { return new URL(process.env.WORKBENCH_PUBLIC_URL).origin } catch { /* fall through */ }
   }
+  const host = trustedHostname(req.headers.host)
+  if (host === null) throw httpError(403, 'Host 不受信任，请通过 127.0.0.1/localhost 访问工作台')
   const proto = req.socket && req.socket.encrypted ? 'https' : 'http'
-  const host = req.headers.host || '127.0.0.1'
-  return `${proto}://${String(host).split(',')[0].trim()}`
+  return `${proto}://${host}`
 }
 
 function redirect(res, location) {
@@ -559,12 +732,15 @@ function assertSameOrigin(req) {
   const method = req.method || 'GET'
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return
   const origin = req.headers.origin
+  // 无论 Origin 是什么都先校验 Host：避免 DNS rebinding 把恶意域名解析到
+  // 127.0.0.1，再借“看起来同源”的 Host 写入本机会话/文件夹映射。
+  const expectedOrigin = requestOrigin(req)
   // 桌面端 DSH 的渲染层跑在 dsh-app://app 自定义协议下（见 dsh-desktop 主进程），
   // 同源 fetch 的 Origin 是 "dsh-app://app"，也可能是字面量 "null"。这些都不是跨站，
   // 放行；只对真正的 http(s) 跨站 Origin 做比对拒绝。下面的 Sec-Fetch-Site 仍会挡住
   // 明确的跨站写请求（cross-site）。
   if (typeof origin === 'string' && /^https?:\/\//i.test(origin)) {
-    if (origin !== requestOrigin(req)) {
+    if (origin !== expectedOrigin) {
       throw httpError(403, '跨站写请求已被拒绝')
     }
   }
@@ -585,35 +761,93 @@ function safeReturnTo(req, raw) {
   }
 }
 
+function tokenFromRequest(req) {
+  const auth = String(req.headers.authorization || '')
+  if (/^Bearer\s+/i.test(auth)) {
+    const bearer = auth.replace(/^Bearer\s+/i, '').trim()
+    if (bearer !== '') return bearer
+  }
+  const cookie = parseCookies(req)[AUTH_COOKIE]
+  return typeof cookie === 'string' && cookie !== '' ? cookie : ''
+}
+
+// 每个请求都去服务端换一次身份会把 /state 轮询放大成双倍请求。身份本身在
+// JWT TTL 内不变，这里只缓存 5 秒；退出登录时主动清掉对应条目。
+const AUTH_SESSION_CACHE_MS = 5_000
+const AUTH_SESSION_CACHE_MAX = 200
+const authSessionCache = new Map()
+
 async function sessionFromRequest(req, local) {
   // 桌面端渲染层在 dsh-app://app 自定义协议下运行时，Set-Cookie 可能不落地；
   // 因此同时接受 Authorization: Bearer <token>（客户端登录后存 localStorage）。
-  let token = parseCookies(req)[AUTH_COOKIE]
-  if (typeof token !== 'string' || token === '') {
-    const auth = String(req.headers.authorization || '')
-    if (/^Bearer\s+/i.test(auth)) token = auth.replace(/^Bearer\s+/i, '').trim()
+  // 显式 Bearer 优先于 Cookie：避免浏览器里残留账号 B 的 Cookie 时，
+  // 请求却带着账号 A 的 Bearer，静默以 B 的身份执行。
+  const token = tokenFromRequest(req)
+  if (token === '') return null
+  let authPayload = null
+  const cached = authSessionCache.get(token)
+  if (cached !== undefined && cached.expiresAt > Date.now()) {
+    authPayload = cached.payload
+  } else {
+    if (cached !== undefined) authSessionCache.delete(token)
+    const result = await serverRaw('/auth/session', { token })
+    if (result.status === 401) return null
+    if (!result.ok) {
+      const status = result.status >= 500 ? 503 : result.status
+      throw httpError(status, result.data?.error || '团队服务端身份校验失败')
+    }
+    if (result.data?.authenticated !== true) return null
+    authPayload = result.data
+    authSessionCache.set(token, { payload: authPayload, expiresAt: Date.now() + AUTH_SESSION_CACHE_MS })
+    while (authSessionCache.size > AUTH_SESSION_CACHE_MAX) {
+      const oldest = authSessionCache.keys().next()
+      if (oldest.done) break
+      authSessionCache.delete(oldest.value)
+    }
   }
-  if (typeof token !== 'string' || token === '') return null
-  const result = await serverRaw('/auth/session', { token })
-  if (!result.ok || result.data?.authenticated !== true) return null
-  const user = result.data.user
+  const user = authPayload.user
   if (!user || typeof user.id !== 'string') return null
   const localState = localUser(local, user.id)
   if (!localState.topLevelFolder) {
-    localState.topLevelFolder = defaultBaseDir()
-    fs.mkdirSync(localState.topLevelFolder, { recursive: true })
-    saveLocal(local)
+    // 登录校验不应因为磁盘/权限问题整体失败；目录在真正创建需求时再确保存在。
+    try {
+      const base = defaultBaseDir()
+      fs.mkdirSync(base, { recursive: true })
+      localState.topLevelFolder = base
+      saveLocal(local)
+    } catch { /* 保留 null，后续 baseDirFor 会回退到默认目录 */ }
   }
-  result.data.user = {
-    ...user,
-    onboarding: {
-      ...(user.onboarding || {}),
-      topLevelFolder: localState.topLevelFolder,
+  const effectiveBase = baseDirFor(local, user.id)
+  const payload = {
+    ...authPayload,
+    user: {
+      ...user,
+      onboarding: {
+        ...(user.onboarding || {}),
+        topLevelFolder: effectiveBase,
+      },
     },
+    baseDir: effectiveBase,
+    defaultBaseDir: defaultBaseDir(),
   }
-  result.data.baseDir = localState.topLevelFolder
-  result.data.defaultBaseDir = defaultBaseDir()
-  return { token, payload: result.data, user: result.data.user }
+  return { token, payload, user: payload.user }
+}
+
+function isLoopbackRequest(req) {
+  const raw = req.socket?.remoteAddress
+  if (typeof raw !== 'string' || raw === '') return true
+  const address = raw.replace(/^::ffff:/i, '').toLowerCase()
+  return address === '127.0.0.1' || address === '::1'
+}
+
+// 登录相关页面可以由反向代理从远端访问；其余接口会读写本机路径、DSH 会话映射
+// 和预览票据，只允许本机回环。容器/局域网场景需显式设置 WORKBENCH_ALLOW_REMOTE_BFF=1。
+function remoteAllowedRoute(route) {
+  return route === '/health'
+    || route === '/auth/config'
+    || route === '/auth/session'
+    || route === '/auth/logout'
+    || route.startsWith('/auth/dingtalk/')
 }
 
 function isDesktopClient(req) {
@@ -649,7 +883,12 @@ function iterationOf(state, requirement) {
 }
 
 function folderPathFor(localState, baseDir, state, requirement) {
-  if (localState.folders[requirement.id]) return localState.folders[requirement.id]
+  const stored = localState.folders[requirement.id]
+  if (typeof stored === 'string' && stored.trim() !== '') {
+    // 旧版本只校验写入时的字符串边界；升级后文件可能被替换成符号链接，
+    // 或 local.json 被手工改到工作台外。读取时重新验证，坏映射回退到规范目录。
+    try { return assertLocalFolderInside(baseDir, stored, '需求目录') } catch { /* fall through */ }
+  }
   const iteration = iterationOf(state, requirement)
   if (!iteration) return ''
   const iterationDir = path.join(baseDir, safeSegment(iteration.code, '未命名迭代'))
@@ -731,12 +970,24 @@ function findSessionOwner(local, dshSessionId) {
 // Route handler
 // ---------------------------------------------------------------------------
 
-function makeRoute(local) {
+function decodeRoutePart(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    throw httpError(400, '路径参数编码不合法')
+  }
+}
+
+function makeRoute(local, hostCtx = null) {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const route = url.pathname.slice(API_PREFIX.length) || '/'
     try {
       assertSameOrigin(req)
+      refreshLocal(local)
+      if (!ALLOW_REMOTE_BFF && !isLoopbackRequest(req) && !remoteAllowedRoute(route)) {
+        return json(res, 403, { error: '本机工作台接口只允许通过 127.0.0.1/localhost 访问' })
+      }
       // ---- public auth surface -------------------------------------------------
       if (req.method === 'GET' && route === '/health') {
         const server = await serverRaw('/health')
@@ -754,9 +1005,11 @@ function makeRoute(local) {
         })
       }
       if (req.method === 'GET' && route === '/auth/config') {
-        return json(res, 200, await authConfig())
+        const config = await authConfig()
+        return json(res, 200, isLoopbackRequest(req) ? config : withoutLocalPaths(config))
       }
       if (req.method === 'POST' && route === '/auth/mock') {
+        if (IS_PRODUCTION) return json(res, 404, { error: 'Mock 登录未启用' })
         const body = await readJson(req)
         const result = await serverRaw('/auth/mock', { method: 'POST', body: { userId: body.userId } })
         if (!result.ok) return json(res, result.status, result.data)
@@ -764,18 +1017,22 @@ function makeRoute(local) {
       }
       if (req.method === 'GET' && route === '/auth/session') {
         const session = await sessionFromRequest(req, local)
+        const localRequest = isLoopbackRequest(req)
         if (session !== null) {
-          return json(res, 200, { ...session.payload, authenticated: true })
+          const payload = { ...session.payload, authenticated: true }
+          return json(res, 200, localRequest ? payload : withoutLocalPaths(payload))
         }
         let provider = 'mock'
         try { provider = (await authConfig()).provider || 'mock' } catch { /* server down */ }
         return json(res, 200, {
           authenticated: false,
           provider,
-          defaultBaseDir: defaultBaseDir(),
+          ...(localRequest ? { defaultBaseDir: defaultBaseDir() } : {}),
         })
       }
       if (req.method === 'POST' && route === '/auth/logout') {
+        const token = tokenFromRequest(req)
+        if (token !== '') authSessionCache.delete(token)
         appendCookie(res, serializeCookie(AUTH_COOKIE, '', 0))
         return json(res, 200, { ok: true })
       }
@@ -878,8 +1135,14 @@ function makeRoute(local) {
         if (!baseRequirement) return json(res, 404, { error: '需求不存在或无权访问' })
         const baseDir = baseDirFor(local, userId)
         const folder = folderPathFor(localUser(local, userId), baseDir, stateData, baseRequirement)
+        if (folder === '') return json(res, 404, { error: '需求目录不存在' })
         const target = path.resolve(folder, relativePath)
-        if (!isInside(baseDir, target)) return json(res, 403, { error: '文件不在工作台目录内' })
+        // 只允许读这条需求文件夹内的文件，不能借 ../ 读到同一顶级文件夹下
+        // 其他需求、.env、数据库备份或用户私钥。
+        if (!isInside(folder, target)) return json(res, 403, { error: '文件不在需求目录内' })
+        if (DESIGN_PREVIEW_TYPES[path.extname(target).toLowerCase()] === undefined) {
+          return json(res, 415, { error: '不支持预览这个文件类型' })
+        }
         try {
           assertNoSymlinkBetween(folder, target)
           const real = fs.realpathSync(target)
@@ -911,6 +1174,99 @@ function makeRoute(local) {
         return json(res, 200, { ok: true, userId })
       }
 
+      // 需求会话的开场白：写进会话日志，成为一条真实的 assistant 消息。
+      // 不用输入框上方的浮层，也不发模型请求。只在会话还没有真正开始（没有
+      // 任何 turn）时写一次；写成 self-contained 的 turn 1 并当场收尾。
+      // 会话日志要求第一个 turn/start 必须是 turn 1（DSH 重放时会校验），所以
+      // 不能写 turn 0。写完把仍空转的 Agent 的 lastTurn 一起推到 1，用户真正
+      // 发出的第一条消息才会接在 turn 2，而不是和开场白抢 turn 1。
+      if (req.method === 'POST' && route === '/session-greeting') {
+        const GREETING_TURN = 1
+        const body = await readJson(req)
+        const dshSessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
+        if (dshSessionId === '' || dshSessionId.length > 200) {
+          return json(res, 400, { error: '缺少合法的会话 ID' })
+        }
+        const localState = localUser(local, userId)
+        if (localState.sessionUsers[dshSessionId] !== userId) {
+          return json(res, 403, { error: '会话还没有归属当前工作台账号' })
+        }
+        // 只有绑定了需求/设计记录的会话才需要开场白；普通 DSH 聊天即使被认领，
+        // 也不应该收到“请描述你的需求”。
+        if (typeof localState.dshSessions?.[dshSessionId] !== 'string') {
+          return json(res, 403, { error: '会话没有绑定工作台需求' })
+        }
+        if (localState.greetedSessions[dshSessionId] === true) {
+          return json(res, 200, { ok: true, skipped: 'greeted' })
+        }
+        const live = typeof hostCtx?.get === 'function' ? hostCtx.get('sessions')?.get?.(dshSessionId) : undefined
+        if (live === undefined || live === null) {
+          return json(res, 409, { error: '会话还没有在 DSH 里打开' })
+        }
+        const agents = typeof hostCtx?.get === 'function' ? hostCtx.get('agents') : undefined
+        const agent = agents?.get?.(dshSessionId)
+        // 已经有真实轮次的会话不再补开场白（用户已经发过消息了）。
+        let boundary = null
+        try { boundary = agents?.turnBoundaryOf?.(live) ?? null } catch { boundary = null }
+        if (boundary !== null && (boundary.openTurnStartSeq !== null || boundary.lastTurn !== 0)) {
+          return json(res, 200, { ok: true, skipped: 'started' })
+        }
+        let blank = null
+        try {
+          blank = hostCtx.get('sessionQuery')?.getListMetadata?.(live)?.blank ?? null
+        } catch { blank = null }
+        if (blank === false) return json(res, 200, { ok: true, skipped: 'started' })
+        if (!agent || agent.phase?.kind !== 'idle' || agent.phase.lastTurn !== 0) {
+          return json(res, 409, { error: '会话的 Agent 还没准备好' })
+        }
+        // 先确认能推进 Agent 的轮次边界；写不了就不写开场白，免得日志合法但下一条消息撞 turn 1。
+        const previousTurn = agent.phase.lastTurn
+        let canBump = false
+        try {
+          agent.phase.lastTurn = GREETING_TURN
+          canBump = agent.phase.lastTurn === GREETING_TURN
+        } catch { canBump = false } finally {
+          // 探测失败也必须恢复，否则 lastTurn 会停在 1，下一条用户消息直接撞轮次。
+          try { agent.phase.lastTurn = previousTurn } catch { /* ignore */ }
+        }
+        if (!canBump) return json(res, 501, { error: '当前 DSH 版本不支持写入开场白' })
+        const kind = body.kind === 'design' ? 'design' : 'requirement'
+        const text = kind === 'design'
+          ? '请描述这次要做的设计稿：页面、关键状态和参考风格。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的设计目录 design/，右栏画布直接出图。'
+          : '请描述你的需求。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的原型目录 prototype/，右栏画布直接出图。'
+        const message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: [{ type: 'text', text }],
+          source: { kind: 'model', provider: 'dsh-workbench', model: 'workbench-greeting' },
+        }
+        // 先落盘“尝试过”标记：如果 append 只写进去一半，宁可这次没有开场白，
+        // 也不能重试再写一个 turn 1（DSH 重放校验会直接判定会话日志损坏）。
+        localState.greetedSessions[dshSessionId] = true
+        try {
+          saveLocal(local)
+        } catch (reason) {
+          delete localState.greetedSessions[dshSessionId]
+          return json(res, 500, { error: `开场白标记保存失败：${reason instanceof Error ? reason.message : String(reason)}` })
+        }
+        try {
+          live.append([
+            ['turn/start', { turn: GREETING_TURN }],
+            ['step/start', { turn: GREETING_TURN, step: 1 }],
+            ['assistant/message', { turn: GREETING_TURN, step: 1, message, stream: [] }, { surfaceOp: 'append' }],
+            ['step/end', { turn: GREETING_TURN, step: 1 }],
+            ['turn/end', { turn: GREETING_TURN, reason: { kind: 'completed' } }],
+          ])
+          agent.phase.lastTurn = GREETING_TURN
+        } catch (reason) {
+          return json(res, 500, {
+            error: `开场白写入失败：${reason instanceof Error ? reason.message : String(reason)}`,
+            retryable: false,
+          })
+        }
+        return json(res, 200, { ok: true })
+      }
+
       if (req.method === 'GET' && route === '/state') {
         ensureBaseDir(local, userId)
         const data = await serverJson('/state', { token: session.token })
@@ -935,9 +1291,8 @@ function makeRoute(local) {
       if (req.method === 'POST' && route === '/onboarding/complete') {
         const body = await readJson(req)
         const folder = resolveAndCreateTopFolder(body.topLevelFolder, local, userId)
-        const localState = localUser(local, userId)
-        localState.topLevelFolder = folder
-        saveLocal(local)
+        // 先让服务端确认身份/平台组合，再写本机顶级文件夹；否则服务端拒绝时
+        // 本机映射已经切走，旧需求目录会全部从 /state 里消失。
         const result = await serverJson('/onboarding/complete', {
           method: 'POST',
           token: session.token,
@@ -947,6 +1302,9 @@ function makeRoute(local) {
             folderConfigured: true,
           },
         })
+        const localState = localUser(local, userId)
+        localState.topLevelFolder = folder
+        saveLocal(local)
         return json(res, 200, {
           ...result,
           user: {
@@ -964,6 +1322,48 @@ function makeRoute(local) {
         return json(res, 200, { path: folderPath })
       }
 
+      // 新建需求后右栏立刻有一张空白画布：在需求目录的 prototype/ 下放一个 _ 开头的
+      // 占位 HTML，Design Studio 打开它就有画布（外观 / 体检 / 导出 / 版本都在）。
+      // 真正的原型写进 prototype/ 后，右栏会切到原型目录，这张占位页不会再出现。
+      if (req.method === 'POST' && route === '/design/blank-canvas') {
+        const body = await readJson(req)
+        const requirementId = typeof body.requirementId === 'string' ? body.requirementId.trim() : ''
+        if (requirementId === '') return json(res, 400, { error: '缺少需求 ID' })
+        const kind = body.kind === 'design' ? 'design' : 'prototype'
+        const dirName = kind === 'design' ? DESIGN_DIR : PROTOTYPE_DIR
+        const html = kind === 'design' ? BLANK_DESIGN_HTML : BLANK_CANVAS_HTML
+        const stateData = await serverJson('/state', { token: session.token })
+        const baseRequirement = (stateData.requirements || []).find(item => item.id === requirementId)
+        if (!baseRequirement) return json(res, 404, { error: '需求不存在或无权访问' })
+        const baseDir = baseDirFor(local, userId)
+        const folder = folderPathFor(localUser(local, userId), baseDir, stateData, baseRequirement)
+        if (folder === '') return json(res, 403, { error: '需求目录不在工作台内' })
+        try {
+          assertLocalFolderInside(baseDir, folder, '需求目录')
+          const canvasDir = path.join(folder, dirName)
+          fs.mkdirSync(canvasDir, { recursive: true })
+          assertNoSymlinkBetween(folder, canvasDir)
+          const realBase = fs.realpathSync(baseDir)
+          const realCanvas = fs.realpathSync(canvasDir)
+          if (!isInside(realBase, realCanvas)) return json(res, 403, { error: '画布目录不在工作台内' })
+          const file = path.join(realCanvas, BLANK_CANVAS_NAME)
+          try {
+            // wx：lstat 与 write 之间若有人把目标换成符号链接，这里会 EEXIST 而不是跟随写入。
+            fs.writeFileSync(file, html, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+          } catch (reason) {
+            if (reason?.code !== 'EEXIST') throw reason
+            const stat = fs.lstatSync(file)
+            if (!stat.isFile() || stat.isSymbolicLink()) return json(res, 403, { error: '画布文件不是普通文件' })
+          }
+          const realFile = fs.realpathSync(file)
+          if (!isInside(realCanvas, realFile)) return json(res, 403, { error: '画布文件不在需求目录内' })
+          return json(res, 200, { path: realFile, kind })
+        } catch (reason) {
+          const status = Number.isInteger(reason?.status) ? reason.status : 500
+          return json(res, status, { error: `空白画布创建失败：${reason instanceof Error ? reason.message : String(reason)}` })
+        }
+      }
+
       if (req.method === 'POST' && route === '/requirements') {
         const body = await readJson(req)
         const result = await serverRaw('/requirements', { method: 'POST', token: session.token, body })
@@ -972,7 +1372,7 @@ function makeRoute(local) {
 
       const sessionMatch = /^\/requirements\/([^/]+)\/sessions$/.exec(route)
       if (req.method === 'POST' && sessionMatch) {
-        const id = decodeURIComponent(sessionMatch[1])
+        const id = decodeRoutePart(sessionMatch[1])
         const body = await readJson(req)
         const result = await serverJson(`/requirements/${encodeURIComponent(id)}/sessions`, {
           method: 'POST',
@@ -983,10 +1383,12 @@ function makeRoute(local) {
         const record = result.session
         const dshSessionId = typeof body.dshSessionId === 'string' ? body.dshSessionId : ''
         const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : null
-        const folderPath = typeof body.folderPath === 'string' ? body.folderPath : null
+        const folderPath = typeof body.folderPath === 'string' && body.folderPath.trim() !== '' ? body.folderPath : null
         // 需求资料目录（原型/设计稿）与会话工作区可能不同：新流程会话挂在迭代
         // 目录下，资料目录由 requirementFolder 单独记录。
-        const requirementFolder = typeof body.requirementFolder === 'string' ? body.requirementFolder : null
+        const requirementFolder = typeof body.requirementFolder === 'string' && body.requirementFolder.trim() !== ''
+          ? body.requirementFolder
+          : null
         if (dshSessionId.length > 200 || (workspaceId !== null && workspaceId.length > 200) || (folderPath !== null && folderPath.length > 2000) || (requirementFolder !== null && requirementFolder.length > 2000)) {
           return json(res, 400, { error: '会话映射字段过长' })
         }
@@ -998,14 +1400,18 @@ function makeRoute(local) {
         }
         if (folderPath !== null) {
           const base = baseDirFor(local, userId)
-          if (!isInside(base, path.resolve(folderPath))) {
-            return json(res, 403, { error: '需求文件夹必须位于本机顶级文件夹内' })
+          try {
+            assertLocalFolderInside(base, folderPath, '需求文件夹')
+          } catch (reason) {
+            return json(res, reason?.status ?? 403, { error: reason instanceof Error ? reason.message : '需求文件夹不合法' })
           }
         }
         if (requirementFolder !== null) {
           const base = baseDirFor(local, userId)
-          if (!isInside(base, path.resolve(requirementFolder))) {
-            return json(res, 403, { error: '需求资料目录必须位于本机顶级文件夹内' })
+          try {
+            assertLocalFolderInside(base, requirementFolder, '需求资料目录')
+          } catch (reason) {
+            return json(res, reason?.status ?? 403, { error: reason instanceof Error ? reason.message : '需求资料目录不合法' })
           }
         }
         if (record && record.id) {
@@ -1027,13 +1433,15 @@ function makeRoute(local) {
 
       const unbindMatch = /^\/requirements\/([^/]+)\/sessions\/([^/]+)\/unbind$/.exec(route)
       if (req.method === 'POST' && unbindMatch) {
-        const recordId = decodeURIComponent(unbindMatch[2])
+        const recordId = decodeRoutePart(unbindMatch[2])
         const localState = localUser(local, userId)
         const mapping = localState.sessions[recordId]
         if (mapping && typeof mapping.dshSessionId === 'string') {
           delete localState.dshSessions[mapping.dshSessionId]
           delete localState.sessionOwners[mapping.dshSessionId]
           delete localState.sessionUsers[mapping.dshSessionId]
+          // 解绑后重新绑定到同一 DSH 会话时应能重新收到开场白（如果它仍是空会话）。
+          delete localState.greetedSessions[mapping.dshSessionId]
         }
         delete localState.sessions[recordId]
         saveLocal(local)
@@ -1042,12 +1450,20 @@ function makeRoute(local) {
 
       const deliverMatch = /^\/requirements\/([^/]+)\/design-deliver$/.exec(route)
       if (req.method === 'POST' && deliverMatch) {
-        const id = decodeURIComponent(deliverMatch[1])
+        const id = decodeRoutePart(deliverMatch[1])
         const body = await readJson(req)
         const localState = localUser(local, userId)
         const baseDir = baseDirFor(local, userId)
         let files = Array.isArray(body.files) ? body.files : []
-        const folder = localState.folders[id]
+        let folder = ''
+        try {
+          folder = assertLocalFolderInside(baseDir, localState.folders[id], '需求目录')
+        } catch { /* 旧需求可能没有映射，下面按服务端迭代/标题推导 */ }
+        if (folder === '') {
+          const stateData = await serverJson('/state', { token: session.token })
+          const baseRequirement = (stateData.requirements || []).find(item => item.id === id)
+          if (baseRequirement) folder = folderPathFor(localState, baseDir, stateData, baseRequirement)
+        }
         if (files.length === 0 && folder) {
           files = listDesignFiles(folder, baseDir).map(file => file.relativePath)
         }
@@ -1115,6 +1531,7 @@ function defineTool(name, description, parameters, execute) {
 }
 
 function actorIdFromExec(local, exec) {
+  refreshLocal(local)
   const sessionId = exec?.agent?.session?.id
   if (typeof sessionId === 'string' && sessionId !== '') {
     const owner = findSessionOwner(local, sessionId)
@@ -1283,10 +1700,21 @@ const DESIGN_PREVIEW_TYPES = {
 
 function sendDesignPreview(res, buffer, name, declaredType) {
   const ext = path.extname(String(name || '')).toLowerCase()
+  const passiveDeclared = new Set([
+    'text/html', 'text/css', 'text/plain', 'text/markdown',
+    'text/javascript', 'application/javascript',
+    'image/svg+xml', 'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+  ])
   let type = DESIGN_PREVIEW_TYPES[ext]
   if (type === undefined) {
     const declared = String(declaredType || '').split(';')[0].trim().toLowerCase()
-    type = declared.includes('/') ? declared : 'application/octet-stream'
+    if (passiveDeclared.has(declared)) type = declared
+  }
+  if (type === undefined) {
+    res.statusCode = 415
+    res.setHeader('content-type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ error: '不支持预览这个文件类型' }))
+    return
   }
   res.statusCode = 200
   res.setHeader('content-type', type)
@@ -1296,8 +1724,9 @@ function sendDesignPreview(res, buffer, name, declaredType) {
   res.setHeader('referrer-policy', 'no-referrer')
   res.setHeader('cross-origin-resource-policy', 'same-origin')
   if (/text\/html|text\/css|javascript|image\/svg/i.test(type)) {
-    // 原型是别人写的 HTML：放进沙箱源里跑，拿不到工作台会话，也不许加载外部资源。
-    res.setHeader('content-security-policy', "sandbox allow-scripts allow-forms allow-modals allow-popups; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:")
+    // 原型是别人写的 HTML：放进沙箱源里跑，拿不到工作台会话，也不许加载外部资源、
+    // 提交表单或借 base 标签改解析地址。
+    res.setHeader('content-security-policy', "sandbox allow-scripts allow-forms allow-modals; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'; object-src 'none'")
   }
   res.end(buffer)
 }
@@ -1496,17 +1925,24 @@ function registerTools(ctx, local) {
       async (args, exec) => {
         const actorId = actorIdFromExec(local, exec)
         const { state, requirement } = await requirementForExec(local, actorId, args, exec)
+        const baseDir = baseDirFor(local, actorId)
         const folder = requirementFolder(local, actorId, state, requirement)
-        const files = listDesignFiles(folder, baseDirFor(local, actorId))
+        const files = listDesignFiles(folder, baseDir)
         const fileText = files.length === 0
           ? '无'
           : files.slice(0, 20).map(file => file.relativePath).join('、')
+        const prototypes = listPrototypeFiles(folder, baseDir)
+        const prototypeText = prototypes.length === 0
+          ? '无'
+          : prototypes.slice(0, 12).map(file => file.relativePath).join('、')
         return toolOutput(
           `${requirement.code}「${requirement.title}」：需求状态 ${statusLabel(requirement.status)}，设计状态 ${requirement.designStatus}，`
           + `设计人员 ${requirement.designerId ?? '未认领'}，平台 ${platformNames(state, requirement.platformIds)}。\n`
-          + `需求文件夹：${folder || '尚未创建'}。\n`
+          + `需求文件夹：${folder ? '已创建（本机，路径不进入模型上下文）' : '尚未创建'}。\n`
+          + `已有原型（${prototypes.length}，prototype/ 只作为需求参考，不参与设计交付）：${prototypeText}。\n`
           + `已有设计文件（${files.length}）：${fileText}。\n`
-          + '开始设计：先加载 wb-ui-design 技能；设计稿写入需求文件夹（一屏一个 HTML 文件）；'
+          + '开始设计：先加载 wb-ui-design 技能；设计稿写进这条需求的 design/ 目录（一屏一个 HTML 文件），'
+          + '不要覆盖 prototype/ 里的需求原型；'
           + '完成后调用 wb_preview_page 打开第一屏，并用 wb_check_design 自查；交付时调用 workbench_deliver_design。',
         )
       },
@@ -1948,21 +2384,23 @@ const SKILLS = [
   },
   {
     name: 'design-start',
-    description: '为当前需求开始或继续设计：读取需求上下文、认领设计、在需求文件夹里产出 HTML 设计稿并打开设计画布。',
-    whenToUse: '用户要求为某个需求做设计、开始设计、继续设计、改设计稿时',
+    description: '为当前需求开始或继续做产品原型 / 设计稿：读取需求上下文，按会话类型写入 prototype/ 或 design/，并打开右侧画布。',
+    whenToUse: '用户要求为某个需求做原型、开始/继续设计、改原型或改设计稿时',
     content: [
-      '# 开始需求设计',
+      '# 开始需求的原型 / 设计',
       '',
-      '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹和已有设计文件。',
-      '2. 如果设计未认领且当前身份是设计，调用 `workbench_claim_design`。',
-      '3. 加载 `wb-ui-design` 技能，按它的流程和自查清单做设计。',
-      '4. 设计稿写进需求文件夹，一屏一个 HTML 文件；先看已有文件，避免覆盖用户手改的内容。',
-      '5. 写完第一屏就调用 `wb_preview_page` 打开它（右侧「需求」画布会实时显示），之后改文件会自动刷新。',
-      '6. 用 `wb_check_design` 在真实尺寸下自查；需要看真实截图时用 `wb_look_design`。最多三轮测量-修复。',
-      '7. 只汇报改动文件、设计取舍和剩余问题；不要编造设计状态。',
-      '8. 设计完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
+      '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹和已有文件。',
+      '2. 先判断这次要产出什么：',
+      '   - 需求会话里描述需求 → 做**产品原型**：一屏一个 HTML 写进 `prototype/`，优先信息结构、关键流程和状态完整，不追求最终视觉。',
+      '   - 设计会话里做高保真 → 做**设计稿**：加载 `wb-ui-design` 技能，一屏一个 HTML 写进 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
+      '3. 做设计稿且设计未认领、当前身份是设计时，调用 `workbench_claim_design`。',
+      '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名不带序号，一屏一个语义化名字。',
+      '5. 写完第一屏就调用 `wb_preview_page` 打开它（右侧画布会实时显示），之后改文件自动刷新。',
+      '6. 设计稿用 `wb_check_design` 在真实尺寸下自查，需要真实截图时用 `wb_look_design`；最多三轮测量-修复。',
+      '7. 只汇报改动文件、取舍和剩余问题；不要编造原型或设计状态。',
+      '8. 设计稿完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
       '',
-      '页面文案用中文（除非需求明确是海外业务）；设计要紧扣需求范围和平台。',
+      '页面文案用中文（除非需求明确是海外业务）；内容紧扣需求范围和平台。',
     ].join('\n'),
   },
   {
@@ -2522,7 +2960,7 @@ export function apply(ctx, config = {}) {
     sub.effect(() => sub.webServer.register({
       kind: 'prefix',
       path: API_PREFIX,
-      handler: makeRoute(local),
+      handler: makeRoute(local, sub),
     }), 'dsh-workbench: team-server BFF routes')
   })
 

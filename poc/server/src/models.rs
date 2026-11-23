@@ -424,15 +424,6 @@ impl Requirement {
         self.sessions.iter().find(|item| item.id == id)
     }
 
-    pub fn primary_record(&self) -> Option<&SessionRecord> {
-        if let Some(id) = &self.primary_session_id {
-            if let Some(record) = self.session_record(id) {
-                return Some(record);
-            }
-        }
-        self.sessions.first()
-    }
-
     pub fn dev_started(&self) -> bool {
         self.dev_tasks.iter().any(|task| task.started_at.is_some())
     }
@@ -464,15 +455,6 @@ impl Requirement {
 
     pub fn dev_task_mut(&mut self, platform_id: &str) -> Option<&mut DevTask> {
         self.dev_tasks.iter_mut().find(|task| task.platform_id == platform_id)
-    }
-
-    pub fn latest_test(&self) -> Option<&TestRun> {
-        self.test_runs.last()
-    }
-
-    pub fn current_round_reviews(&self) -> Vec<&Review> {
-        let round = self.versions.len() as u32;
-        self.reviews.iter().filter(|review| review.version == round).collect()
     }
 }
 

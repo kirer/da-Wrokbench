@@ -1,7 +1,16 @@
 import { chromium } from 'playwright'
 
-const LISI = 'http://127.0.0.1:3301/?token=J88wP3xdwVl5qSkzYE_7bMuE_w5ki2WHBd5DtOqrPXQ'
-const WANGWU = 'http://127.0.0.1:3303/?token=T3_HZi1kHcBIApCpc-KSJlzqIGYgvwCSbsOFh4ZKH1k'
+// 不在仓库里保存 DSH 访问令牌：令牌等同登录态，提交后必须轮换。
+// 用法：
+//   DSH_URL_LISI='http://127.0.0.1:3301/?token=…' \
+//   DSH_URL_WANGWU='http://127.0.0.1:3303/?token=…' \
+//   node e2e/check-cookie-isolation.mjs
+const LISI = process.env.DSH_URL_LISI ?? ''
+const WANGWU = process.env.DSH_URL_WANGWU ?? ''
+if (!LISI || !WANGWU) {
+  console.error('缺少 DSH_URL_LISI / DSH_URL_WANGWU；不要把手动登录的 token URL 写进仓库。')
+  process.exit(2)
+}
 
 const browser = await chromium.launch()
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: 'dark' })

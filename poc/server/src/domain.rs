@@ -82,10 +82,6 @@ fn user_name(snap: &Snapshot, id: &str) -> String {
         .unwrap_or_else(|| id.to_string())
 }
 
-pub fn requirement_label(requirement: &Requirement) -> String {
-    format!("{}「{}」", requirement.code, requirement.title)
-}
-
 pub fn status_label(status: &str) -> &'static str {
     match status {
         STATUS_DRAFT => "草稿",
@@ -294,6 +290,16 @@ fn check_not_creating(requirement: &Requirement, action: &str) -> Result<(), Api
             "需求文件夹/会话创建失败，先重试创建再{action}"
         )));
     }
+    // 冻结/发布是终态：文档、附件、设计交付和评审都不能再把需求改回进行中。
+    if matches!(
+        requirement.status.as_str(),
+        STATUS_FROZEN | STATUS_RELEASED | STATUS_DONE
+    ) {
+        return Err(ApiError::conflict(format!(
+            "需求当前是「{}」，不能{action}",
+            status_label(&requirement.status)
+        )));
+    }
     Ok(())
 }
 
@@ -500,6 +506,25 @@ pub fn archive_iteration(
     if archived && active_count <= 1 {
         return Err(ApiError::conflict("至少要保留一个未归档迭代"));
     }
+    if archived {
+        let busy = snap.requirements.iter().any(|requirement| {
+            requirement.iteration_id == id
+                && matches!(
+                    requirement.status.as_str(),
+                    STATUS_SCHEDULED
+                        | STATUS_IN_PROGRESS
+                        | STATUS_DEV_DONE
+                        | STATUS_TESTING
+                        | STATUS_TEST_FAILED
+                        | STATUS_TEST_PASSED
+                )
+        });
+        if busy {
+            return Err(ApiError::conflict(
+                "迭代里还有已排期/开发中/测试中的需求，先移出或处理完再归档",
+            ));
+        }
+    }
     snap.iterations[index].archived = archived;
     let iteration = snap.iterations[index].clone();
     if archived {
@@ -531,15 +556,24 @@ pub fn move_requirement(
 ) -> Result<Requirement, ApiError> {
     require_plan(actor, "移动需求的")?;
     let index = req_index(snap, reference)?;
-    if !matches!(
-        snap.requirements[index].status.as_str(),
-        STATUS_BACKLOG
-            | STATUS_DRAFT
-            | STATUS_PENDING_REVIEW
-            | STATUS_CHANGES_REQUESTED
-            | STATUS_APPROVED
-            | STATUS_SCHEDULED
-    ) {
+    // 不能只看当前 status：/req-scope out 会把开发中/测试中的需求改回 backlog，
+    // 再看 status 就会被当成“未开始”而允许移动。历史痕迹才是准确边界。
+    let started = snap.requirements[index]
+        .dev_tasks
+        .iter()
+        .any(|task| task.started_at.is_some() || task.finished_at.is_some())
+        || !snap.requirements[index].test_runs.is_empty();
+    if started
+        || !matches!(
+            snap.requirements[index].status.as_str(),
+            STATUS_BACKLOG
+                | STATUS_DRAFT
+                | STATUS_PENDING_REVIEW
+                | STATUS_CHANGES_REQUESTED
+                | STATUS_APPROVED
+                | STATUS_SCHEDULED
+        )
+    {
         return Err(ApiError::conflict("开发开始后的需求不能跨迭代移动"));
     }
     let target = snap
@@ -876,6 +910,27 @@ pub fn submit_requirement(
         .filter(|value| !value.is_empty())
         .map(String::from)
         .unwrap_or_else(|| format!("v{version} 提交"));
+    // 会签人不能为空：否则任何负责人一次 approve 就能把需求变成已通过。
+    // 需求没配会签人时继承迭代配置，再退回到全体负责人。
+    let fallback_reviewers = {
+        let iteration = snap
+            .iterations
+            .iter()
+            .find(|item| item.id == snap.requirements[index].iteration_id)
+            .map(|item| item.reviewer_ids.clone())
+            .unwrap_or_default();
+        if iteration.is_empty() {
+            planner_ids(snap)
+        } else {
+            iteration
+        }
+    };
+    if snap.requirements[index].reviewer_ids.is_empty() {
+        snap.requirements[index].reviewer_ids = fallback_reviewers;
+    }
+    if snap.requirements[index].reviewer_ids.is_empty() {
+        return Err(ApiError::bad("迭代还没有配置会签人，请先在迭代设置里指定"));
+    }
     snap.requirements[index].versions.push(Version {
         version,
         summary: text,
@@ -886,11 +941,7 @@ pub fn submit_requirement(
     snap.requirements[index].in_scope = false;
     snap.requirements[index].updated_at = crate::now_iso();
     let requirement = snap.requirements[index].clone();
-    let reviewers = if requirement.reviewer_ids.is_empty() {
-        planner_ids(snap)
-    } else {
-        requirement.reviewer_ids.clone()
-    };
+    let reviewers = requirement.reviewer_ids.clone();
     for reviewer in reviewers {
         snap.notify(
             &reviewer,
@@ -936,9 +987,14 @@ pub fn review_requirement(
         )));
     }
     let reviewers = &snap.requirements[index].reviewer_ids;
-    let allowed = actor.has_role(ROLE_ADMIN)
-        || reviewers.contains(&actor.id)
-        || (reviewers.is_empty() && actor.can_plan());
+    if reviewers.is_empty() {
+        return Err(ApiError::conflict("需求还没有配置会签人，请先在迭代设置或 /req-reviewers 里指定"));
+    }
+    let submitter = snap.requirements[index].versions.last().map(|version| version.by.as_str());
+    if submitter == Some(actor.id.as_str()) && !actor.has_role(ROLE_ADMIN) {
+        return Err(ApiError::forbidden("不能评审自己提交的需求"));
+    }
+    let allowed = actor.has_role(ROLE_ADMIN) || reviewers.contains(&actor.id);
     if !allowed {
         return Err(ApiError::forbidden(format!(
             "{} 不在这个需求的会签人列表里",
@@ -1099,6 +1155,9 @@ pub fn set_reviewers(
         }
         clean.push(id);
     }
+    if clean.is_empty() {
+        return Err(ApiError::bad("至少需要一名会签人；留空会让任何负责人一次通过就结束评审"));
+    }
     let previous = snap.requirements[index].reviewer_ids.clone();
     let unchanged = previous.len() == clean.len()
         && previous.iter().all(|id| clean.contains(id));
@@ -1248,10 +1307,6 @@ pub fn set_scope(
             STATUS_SCHEDULED,
             STATUS_IN_PROGRESS,
             STATUS_DEV_DONE,
-            STATUS_TESTING,
-            STATUS_TEST_FAILED,
-            STATUS_TEST_PASSED,
-            STATUS_FROZEN,
             STATUS_BACKLOG,
         ],
         "调整范围",
@@ -1263,6 +1318,16 @@ pub fn set_scope(
             "需求已经在范围外"
         }));
     }
+    let reason = input.reason.trim();
+    if !input.in_scope && reason.is_empty() {
+        return Err(ApiError::bad("移出本期范围必须填写原因"));
+    }
+    if reason.chars().count() > 500 {
+        return Err(ApiError::bad("范围变更原因不能超过 500 字"));
+    }
+    if reason.chars().any(char::is_control) {
+        return Err(ApiError::bad("范围变更原因不能包含控制字符"));
+    }
     let at = crate::now_iso();
     snap.requirements[index].in_scope = input.in_scope;
     snap.requirements[index]
@@ -1271,7 +1336,7 @@ pub fn set_scope(
             at: at.clone(),
             by: actor.id.clone(),
             in_scope: input.in_scope,
-            reason: input.reason.trim().to_string(),
+            reason: reason.to_string(),
         });
     snap.requirements[index].status = if input.in_scope {
         if snap.requirements[index].planned_start_date.is_some()
@@ -1630,14 +1695,6 @@ pub fn dev_claim(
     Ok(requirement)
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DevActionInput {
-    pub platform_id: String,
-    #[serde(default)]
-    pub note: String,
-}
-
 pub fn dev_start(
     snap: &mut Snapshot,
     actor: &User,
@@ -1646,11 +1703,31 @@ pub fn dev_start(
 ) -> Result<Requirement, ApiError> {
     let index = req_index(snap, reference)?;
     check_dev_status(&snap.requirements[index], "开始开发")?;
+    if matches!(
+        snap.requirements[index].status.as_str(),
+        STATUS_DEV_DONE | STATUS_TEST_PASSED
+    ) {
+        return Err(ApiError::conflict(
+            "开发已完成/测试已通过，不能再次开始开发；如需返工请先走重开流程",
+        ));
+    }
     check_platform(&snap.requirements[index], platform_id)?;
     if !snap.requirements[index].in_scope {
         return Err(ApiError::conflict("需求不在本期范围内，不能开始开发"));
     }
     snap.requirements[index].ensure_dev_tasks();
+    if let Some(task) = snap.requirements[index]
+        .dev_tasks
+        .iter()
+        .find(|task| task.platform_id == platform_id)
+    {
+        if task.finished_at.is_some() || task.status == DEV_DONE {
+            return Err(ApiError::conflict("这个平台任务已经完成开发，不能再次开始"));
+        }
+        if task.started_at.is_some() || task.status == DEV_IN_PROGRESS {
+            return Err(ApiError::conflict("这个平台任务已经开始开发"));
+        }
+    }
     let assignee = snap.requirements[index]
         .dev_tasks
         .iter()
@@ -1721,6 +1798,7 @@ pub fn dev_finish(
     actor: &User,
     reference: &str,
     input: DevFinishInput,
+    mock_integration: bool,
 ) -> Result<Requirement, ApiError> {
     let index = req_index(snap, reference)?;
     check_dev_status(&snap.requirements[index], "完成开发")?;
@@ -1749,15 +1827,19 @@ pub fn dev_finish(
         task.finished_at = Some(at.clone());
         task.note = input.note.trim().to_string();
         task.branch = Some(format!("feature/{}-{}", code.to_lowercase(), platform_id));
-        task.mr_url = Some(format!(
-            "https://gitlab.example.com/member/workbench/-/merge_requests/{}",
-            300 + task_count
-        ));
-        task.pipeline_status = Some("success".to_string());
-        task.pipeline_url = Some(format!(
-            "https://gitlab.example.com/member/workbench/-/pipelines/{}",
-            9000 + task_count
-        ));
+        if mock_integration {
+            // 没有配置 GitLab 时才生成演示 MR/流水线；配置后必须等真实调用结果，
+            // 否则一次失败的集成会留下“已成功”的假象。
+            task.mr_url = Some(format!(
+                "https://gitlab.example.com/member/workbench/-/merge_requests/{}",
+                300 + task_count
+            ));
+            task.pipeline_status = Some("success".to_string());
+            task.pipeline_url = Some(format!(
+                "https://gitlab.example.com/member/workbench/-/pipelines/{}",
+                9000 + task_count
+            ));
+        }
     }
     if snap.requirements[index].all_dev_done() {
         snap.requirements[index].status = STATUS_DEV_DONE.to_string();
@@ -2544,22 +2626,11 @@ pub fn create_skill(
         },
         at: at.clone(),
         by: actor.id.clone(),
-        decision: if scope == "global" {
-            Some("approved".to_string())
-        } else {
-            None
-        },
+        // 团队技能也必须走审核；作者不能借“创建即 approved”给自己发权限。
+        decision: None,
         comment: String::new(),
-        reviewed_by: if scope == "global" {
-            Some(actor.id.clone())
-        } else {
-            None
-        },
-        reviewed_at: if scope == "global" {
-            Some(at.clone())
-        } else {
-            None
-        },
+        reviewed_by: None,
+        reviewed_at: None,
     };
     let skill = Skill {
         id: format!("skill-{}", uuid::Uuid::new_v4()),
@@ -2567,27 +2638,24 @@ pub fn create_skill(
         description: input.description.trim().to_string(),
         role_packs,
         scope: scope.to_string(),
-        status: if scope == "global" {
-            "active".to_string()
-        } else {
-            "pending_review".to_string()
-        },
+        status: "pending_review".to_string(),
         owner_id: actor.id.clone(),
         versions: vec![version],
         created_at: at.clone(),
         updated_at: at,
     };
     snap.skills.push(skill.clone());
-    if scope == "personal" {
-        for planner in planner_ids(snap) {
-            snap.notify(
-                &planner,
-                "skill_review_requested",
-                None,
-                &format!("技能 {name} 等待审核"),
-                &format!("{} 上传了个人技能「{name}」。", actor.name),
-            );
+    for planner in planner_ids(snap) {
+        if planner == actor.id {
+            continue;
         }
+        snap.notify(
+            &planner,
+            "skill_review_requested",
+            None,
+            &format!("技能 {name} 等待审核"),
+            &format!("{} 上传了{}技能「{name}」。", actor.name, if scope == "global" { "团队" } else { "个人" }),
+        );
     }
     snap.push_event(
         Some(&actor.id),
@@ -3031,6 +3099,18 @@ pub fn add_artifact(
         }
         content.len()
     };
+    // 附件正文存在快照 JSON 里；只限单文件不够，累计几百个 3 MB 附件会把每次
+    // 状态读取和整份快照写放大到不可用。这里限制每条需求的附件数量和总字节数。
+    let existing_bytes = snap.requirements[index]
+        .artifacts
+        .iter()
+        .fold(0usize, |sum, item| sum.saturating_add(item.size));
+    if snap.requirements[index].artifacts.len() >= 100 {
+        return Err(ApiError::bad("每条需求最多保存 100 个附件"));
+    }
+    if existing_bytes.saturating_add(decoded_size) > 50 * 1024 * 1024 {
+        return Err(ApiError::bad("每条需求的附件总量不能超过 50 MB"));
+    }
     let meta = ArtifactMeta {
         id: format!("art-{}", uuid::Uuid::new_v4()),
         requirement_id: snap.requirements[index].id.clone(),
@@ -3104,4 +3184,63 @@ pub fn get_artifact(snap: &Snapshot, id: &str) -> Result<(ArtifactMeta, String),
         .map(|item| item.content.clone())
         .ok_or_else(|| ApiError::not_found("附件内容不存在"))?;
     Ok((meta, content))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn snapshot_with(status: &str, codes: &[&str]) -> Snapshot {
+        let requirements: Vec<Value> = codes
+            .iter()
+            .enumerate()
+            .map(|(index, code)| {
+                json!({
+                    "id": format!("req-{index}"),
+                    "code": code,
+                    "title": format!("需求 {index}"),
+                    "iterationId": "it-1",
+                    "status": status,
+                    "designStatus": "not_needed",
+                    "ownerId": "u-1",
+                    "createdAt": "2026-01-01T00:00:00Z",
+                    "updatedAt": "2026-01-01T00:00:00Z"
+                })
+            })
+            .collect();
+        serde_json::from_value(json!({
+            "users": [],
+            "groups": [],
+            "platforms": [],
+            "iterations": [{
+                "id": "it-1",
+                "code": "S1",
+                "shortCode": "S1",
+                "name": "迭代"
+            }],
+            "requirements": requirements,
+            "skills": []
+        }))
+        .expect("fixture snapshot")
+    }
+
+    #[test]
+    fn terminal_requirements_reject_further_edits() {
+        for status in [STATUS_FROZEN, STATUS_RELEASED, STATUS_DONE] {
+            let snap = snapshot_with(status, &["S1-001"]);
+            let error = check_not_creating(&snap.requirements[0], "编辑")
+                .expect_err("terminal status must be rejected");
+            assert_eq!(error.status, axum::http::StatusCode::CONFLICT);
+        }
+        let snap = snapshot_with(STATUS_DRAFT, &["S1-001"]);
+        assert!(check_not_creating(&snap.requirements[0], "编辑").is_ok());
+    }
+
+    #[test]
+    fn next_code_uses_high_water_mark() {
+        let snap = snapshot_with(STATUS_DRAFT, &["S1-001", "S1-007", "S2-100"]);
+        let iteration = &snap.iterations[0];
+        assert_eq!(next_code(&snap, iteration), "S1-008");
+    }
 }

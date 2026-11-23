@@ -160,7 +160,7 @@ pub async fn app_token(config: &Config) -> Result<String, ApiError> {
     Ok(token)
 }
 
-fn http_client() -> Result<reqwest::Client, ApiError> {
+pub(crate) fn http_client() -> Result<reqwest::Client, ApiError> {
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(15))

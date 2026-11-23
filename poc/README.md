@@ -8,9 +8,11 @@ DSH 部门研发工作台的可运行验证：**DSH 插件是主界面，Rust �
 - 本机 BFF：`index.js`（同源 Cookie、转发服务端、管理本机文件夹/DSH 会话映射）
 - 团队服务端：`server/`（Rust + axum；SQLite 或 Postgres；可 Docker 部署）
 - 设计画布：改造自 `dsh-design-studio@0.29.0`（MIT），已并入工作台插件
-- 回归：`server/test-api.sh`（112 项）、`tests/host-bff.mjs`（23 项）、
+- 回归：`server/test-api.sh`（112 项）、`tests/host-bff.mjs`（44 项）、
   `server/test-integrations.sh`（34 项）、`server/test-gitlab-real.sh`（真实 GitLab，20 项/平台）、
-  `e2e/`（Playwright 4 项）；审查与修复记录见 [`REVIEW-2026-11-22.md`](../docs/reviews/REVIEW-2026-11-22.md)
+  `e2e/`（Playwright 5 项）；审查与修复记录见
+  [`REVIEW-2026-11-22.md`](../docs/reviews/REVIEW-2026-11-22.md)、
+  [`REVIEW-2026-11-23.md`](../docs/reviews/REVIEW-2026-11-23.md)
 
 ## 架构
 
@@ -104,12 +106,13 @@ Group Runner 和 Webhook，凭据写入 `.local/gitlab.outputs.env`（已在 `.g
 
 ```bash
 # 独立 profile，避免影响桌面默认 profile
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 dsh --profile workbench-poc --from-default-profile web --dump-config >/dev/null
-dsh plugin --profile workbench-poc add /Users/kirer/projects/da-Workbench/poc
+dsh plugin --profile workbench-poc add "$REPO_ROOT/poc"
 
 WORKBENCH_SERVER_URL=http://127.0.0.1:3210 \
 WORKBENCH_INTERNAL_TOKEN="$(grep '^WORKBENCH_INTERNAL_TOKEN=' .env | cut -d= -f2)" \
-DSH_WORKBENCH_BASE=/Users/kirer/projects/da-Workbench/poc/runtime/workbench \
+DSH_WORKBENCH_BASE="$REPO_ROOT/poc/runtime/workbench" \
 dsh --profile workbench-poc --no-open --port 3199
 ```
 
@@ -402,7 +405,7 @@ bash test-integrations.sh                        # 34 项断言
 
 # Host BFF（自己启动临时 Rust 服务端，验证 Cookie/CSRF/会话归属/路径边界）
 cd ..
-node tests/host-bff.mjs                           # 23 项断言
+node tests/host-bff.mjs                           # 44 项断言
 
 # 真实 GitLab（需先按 deploy/gitlab 启动并配置服务端 GITLAB_* 环境变量）
 set -a; . .local/gitlab.outputs.env; set +a
@@ -426,12 +429,12 @@ DSH_URL='http://127.0.0.1:3199/?token=...' npx playwright test
 
 真实 GitLab 额外验证：`server/test-gitlab-real.sh` 在本地 GitLab CE 17.11.4 + Runner 上，
 对 `workbench/trade-server` 和 `workbench/web` 各跑通 20 项断言：真实分支、开发者提交、
-Runner 流水线成功、MR 创建、Webhook 新流水线回写。截图见
-`e2e/screenshots/workbench-gitlab-real.png`、`gitlab-project.png`、`gitlab-pipelines.png`、
-`gitlab-merge-requests.png`。
+Runner 流水线成功、MR 创建、Webhook 新流水线回写。截图默认生成到
+`e2e/screenshots/`（不提交，需本机跑出）。
 
 浏览器 E2E 覆盖：工作台首页/需求详情/活文档/团队文件、通知聚合、管理员后台、右侧「需求」
-与「设计」两个独立面板。用例在 `e2e/tests/workbench.spec.js`，截图在 `e2e/screenshots/`。
+与「设计」两个独立面板。用例在 `e2e/tests/workbench.spec.js`；截图目录 `e2e/screenshots/`
+按 `e2e/.gitignore` 不提交，需在本机跑测试后生成。
 
 CI：`.github/workflows/ci.yml` 跑 Rust 构建、API 回归、Host BFF 回归、集成回归和 Docker 镜像构建；
 设置仓库变量 `DSH_E2E_ENABLED=1` 与 `DSH_URL` secret 后启用浏览器 E2E。
@@ -448,12 +451,13 @@ CI：`.github/workflows/ci.yml` 跑 Rust 构建、API 回归、Host BFF 回归�
   Runner 调整。CI 目前只回写 GitLab pipeline 状态，没有接 Jenkins/制品库。
 - **设计稿上传限制**：自动上传只处理 HTML/CSS/JS/SVG/JSON/MD/TXT，单文件 1.5 MB、最多 30 个；
   二进制设计资产可通过「上传附件」手动上传（3 MB）。
-- **附件上限**：单文件 3 MB（解码后），存在状态快照里；大文件应改用对象存储。
+- **附件上限**：单文件 3 MB（解码后），每条需求最多 100 个、合计 50 MB，存在状态快照里；
+  大文件应改用对象存储。
 - **监控**：提供 `/health`、Docker healthcheck 和 tracing 访问日志；没有 Prometheus 指标端点。
 - **技能治理**：技能正文由人上传，模型是否遵守取决于提示词；没有技能沙箱/权限执行隔离。
-- **设计画布裁剪**：裁剪了 Design Studio 的首页/市场、导出、画笔、试用等入口；上游升级需要
-  重新合入 `design-studio/` 与 `client.design-studio.js` 的改动。改动清单见
-  `design-studio/PATCHES.md`（如存在）与 `client.design-studio.js` 顶部注释。
+- **设计画布保留 Design Studio 能力**：内嵌后保留首页、画布、外观、体检、导出、版本等能力，
+  只去掉工作台不需要的独立聊天框/市场入口；上游升级需要重新合入 `design-studio/` 与
+  `client.design-studio.js` 的改动，详见这两个文件的顶部注释。
 - `client.design-studio.js` 是 DSH package-local chunk，必须与 `client.js` 同目录且匹配
   `client.*.js`。
 - **内部令牌仍是机器凭据**：生产需要网络隔离/mTLS 或只在 DSH 宿主上暴露服务端端口。
@@ -461,6 +465,7 @@ CI：`.github/workflows/ci.yml` 跑 Rust 构建、API 回归、Host BFF 回归�
 - **无内置限流**：登录、Mock 登录和 Webhook 依赖反向代理限流；生产需在网关层配置。
 - **附件按团队可见**：需求状态对全员可见，附件正文同样按已登录成员可读；如需按需求授权，应先引入需求级 ACL。
 - **工具身份基于会话认领**：DSH 会话首次在浏览器认领后，工具以认领人身份执行；生产可替换为短期 capability。
-- **未初始化 git**：当前目录不是 git 仓库；`.env`、数据库和 `server/target` 已忽略。
+- **仓库根目录**：`poc/` 只是仓库中的一个子目录，安装插件时用 `git rev-parse --show-toplevel`
+  取绝对路径；`.env`、数据库和 `server/target` 已忽略。
 
 更完整的设计取舍与验证结论见 [`../docs/POC结论.md`](../docs/POC结论.md)。

@@ -139,7 +139,7 @@ MR_CALLS="$(curl -s "$MOCK/__requests" | jq '[.[] | select(.path=="/api/v4/proje
 check "GitLab 创建 MR 已调用" "$MR_CALLS" "1"
 expect 200 -X POST "$BASE/webhooks/gitlab" -H 'content-type: application/json' \
   -H 'x-gitlab-token: test-hook-secret' \
-  -d "{\"object_kind\":\"pipeline\",\"object_attributes\":{\"ref\":\"$BRANCH\",\"status\":\"failed\",\"url\":\"http://gitlab.mock/pipelines/99\"}}"
+  -d "{\"object_kind\":\"pipeline\",\"project\":{\"id\":123,\"path_with_namespace\":\"trade/trade-server\"},\"object_attributes\":{\"ref\":\"$BRANCH\",\"status\":\"failed\",\"url\":\"http://gitlab.mock/pipelines/99\"}}"
 check "Webhook 命中开发任务" "$(jq -r .updated "$BODY_FILE")" "true"
 WEBHOOK_STATUS="$(curl -s "$BASE/state" -H "$(auth "$TA")" | jq -r --arg rid "$RID" '.requirements[] | select(.id==$rid) | .devTasks[] | select(.platformId=="trade-server") | .pipelineStatus')"
 check "Webhook 回写流水线状态" "$WEBHOOK_STATUS" "failed"

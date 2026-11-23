@@ -25,6 +25,7 @@ pub struct Config {
     pub dingtalk_agent_id: Option<String>,
     pub dingtalk_work_notify: bool,
     pub dingtalk_api_base: String,
+    pub dingtalk_oauth_base: String,
     pub dingtalk_default_roles: Vec<String>,
     pub dingtalk_sync_root_dept: i64,
     pub dingtalk_disable_missing: bool,
@@ -33,9 +34,6 @@ pub struct Config {
     pub gitlab_webhook_secret: Option<String>,
     pub gitlab_default_branch: String,
     pub token_ttl_seconds: i64,
-    pub database_path: String,
-    pub port: u16,
-    pub allowed_origins: Vec<String>,
     pub allow_remote_internal: bool,
 }
 
@@ -410,8 +408,6 @@ async fn auth_session(State(state): State<AppState>, AuthUser(user): AuthUser) -
 #[derive(Debug, Deserialize)]
 struct DingTalkExchange {
     code: String,
-    #[serde(rename = "redirectUri", default)]
-    redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -430,8 +426,6 @@ struct DingTalkProfile {
     mobile: Option<String>,
     #[serde(rename = "avatarUrl", default)]
     avatar_url: Option<String>,
-    #[serde(default)]
-    nick: Option<String>,
 }
 
 async fn dingtalk_exchange(
@@ -454,9 +448,12 @@ async fn dingtalk_exchange(
     if input.code.trim().is_empty() {
         return Err(ApiError::bad("缺少钉钉授权码"));
     }
-    let client = reqwest::Client::new();
+    let client = crate::dingtalk::http_client()?;
     let token_response = client
-        .post("https://api.dingtalk.com/v1.0/oauth2/userAccessToken")
+        .post(format!(
+            "{}/v1.0/oauth2/userAccessToken",
+            state.config.dingtalk_oauth_base
+        ))
         .json(&json!({
             "clientId": client_id,
             "clientSecret": client_secret,
@@ -479,7 +476,10 @@ async fn dingtalk_exchange(
         return Err(ApiError::unauthorized("钉钉没有返回 accessToken"));
     }
     let profile_response = client
-        .get("https://api.dingtalk.com/v1.0/contact/users/me")
+        .get(format!(
+            "{}/v1.0/contact/users/me",
+            state.config.dingtalk_oauth_base
+        ))
         .header("x-acs-dingtalk-access-token", &token_body.access_token)
         .send()
         .await
@@ -1067,8 +1067,9 @@ async fn dev_finish(
 ) -> Result<Json<Value>, ApiError> {
     let platform_id = input.platform_id.clone();
     let note = input.note.clone();
+    let mock_integration = !gitlab::configured(&state.config);
     let requirement = mutate(&state, |snapshot| {
-        domain::dev_finish(snapshot, &actor, &id, input)
+        domain::dev_finish(snapshot, &actor, &id, input, mock_integration)
     })
     .await?;
     let mut integration_warning = Value::Null;
@@ -1307,6 +1308,9 @@ async fn archive_platform_group(
     AuthUser(actor): AuthUser,
     Path((id, action)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
+    if action != "archive" && action != "restore" {
+        return Err(ApiError::bad("action 只能是 archive 或 restore"));
+    }
     mutate(&state, |snapshot| {
         domain::archive_platform(
             snapshot,
@@ -1361,6 +1365,9 @@ async fn archive_platform(
     AuthUser(actor): AuthUser,
     Path((id, action)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
+    if action != "archive" && action != "restore" {
+        return Err(ApiError::bad("action 只能是 archive 或 restore"));
+    }
     mutate(&state, |snapshot| {
         domain::archive_platform(
             snapshot,
@@ -1399,13 +1406,16 @@ async fn list_skills(
 
 async fn published_skills(
     State(state): State<AppState>,
-    AuthUser(_actor): AuthUser,
+    AuthUser(actor): AuthUser,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = read_snapshot(&state).await?;
     let items: Vec<Value> = snapshot
         .skills
         .iter()
-        .filter(|skill| skill.published())
+        .filter(|skill| {
+            skill.published()
+                && (actor.can_plan() || skill.scope == "global" || skill.owner_id == actor.id)
+        })
         .filter_map(|skill| {
             let latest = skill.latest()?;
             Some(json!({
@@ -1570,6 +1580,9 @@ async fn read_notifications(
     AuthUser(actor): AuthUser,
     Json(input): Json<ReadNotificationsBody>,
 ) -> Result<Json<Value>, ApiError> {
+    if input.ids.as_ref().map_or(false, |ids| ids.len() > 200) {
+        return Err(ApiError::bad("一次最多标记 200 条通知为已读"));
+    }
     mark_notifications_read(&state, &actor.id, input.ids.as_deref()).await?;
     let unread = unread_notifications(&state, &actor.id).await?;
     Ok(Json(json!({ "ok": true, "unreadNotificationCount": unread })))
@@ -1585,15 +1598,24 @@ struct EventsQuery {
 
 async fn list_events(
     State(state): State<AppState>,
-    AuthUser(_actor): AuthUser,
+    AuthUser(actor): AuthUser,
     Query(query): Query<EventsQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    let items = events_since(
+    let mut items = events_since(
         &state,
         query.since.unwrap_or(0),
         query.limit.unwrap_or(100).clamp(1, 500),
     )
     .await?;
+    // 普通成员看到的是业务事件流；管理员/集成/技能审核的载荷只给管理员，
+    // 否则 /events 等于绕过 /audit 的权限检查。
+    if !actor.has_role(ROLE_ADMIN) {
+        items.retain(|event| {
+            !event.kind.starts_with("admin.")
+                && !event.kind.starts_with("integration.")
+                && !event.kind.starts_with("skill.")
+        });
+    }
     Ok(Json(json!({ "events": items })))
 }
 
@@ -1865,14 +1887,30 @@ async fn admin_dingtalk_sync(
 async fn gitlab_webhook(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-    Json(payload): Json<Value>,
+    body: axum::body::Bytes,
 ) -> Result<Json<Value>, ApiError> {
     let token = headers
         .get("x-gitlab-token")
         .and_then(|value| value.to_str().ok());
+    // 先验令牌，再解析 JSON：否则未认证请求可以用 8 MB 请求体反复消耗解析 CPU。
     if !gitlab::webhook_authorized(&state.config, token) {
         return Err(ApiError::unauthorized("GitLab Webhook 令牌无效"));
     }
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::bad("Webhook 请求体不是合法 JSON"))?;
+    let delivery = headers
+        .get("x-gitlab-event-uuid")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    let project_id = payload
+        .pointer("/project/id")
+        .and_then(Value::as_i64)
+        .map(|id| id.to_string());
+    let project_path = payload
+        .pointer("/project/path_with_namespace")
+        .and_then(Value::as_str)
+        .map(String::from);
     let kind = payload
         .get("object_kind")
         .and_then(Value::as_str)
@@ -1896,60 +1934,101 @@ async fn gitlab_webhook(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let url = attrs
-        .get("url")
-        .and_then(Value::as_str)
-        .map(String::from)
-        .or_else(|| {
-            attrs
-                .get("web_url")
-                .and_then(Value::as_str)
-                .map(String::from)
-        });
+    // merge_request 的 url 是 API 地址（/api/v4/...），点进浏览器会 404；
+    // 必须优先用 web_url。
+    let url = if kind == "merge_request" {
+        attrs.get("web_url").and_then(Value::as_str).map(String::from)
+            .or_else(|| attrs.get("url").and_then(Value::as_str).map(String::from))
+    } else {
+        attrs.get("url").and_then(Value::as_str).map(String::from)
+            .or_else(|| attrs.get("web_url").and_then(Value::as_str).map(String::from))
+    };
     let mr_iid = attrs.get("iid").and_then(Value::as_i64);
+    let platform_projects: Vec<(String, Option<String>, Option<String>)> = {
+        let snapshot = read_snapshot(&state).await?;
+        snapshot
+            .platforms
+            .iter()
+            .map(|platform| {
+                (
+                    platform.id.clone(),
+                    platform.gitlab_project_id.clone(),
+                    platform.gitlab_project_path.clone(),
+                )
+            })
+            .collect()
+    };
     let updated = mutate(&state, |snapshot| {
         let mut found: Option<(String, String)> = None;
         for requirement in snapshot.requirements.iter_mut() {
             for task in requirement.dev_tasks.iter_mut() {
-                if task.branch.as_deref() == Some(branch.as_str()) {
-                    if kind == "pipeline" && !status.is_empty() {
-                        task.pipeline_status = Some(status.clone());
-                        task.pipeline_url = url.clone();
-                    }
-                    if kind == "merge_request" {
-                        if let Some(url) = url.clone() {
-                            task.mr_url = Some(url);
-                        }
-                        if !status.is_empty() {
-                            task.note = format!("{} MR {}", task.note, status).trim().to_string();
-                        }
-                    }
-                    found = Some((requirement.id.clone(), task.platform_id.clone()));
-                    break;
+                if task.branch.as_deref() != Some(branch.as_str()) {
+                    continue;
                 }
+                // 同名分支在不同 GitLab 项目里很常见；只接受平台配置的项目，
+                // 避免一个能发 Webhook 的项目改写别的平台任务。
+                let project_ok = platform_projects
+                    .iter()
+                    .find(|(id, _, _)| id == &task.platform_id)
+                    .map(|(_, configured_id, configured_path)| {
+                        let id_ok = match configured_id {
+                            Some(configured) => project_id.as_deref() == Some(configured.as_str()),
+                            None => true,
+                        };
+                        let path_ok = match configured_path {
+                            Some(configured) => project_path.as_deref() == Some(configured.as_str()),
+                            None => true,
+                        };
+                        id_ok && path_ok
+                    })
+                    .unwrap_or(false);
+                if !project_ok {
+                    continue;
+                }
+                if kind == "pipeline" && !status.is_empty() {
+                    task.pipeline_status = Some(status.clone());
+                    task.pipeline_url = url.clone();
+                }
+                if kind == "merge_request" {
+                    if let Some(url) = url.clone() {
+                        task.mr_url = Some(url);
+                    }
+                    // 不往用户手写的 note 里追加 “MR merged”：Webhook 每次重投都会
+                    // 让文本无限增长。MR 状态本身已经保存在 mr_url/pipeline_status。
+                }
+                found = Some((requirement.id.clone(), task.platform_id.clone()));
+                break;
             }
             if found.is_some() {
                 break;
             }
         }
         if let Some((requirement_id, platform_id)) = &found {
-            snapshot.push_event(
-                None,
-                if kind == "pipeline" {
-                    "integration.gitlab_pipeline"
-                } else {
-                    "integration.gitlab_mr_update"
-                },
-                Some(requirement_id),
-                None,
-                json!({
-                    "platformId": platform_id,
-                    "branch": branch,
-                    "status": status,
-                    "url": url,
-                    "iid": mr_iid
-                }),
-            );
+            let duplicated = !delivery.is_empty()
+                && snapshot.events.iter().any(|event| {
+                    event.kind.starts_with("integration.gitlab")
+                        && event.payload.get("delivery").and_then(Value::as_str) == Some(delivery.as_str())
+                });
+            if !duplicated {
+                snapshot.push_event(
+                    None,
+                    if kind == "pipeline" {
+                        "integration.gitlab_pipeline"
+                    } else {
+                        "integration.gitlab_mr_update"
+                    },
+                    Some(requirement_id),
+                    None,
+                    json!({
+                        "platformId": platform_id,
+                        "branch": branch,
+                        "status": status,
+                        "url": url,
+                        "iid": mr_iid,
+                        "delivery": delivery,
+                    }),
+                );
+            }
         }
         Ok(found)
     })

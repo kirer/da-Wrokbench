@@ -811,7 +811,7 @@ window.__ModuleLoader__.load({
       library: '设计库',
       libBack: '回到画布',
       homeBtn: '首页',
-      dHome: '回首页：新做一套、接着做别的、逛设计库',
+      dHome: '回首页：接着做，看看按迭代归档的需求原型',
       homeBack: '回到「{name}」',
       askNewLine: '（另起一套新设计，放新文件夹里，别改现在这套）',
       askNewNote: '新做一套，现在这套不会被改',
@@ -8309,6 +8309,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
     function WbThumb({ src, title }) {
       const box = useRef(null)
       const [width, setWidth] = useState(0)
+      const [near, setNear] = useState(false)
       useEffect(() => {
         const node = box.current
         if (node === null) return undefined
@@ -8319,13 +8320,27 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         observer.observe(node)
         return () => observer.disconnect()
       }, [])
+      // 每张缩略图都是一个完整 HTML iframe。历史作品多时一次性加载几十个会卡死首页；
+      // 只渲染进入视口附近的卡片。
+      useEffect(() => {
+        if (near) return undefined
+        const node = box.current
+        if (node === null || typeof IntersectionObserver === 'undefined') { setNear(true); return undefined }
+        const observer = new IntersectionObserver((entries) => {
+          if (entries.some(entry => entry.isIntersecting)) { setNear(true); observer.disconnect() }
+        }, { rootMargin: '320px' })
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [near])
       const scale = width > 0 ? width / 1440 : 0
       return h('span', { className: 'im ddp-wbthumb', ref: box },
-        scale > 0 && src ? h('iframe', {
+        scale > 0 && src && near ? h('iframe', {
           src,
           title,
           loading: 'lazy',
-          sandbox: 'allow-scripts allow-forms allow-modals allow-popups',
+          tabIndex: -1,
+          'aria-hidden': 'true',
+          sandbox: 'allow-scripts allow-forms',
           referrerPolicy: 'no-referrer',
           style: {
             width: '1440px',
@@ -8343,17 +8358,50 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         }) : null)
     }
 
-    // 工作台内嵌首页的作品区：按迭代分组展示工作台里已有原型的需求，点一张进它的会话。
+    // 工作台内嵌首页的「接着做」：只取工作台自己的作品（原型或设计稿），
+    // 不读 Design Studio 自己的作品库，免得把工作台外的设计混进来。
+    function WorkbenchRecent({ t, groups, onOpenWork, currentId }) {
+      const list = (Array.isArray(groups) ? groups : [])
+        .flatMap((group) => group.works.map((work) => ({ ...work, iteration: group.iteration })))
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .slice(0, 3)
+      if (list.length === 0) return null
+      return h('section', { className: 'ddp-homesec' },
+        h('div', { className: 'hd' }, h('b', null, '接着做')),
+        h('div', { className: 'ddp-recent' }, ...list.map((work) => {
+          const here = typeof currentId === 'string' && currentId !== '' && work.id === currentId
+          return h('button', {
+            key: work.id,
+            className: 'wk' + (here ? ' here' : ''),
+            title: `${work.code} ${work.title}`,
+            'aria-current': here ? 'true' : undefined,
+            onClick: () => onOpenWork(work),
+          },
+            here ? h('em', { className: 'now' }, '正在看') : null,
+            h(WbThumb, { src: work.thumb, title: work.title }),
+            h('span', { className: 'tx' },
+              h('b', null, work.title),
+              h('span', null, `${work.code} · ${t('wkScreens', { n: work.screens })} · ${agoText(t, Date.parse(work.updatedAt))}`)),
+          )
+        })),
+      )
+    }
+
+    // 工作台内嵌首页的作品区：按迭代分组展示工作台里已有原型/设计稿的需求，点一张进它的会话。
     // 数据由工作台传入（works = [{ iteration, works: [{ id, code, title, screens, updatedAt, thumb }] }]）。
-    function WorkbenchWorks({ t, groups, onOpenWork }) {
+    // worksKind 把「需求原型」和「设计稿」分开：需求面板只看 prototype/，设计台只看 design/。
+    function WorkbenchWorks({ t, groups, onOpenWork, worksKind }) {
+      const label = worksKind === 'design' ? '设计稿' : '需求原型'
       if (!Array.isArray(groups) || groups.length === 0) {
         return h('section', { className: 'ddp-homesec' },
-          h('div', { className: 'hd' }, h('b', null, '需求原型')),
-          h('p', { className: 'ddp-wb-empty' }, '在需求会话里描述需求，原型会按迭代归档到这里。'),
+          h('div', { className: 'hd' }, h('b', null, label)),
+          h('p', { className: 'ddp-wb-empty' }, worksKind === 'design'
+            ? '在设计会话里描述设计稿，成品会按迭代归档到这里。'
+            : '在需求会话里描述需求，原型会按迭代归档到这里。'),
         )
       }
       return h('section', { className: 'ddp-homesec ddp-wbworks' },
-        h('div', { className: 'hd' }, h('b', null, '需求原型'), h('span', { className: 'ddp-wb-hint' }, '按迭代归档')),
+        h('div', { className: 'hd' }, h('b', null, label), h('span', { className: 'ddp-wb-hint' }, '按迭代归档')),
         ...groups.map((group) => h('div', { className: 'ddp-wb-iter', key: group.iteration.id },
           h('div', { className: 'ddp-wb-iterhead' },
             h('span', { className: 'code' }, group.iteration.shortCode ?? group.iteration.code),
@@ -8387,7 +8435,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
       const ws = (list || []).filter((w) => w.exists).slice(0, 3)
       if (!ws.length) return null
       return h('section', { className: 'ddp-homesec' },
-        h('div', { className: 'hd' }, h('b', null, t('homeRecent')), h('button', { className: 'lk', onClick: onAll }, t('homeRecentAll'))),
+        h('div', { className: 'hd' }, h('b', null, t('homeRecent')), onAll ? h('button', { className: 'lk', onClick: onAll }, t('homeRecentAll')) : null),
         h('div', { className: 'ddp-recent' }, ...ws.map((w) => { const here = !!cur && norm(w.dir) === norm(cur); return h('button', { key: w.id, className: 'wk' + (here ? ' here' : ''), title: w.dir, 'aria-current': here ? 'true' : undefined, onClick: () => (here && onBack ? onBack() : onOpen(w)) },
           here ? h('em', { className: 'now' }, t('wkHere')) : null,
           h('span', { className: 'im' }, w.thumb ? h('img', { src: `${API}workthumb?id=${w.id}&v=${w.thumb}`, alt: '', loading: 'lazy', onError: (e) => { e.currentTarget.style.visibility = 'hidden' } }) : null, h(I[w.kind] || I.web)),
@@ -11556,8 +11604,24 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
                       h('p', null, t(browse ? 'emptyHintPick' : 'emptyHint')),
                       h(AddressForm, { t, sid, className: 'ddp-form', onDone: () => {}, onBrowse: browse }))),
                 ]
-              // 内嵌工作台：首页只承载工作台自己的需求原型，没有对话框、市场、灵感。
-              : h(WorkbenchWorks, { key: 'wb', t, groups: props.works, onOpenWork: props.onOpenWork }))),
+              // 内嵌工作台：保留 Design Studio 的首页版式，去掉聊天框、模板、市场、灵感；
+              // 「接着做」和迭代归档都只用工作台自己的作品，不读 Design Studio 的作品库。
+              : [
+                  h(WorkbenchRecent, {
+                    key: 'recent',
+                    t,
+                    groups: props.works,
+                    currentId: props.currentWorkId,
+                    onOpenWork: (w) => { if (over) homeClose(); props.onOpenWork(w) },
+                  }),
+                  h(WorkbenchWorks, {
+                    key: 'wb',
+                    t,
+                    groups: props.works,
+                    worksKind: props.worksKind,
+                    onOpenWork: (w) => { if (over) homeClose(); props.onOpenWork(w) },
+                  }),
+                ])),
         h(HoverTip, { key: 'tip' }))
 
       if (!url) {
@@ -11929,12 +11993,20 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
       try { ctx.effect(() => ctx.locale.register(NS, { zh: ZH, en: EN }), 'dsh-design-studio: copy') } catch (e) { console.warn('[dsh-design-studio] locale', e) }
 
       /** 打开右侧栏的预览标签；force=false 时只在这个会话正显示在屏幕上时才弹 */
-      const open = (sid, force) => {
+      const open = async (sid, force) => {
         try {
           const m = ctx.sidebarRight.mounted
           const onScreen = m && typeof m.getSnapshot === 'function' ? m.getSnapshot() : sid
           if (!force && onScreen !== sid) return
-          ctx.sidebarRight.openTab(EMBED !== null ? EMBED.kind : KIND)
+          let kind = EMBED !== null ? EMBED.kind : KIND
+          // 工作台内嵌时，原型会话和设计会话共用同一个右栏，但属于两个 tab。
+          // 由宿主根据会话记录决定开哪个；宿主拒绝（返回 false）就不弹。
+          if (EMBED !== null && typeof EMBED.openFor === 'function') {
+            const chosen = await EMBED.openFor(sid, Boolean(force))
+            if (chosen === false) return
+            if (typeof chosen === 'string' && chosen !== '') kind = chosen
+          }
+          ctx.sidebarRight.openTab(kind)
         } catch (e) {
           console.warn('[dsh-design-studio] 打不开右侧栏', e)
         }

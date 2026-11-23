@@ -66,11 +66,6 @@ impl Snapshot {
         })
     }
 
-    pub fn requirement(&self, reference: &str) -> Option<&Requirement> {
-        self.requirement_index(reference)
-            .map(|index| &self.requirements[index])
-    }
-
     pub fn push_event(
         &mut self,
         actor_id: Option<&str>,
@@ -129,13 +124,40 @@ impl Snapshot {
     }
 }
 
+pub fn demo_seed_enabled() -> bool {
+    let env = std::env::var("APP_ENV")
+        .unwrap_or_else(|_| "development".to_string())
+        .trim()
+        .to_lowercase();
+    let development = matches!(env.as_str(), "development" | "dev" | "test");
+    let explicit = std::env::var("WORKBENCH_SEED_DEMO")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        });
+    explicit.unwrap_or(development)
+}
+
 pub fn open(path: &str) -> rusqlite::Result<Connection> {
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
             let _ = std::fs::create_dir_all(parent);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+            }
         }
     }
     let conn = Connection::open(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "busy_timeout", 5000)?;
@@ -245,6 +267,12 @@ pub fn seed_snapshot() -> Snapshot {
 fn seed_if_empty(conn: &Connection) -> rusqlite::Result<()> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))?;
     if count > 0 {
+        return Ok(());
+    }
+    if !demo_seed_enabled() {
+        tracing::warn!(
+            "空数据库且未启用演示数据；生产环境请先导入管理员账号（仅演示可设置 WORKBENCH_SEED_DEMO=1）"
+        );
         return Ok(());
     }
     let mut snapshot = seed_snapshot();

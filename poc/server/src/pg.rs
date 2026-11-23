@@ -68,6 +68,12 @@ async fn ensure_seeded(client: &deadpool_postgres::Client) -> Result<(), ApiErro
     if count > 0 {
         return Ok(());
     }
+    if !db::demo_seed_enabled() {
+        tracing::warn!(
+            "空数据库且未启用演示数据；生产环境请先导入管理员账号（仅演示可设置 WORKBENCH_SEED_DEMO=1）"
+        );
+        return Ok(());
+    }
     let mut snapshot = db::seed_snapshot();
     db::append_pending(&mut snapshot);
     let data = serde_json::to_value(&snapshot)

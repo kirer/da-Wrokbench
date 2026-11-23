@@ -214,6 +214,20 @@ try {
   })
   check('超长会话 ID 被拒绝', tooLong.status === 400, `HTTP ${tooLong.status}`)
 
+  console.log('== 会话开场白 ==')
+  const greetAnonymous = await jsonFetch('/dsh-workbench/api/session-greeting', {
+    method: 'POST', body: { sessionId },
+  })
+  check('未登录不能写入开场白', greetAnonymous.status === 401, `HTTP ${greetAnonymous.status}`)
+  const greetUnmapped = await jsonFetch('/dsh-workbench/api/session-greeting', {
+    method: 'POST', cookie: lisiCookie, body: { sessionId: `unmapped-${Date.now()}` }, headers: { origin: bff.base },
+  })
+  check('未归属当前账号的会话不写开场白', greetUnmapped.status === 403, `HTTP ${greetUnmapped.status}`)
+  const greetOffline = await jsonFetch('/dsh-workbench/api/session-greeting', {
+    method: 'POST', cookie: lisiCookie, body: { sessionId: 'bff-dsh-session' }, headers: { origin: bff.base },
+  })
+  check('会话没在 DSH 里打开时不写开场白', greetOffline.status === 409, `HTTP ${greetOffline.status}`)
+
   console.log('== CSRF 与代理边界 ==')
   const forged = await jsonFetch('/dsh-workbench/api/sessions/claim', {
     method: 'POST', cookie: lisiCookie, body: { sessionId: 'bff-forged' }, headers: { origin: 'http://evil.example' },
@@ -246,6 +260,37 @@ try {
   check('伪造票据读不了预览', forgedPreview.status === 401, `HTTP ${forgedPreview.status}`)
   const crossPreview = await jsonFetch(`/dsh-workbench/api/design-preview?requirementId=req-other&path=prototype%2Fx.html&ticket=${encodeURIComponent(String(ticket))}`)
   check('票据不能读别的需求', crossPreview.status === 403, `HTTP ${crossPreview.status}`)
+
+  console.log('== 空白画布 ==')
+  const blankAnonymous = await jsonFetch('/dsh-workbench/api/design/blank-canvas', {
+    method: 'POST', body: { requirementId: createdRequirement.id },
+  })
+  check('未登录不能创建空白画布', blankAnonymous.status === 401, `HTTP ${blankAnonymous.status}`)
+  const blankBad = await jsonFetch('/dsh-workbench/api/design/blank-canvas', {
+    method: 'POST', cookie: lisiCookie, body: {}, headers: { origin: bff.base },
+  })
+  check('缺少需求 ID 时拒绝创建空白画布', blankBad.status === 400, `HTTP ${blankBad.status}`)
+  const blank = await jsonFetch('/dsh-workbench/api/design/blank-canvas', {
+    method: 'POST', cookie: lisiCookie, body: { requirementId: createdRequirement.id }, headers: { origin: bff.base },
+  })
+  check(
+    '登录后按需求创建空白画布',
+    blank.status === 200 && path.basename(String(blank.data?.path ?? '')) === '_canvas.html' && fs.existsSync(String(blank.data?.path ?? '')),
+    blank.text,
+  )
+  const blueprint = await jsonFetch('/dsh-workbench/api/design/blank-canvas', {
+    method: 'POST', cookie: lisiCookie, body: { requirementId: createdRequirement.id, kind: 'design' }, headers: { origin: bff.base },
+  })
+  const blueprintPath = String(blueprint.data?.path ?? '')
+  check(
+    '设计会话也能创建空白画布，落在 design/',
+    blueprint.status === 200 && path.basename(blueprintPath) === '_canvas.html' && path.basename(path.dirname(blueprintPath)) === 'design',
+    blueprint.text,
+  )
+  const blankState = await jsonFetch('/dsh-workbench/api/state', { cookie: lisiCookie })
+  const blankRequirement = (blankState.data?.requirements ?? []).find(item => item.id === createdRequirement.id)
+  check('空白画布不计入原型页面', (blankRequirement?.prototypeFiles ?? []).length === 0, JSON.stringify(blankRequirement?.prototypeFiles))
+  check('空白画布不计入设计稿', (blankRequirement?.designFiles ?? []).length === 0, JSON.stringify(blankRequirement?.designFiles))
 
   console.log('== 本地文件夹边界 ==')
   const outside = await jsonFetch('/dsh-workbench/api/folders/ensure', {
