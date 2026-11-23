@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>首次使用 · 选择身份 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="ob">
+  <div class="ob-card">
+    <div class="ob-brand">
+      <svg class="logo-mark" style="width:22px;height:22px"><use href="icons.svg#i-logo"></use></svg>
+      <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+      <span class="badge badge--mock" style="margin-left:8px">首次使用</span>
+    </div>
+    <div class="ob-steps">
+      <span class="s active"><span class="dot">1</span>选择身份</span>
+      <span class="line"></span>
+      <span class="s "><span class="dot">2</span>顶级文件夹</span>
+      <span class="line"></span>
+      <span class="s "><span class="dot">3</span>确认</span>
+    </div>
+    <div class="ob-panel">
+      <h1>先确认你的身份</h1>
+      <div class="sub">职能与平台可多选，权限取并集；再选一个「当前身份」用来决定默认打开哪个工作台。以后可在设置里改。</div>
+
+      <div class="field">
+        <div class="label">职能<span class="hint">多选</span></div>
+        <div class="row gap-2 wrap">
+          <div class="ptog on"><span class="box"></span>负责人 / 项目经理</div>
+          <div class="ptog on"><span class="box"></span>产品</div>
+          <div class="ptog on"><span class="box"></span>设计</div>
+          <div class="ptog"><span class="box"></span>开发</div>
+          <div class="ptog"><span class="box"></span>测试</div>
+          <div class="ptog"><span class="box"></span>管理员</div>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">开发平台<span class="hint">按组展示 · 可配置</span></div>
+        <div class="tiny muted" style="margin-bottom:6px">服务端组</div>
+        <div class="row gap-2 wrap" style="margin-bottom:10px">
+          <div class="ptog on"><span class="box"></span>交易服务端</div>
+          <div class="ptog on"><span class="box"></span>商品服务端</div>
+          <div class="ptog on"><span class="box"></span>用户服务端</div>
+        </div>
+        <div class="tiny muted" style="margin-bottom:6px">前端 / 客户端组</div>
+        <div class="row gap-2 wrap">
+          <div class="ptog on"><span class="box"></span>Web</div>
+          <div class="ptog"><span class="box"></span>小程序</div>
+          <div class="ptog"><span class="box"></span>iOS</div>
+          <div class="ptog"><span class="box"></span>Android</div>
+          <div class="ptog"><span class="box"></span>鸿蒙</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:0">
+        <div class="label">当前身份<span class="hint">单选</span></div>
+        <div class="radio-row">
+          <label class="radio-card sel" style="cursor:pointer"><div class="rt"><span class="r"></span>负责人</div><div class="rd">默认打开「我的工作台」，可创建迭代</div></label>
+          <label class="radio-card" style="cursor:pointer"><div class="rt"><span class="r"></span>产品</div><div class="rd">默认打开需求相关视图</div></label>
+          <label class="radio-card" style="cursor:pointer"><div class="rt"><span class="r"></span>设计</div><div class="rd">默认打开设计相关视图</div></label>
+        </div>
+      </div>
+
+      <div class="ob-foot">
+        <a class="btn" href="login.html">返回登录</a>
+        <div class="spacer"></div>
+        <a class="btn btn-primary" href="onboarding-folder.html">下一步：顶级文件夹 <svg><use href="icons.svg#i-arrow-right"></use></svg></a>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

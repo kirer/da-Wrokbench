@@ -1,0 +1,94 @@
+name: workbench-ci
+
+on:
+  push:
+    paths:
+      - 'poc/server/**'
+      - 'poc/index.js'
+      - 'poc/client.js'
+      - 'poc/tests/host-bff.mjs'
+      - 'poc/docker-compose.yml'
+      - 'poc/deploy/**'
+      - 'poc/e2e/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  server-api:
+    name: Rust 服务端 + API/集成回归
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poc/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: poc/server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 构建
+        run: cargo build --locked
+      - name: API 回归
+        run: |
+          DATABASE_PATH="$RUNNER_TEMP/workbench-api.db" PORT=3210 ./target/debug/dsh-workbench-server &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true; wait $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3210/health >/dev/null && break
+            sleep 0.5
+          done
+          BASE=http://127.0.0.1:3210 bash test-api.sh
+      - name: Host BFF 回归
+        working-directory: poc
+        run: node tests/host-bff.mjs
+      - name: 钉钉 / GitLab 集成回归（本地 mock）
+        run: bash test-integrations.sh
+      - name: 上传日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-logs
+          path: |
+            poc/server/test-results/
+            poc/server/target/debug/dsh-workbench-server
+
+  docker:
+    name: Docker 镜像构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: poc/server
+          push: false
+          tags: dsh-workbench-server:ci
+
+  ui-e2e:
+    name: 浏览器 E2E（需要 DSH 环境）
+    if: ${{ vars.DSH_E2E_ENABLED == '1' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poc/e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+        env:
+          DSH_URL: ${{ secrets.DSH_URL }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            poc/e2e/playwright-report/
+            poc/e2e/screenshots/

@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>迭代详情 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  .head-card { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+  .head-card .lft { min-width: 0; flex: 1; }
+  .head-card .code-line { display: flex; align-items: center; gap: 10px; }
+  .head-card .code-line .code { font-family: var(--font-mono); font-size: 14px; color: var(--text-3); display: inline-flex; align-items: center; min-height: 24px; }
+  .head-card h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 3px 0 8px; }
+  .head-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-3); }
+  .head-meta .it { display: flex; align-items: center; gap: 6px; }
+  .head-meta b { color: var(--text-2); font-weight: 500; }
+  .tl-head { display: grid; grid-template-columns: 104px 1fr 92px; gap: 12px; font-size: 12px; color: var(--text-3); font-family: var(--font-mono); margin-bottom: 4px; }
+  .tl-head .axis { display: flex; justify-content: space-between; }
+  .tl-wrap { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 14px 16px; margin-bottom: 22px; }
+  .summary-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="traffic"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i></div>
+
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="logo">
+        <svg class="logo-mark"><use href="icons.svg#i-logo"></use></svg>
+        <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+        <svg class="logo-collapse ic"><use href="icons.svg#i-panel"></use></svg>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item plugin-entry active" href="iterations.html"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台<span class="badge badge--live" style="margin-left:auto">插件</span></a>
+    </nav>
+    <div class="rail-ph">
+      <div class="h"><svg><use href="icons.svg#i-panel"></use></svg>DSH 原生侧栏 · 占位</div>
+      <p>新会话、插件市场、自动化任务、工作区列表、身份等由 DSH 提供，不在本插件设计范围内。</p>
+      <div class="lines"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="identity ph-id">
+      <span class="avatar">·</span>
+      <div class="who"><div class="n">当前用户</div><div class="r">DSH 身份 · 占位</div></div>
+    </div>
+  </aside>
+
+  <main class="center">
+    <div class="topbar">
+      <div class="plugnac">
+        <span class="plugnac-title"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台</span>
+        <span class="plugnac-sep"></span>
+        <a class="active" href="iterations.html">迭代列表</a>
+        <a href="my-workbench.html">我的工作台</a>
+        <a href="skill-library.html">技能库</a>
+        <a href="settings.html">设置</a>
+        <a href="notifications.html">通知</a>
+      </div>
+      <div class="spacer"></div>
+      <button class="theme-toggle" data-theme-toggle title="切换主题"><svg class="sun"><use href="icons.svg#i-sun"></use></svg><svg class="moon"><use href="icons.svg#i-moon"></use></svg></button>
+      <button class="btn btn-sm btn-icon"><svg><use href="icons.svg#i-more"></use></svg></button>
+    </div>
+
+    <div class="scroll">
+      <div class="page" style="max-width:1180px">
+        <div class="head-card">
+          <div class="lft">
+            <div class="code-line"><a class="code" href="iterations.html">2026-S11</a><span class="chip chip--prog"><span class="gl">◐</span>进行中</span></div>
+            <h1>双十一改版</h1>
+            <div class="head-meta">
+              <span class="it">负责人 <span class="assignee"><span class="avatar sm av-1">张</span><b>张三</b></span></span>
+              <span class="it"><svg class="ic" style="width:13px"><use href="icons.svg#i-lock"></use></svg>范围锁定 · 12 需求</span>
+              <span class="it"><svg class="ic" style="width:13px"><use href="icons.svg#i-calendar"></use></svg>11-01 → 12-03</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="with-aside">
+          <div>
+            <!-- 阶段时间轴 -->
+            <div class="tl-wrap">
+              <div class="tl-head"><span></span><div class="axis"><span>11-01</span><span>11-15</span><span>11-25</span><span>12-03</span></div><span>计划</span></div>
+              <div class="timeline">
+                <div class="tl-row"><div class="tl-name"><span class="chip chip--done" style="height:16px;padding:0 5px"><span class="gl">✓</span></span>需求与评审</div><div class="tl-track"><span class="tl-bar green" style="left:0%;width:12%"></span></div><div class="tl-date">11-01→11-05</div></div>
+                <div class="tl-row"><div class="tl-name"><span class="chip chip--prog" style="height:16px;padding:0 5px"><span class="gl">◐</span></span>设计</div><div class="tl-track"><span class="tl-bar" style="left:12%;width:21%">设计中</span></div><div class="tl-date">11-05→11-12</div></div>
+                <div class="tl-row"><div class="tl-name"><span class="chip chip--idle" style="height:16px;padding:0 5px"><span class="gl">○</span></span>开发</div><div class="tl-track"><span class="tl-bar idle" style="left:27%;width:45%"></span></div><div class="tl-date">11-10→11-25</div></div>
+                <div class="tl-row"><div class="tl-name"><span class="chip chip--na" style="height:16px;padding:0 5px"><span class="gl">—</span></span>测试</div><div class="tl-track"><span class="tl-bar idle" style="left:73%;width:21%"></span></div><div class="tl-date">11-25→12-02</div></div>
+                <div class="tl-row"><div class="tl-name"><span class="chip chip--na" style="height:16px;padding:0 5px"><span class="gl">—</span></span>封板</div><div class="tl-track"><span class="tl-bar idle" style="left:96%;width:4%"></span></div><div class="tl-date">12-03</div></div>
+              </div>
+              <div class="summary-line">
+                <span class="chip chip--prog"><span class="gl">◐</span>设计 5/6 交付</span>
+                <span class="chip chip--idle"><span class="gl">○</span>服务端 0/5 提测</span>
+                <span class="chip chip--idle"><span class="gl">○</span>Web 0/4 提测</span>
+                <span class="badge" style="margin-left:auto"><svg class="ic" style="width:11px"><use href="icons.svg#i-branch"></use></svg>设计与开发轨道重叠（无固定阶段依赖）</span>
+              </div>
+            </div>
+
+            <!-- 需求（卡片 · 脑图/流程风） -->
+            <div class="section-hd" style="margin-top:0">
+              <span class="t">需求</span><span class="n">12</span>
+              <div class="r">
+                <div class="seg" style="height:26px"><button class="active">全部</button><button>待评审 2</button><button>进行中 3</button></div>
+                <a class="btn btn-sm btn-primary" href="#new-req-modal"><svg><use href="icons.svg#i-plus"></use></svg>新建需求</a>
+              </div>
+            </div>
+            <p class="tiny muted" style="margin:-4px 0 14px">每张需求卡只显示<b>设计状态</b>和涉及平台的进展；认领 / 指派 / 提交 / 变更都由 skill 在<b>会话</b>里完成。点标题进「需求全量」，小卡链到总述 / 原型 / 设计稿 / 会话。会话由「创建需求」<b>自动创建</b>；如需补充设计 / 评审等额外会话，在需求卡的「会话」里选择类型新建。</p>
+
+            <div class="mindmap">
+              <div class="branch">
+                <article class="req-card">
+                  <div class="rc-hd"><span class="rc-code">S11-001</span><span class="chip chip--prog"><span class="gl">◐</span>进行中</span><span class="chip chip--warn" style="margin-left:auto"><span class="gl">◷</span>设计已更新</span></div>
+                  <a class="rc-title" href="requirement-full.html">会员积分改版</a>
+                  <div class="row wrap" style="gap:4px;margin:8px 0">
+                      <span class="chip chip--done" title="需求 已通过"><span class="gl">✓</span>需求</span>
+                      <span class="chip chip--prog" title="设计 设计中"><span class="gl">◐</span>设计</span>
+                      <span class="mxg"><span class="gl2">服务端 3</span><span class="chip chip--done" title="交易服务端 已提测"><span class="gl">✓</span>交</span><span class="chip chip--prog" title="商品服务端 开发中"><span class="gl">◐</span>商</span><span class="chip chip--idle" title="用户服务端 待认领"><span class="gl">○</span>用</span></span>
+                      <span class="chip chip--idle" title="Web 未开始"><span class="gl">○</span>Web</span>
+                      <span class="chip chip--idle" title="iOS 未开始"><span class="gl">○</span>iOS</span>
+                      <span class="chip chip--idle" title="测试 未开始"><span class="gl">○</span>测试</span>
+                      <span class="mna2" title="不涉及">不涉及 安卓·鸿蒙</span>
+                    </div>
+                  <div class="rc-ft">
+                    <span class="assignee"><span class="avatar sm av-2">李</span><span class="avatar sm av-3">王</span></span>
+                    <span class="tiny muted">王五 10 分钟前更新</span>
+                    <div class="req-links"><a class="req-link" href="requirement-full.html">总述</a><a class="req-link" href="requirement-full.html">原型</a><a class="req-link" href="requirement-full.html">设计稿</a><a class="req-link" href="requirement-workbench.html"><svg><use href="icons.svg#i-workbench"></use></svg>会话</a></div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="branch">
+                <article class="req-card">
+                  <div class="rc-hd"><span class="rc-code">S11-002</span><span class="chip chip--warn"><span class="gl">◷</span>待评审</span></div>
+                  <a class="rc-title" href="requirement-full.html">积分规则说明页</a>
+                  <div class="row wrap" style="gap:4px;margin:8px 0">
+                      <span class="chip chip--warn" title="需求 待评审"><span class="gl">◷</span>需求</span>
+                      <span class="chip chip--na" title="设计 无需设计"><span class="gl">—</span>无需设计</span>
+                      <span class="chip chip--idle" title="Web 未开始"><span class="gl">○</span>Web</span>
+                      <span class="chip chip--idle" title="测试 未开始"><span class="gl">○</span>测试</span>
+                      <span class="mna2" title="不涉及">不涉及 服务端·iOS·安卓·鸿蒙</span>
+                    </div>
+                  <div class="rc-ft">
+                    <span class="assignee"><span class="avatar sm av-2">李</span></span>
+                    <span class="tiny muted">李四 提交 · 无需设计</span>
+                    <div class="req-links"><a class="req-link" href="requirement-full.html">总述</a><a class="req-link" href="requirement-full.html">原型</a><a class="req-link" href="requirement-workbench.html"><svg><use href="icons.svg#i-workbench"></use></svg>会话</a></div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="branch">
+                <article class="req-card">
+                  <div class="rc-hd"><span class="rc-code">S11-003</span><span class="chip chip--done"><span class="gl">✓</span>设计已交付</span></div>
+                  <a class="rc-title" href="requirement-full.html">会员中心改版</a>
+                  <div class="row wrap" style="gap:4px;margin:8px 0">
+                      <span class="chip chip--done" title="需求 已通过"><span class="gl">✓</span>需求</span>
+                      <span class="chip chip--done" title="设计 已交付"><span class="gl">✓</span>设计</span>
+                      <span class="mxg"><span class="gl2">服务端 3</span><span class="chip chip--idle" title="交易 待开始"><span class="gl">○</span>交</span><span class="chip chip--idle" title="商品 待开始"><span class="gl">○</span>商</span><span class="chip chip--idle" title="用户 待开始"><span class="gl">○</span>用</span></span>
+                      <span class="chip chip--idle" title="Web 待开始"><span class="gl">○</span>Web</span>
+                      <span class="chip chip--idle" title="iOS 待开始"><span class="gl">○</span>iOS</span>
+                      <span class="chip chip--idle" title="安卓 待开始"><span class="gl">○</span>安卓</span>
+                      <span class="chip chip--idle" title="测试 未开始"><span class="gl">○</span>测试</span>
+                      <span class="mna2" title="不涉及">不涉及 鸿蒙</span>
+                    </div>
+                  <div class="rc-ft">
+                    <span class="assignee"><span class="avatar sm av-2">李</span><span class="avatar sm av-3">王</span></span>
+                    <span class="tiny muted">设计已交付 · 开发可开始</span>
+                    <div class="req-links"><a class="req-link" href="requirement-full.html">总述</a><a class="req-link" href="requirement-full.html">设计稿</a><a class="req-link" href="design-workbench.html"><svg><use href="icons.svg#i-workbench"></use></svg>设计会话</a></div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="branch">
+                <article class="req-card">
+                  <div class="rc-hd"><span class="rc-code">S11-004</span><span class="chip chip--idle"><span class="gl">○</span>待认领</span></div>
+                  <a class="rc-title" href="requirement-full.html">积分商城入口</a>
+                  <div class="row wrap" style="gap:4px;margin:8px 0">
+                      <span class="chip chip--done" title="需求 已通过"><span class="gl">✓</span>需求</span>
+                      <span class="chip chip--idle" title="设计 待认领"><span class="gl">○</span>设计待认领</span>
+                      <span class="mxg"><span class="gl2">服务端 1</span><span class="chip chip--idle" title="用户服务端 未开始"><span class="gl">○</span>用</span></span>
+                      <span class="chip chip--idle" title="Web 未开始"><span class="gl">○</span>Web</span>
+                      <span class="chip chip--idle" title="iOS 未开始"><span class="gl">○</span>iOS</span>
+                      <span class="chip chip--idle" title="测试 未开始"><span class="gl">○</span>测试</span>
+                      <span class="mna2" title="不涉及">不涉及 安卓·鸿蒙</span>
+                    </div>
+                  <div class="rc-ft">
+                    <span class="assignee"><span class="avatar sm av-2">李</span></span>
+                    <span class="tiny muted">设计待认领（会话认领）</span>
+                    <div class="req-links"><a class="req-link" href="requirement-full.html">总述</a><a class="req-link" href="requirement-workbench.html"><svg><use href="icons.svg#i-workbench"></use></svg>会话</a></div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="branch">
+                <article class="req-card">
+                  <div class="rc-hd"><span class="rc-code">S11-005</span><span class="chip chip--block"><span class="gl">!</span>设计待修改</span></div>
+                  <a class="rc-title" href="requirement-full.html">生日礼包弹窗</a>
+                  <div class="row wrap" style="gap:4px;margin:8px 0">
+                      <span class="chip chip--done" title="需求 已通过"><span class="gl">✓</span>需求</span>
+                      <span class="chip chip--block" title="设计 待修改"><span class="gl">!</span>设计待改</span>
+                      <span class="mxg"><span class="gl2">服务端 1</span><span class="chip chip--idle" title="商品服务端 未开始"><span class="gl">○</span>商</span></span>
+                      <span class="chip chip--idle" title="Web 未开始"><span class="gl">○</span>Web</span>
+                      <span class="chip chip--idle" title="测试 未开始"><span class="gl">○</span>测试</span>
+                      <span class="mna2" title="不涉及">不涉及 iOS·安卓·鸿蒙</span>
+                    </div>
+                  <div class="rc-ft">
+                    <span class="assignee"><span class="avatar sm av-2">李</span><span class="avatar sm av-3">王</span></span>
+                    <span class="tiny muted">产品已退回：补充空状态</span>
+                    <div class="req-links"><a class="req-link" href="requirement-full.html">总述</a><a class="req-link" href="design-workbench.html"><svg><use href="icons.svg#i-workbench"></use></svg>设计会话</a></div>
+                  </div>
+                </article>
+              </div>
+            </div>
+            <div class="row" style="justify-content:center;margin-top:16px"><span class="btn btn-sm btn-text" style="cursor:default" title="其余需求在会话里按需查看">查看全部 12 个 · 在会话里查看 →</span></div>
+
+            <div class="state-band">
+              <div class="cap">页面状态 · 变体</div>
+              <div class="state-cards">
+                <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-inbox"></use></svg>无需求</div><div class="bd"><div class="msg"><svg style="color:var(--text-3)"><use href="icons.svg#i-iter"></use></svg>迭代还没有需求</div><div class="tiny muted">从「新建需求」或 Backlog 移入</div></div></div>
+                <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-user"></use></svg>设计未指派</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-alert"></use></svg>3 个需求设计未开始</div><div class="tiny muted">由 skill 在会话里指派/认领</div></div></div>
+                <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-dot"></use></svg>设计进行中</div><div class="bd"><div class="msg"><svg style="color:var(--primary)"><use href="icons.svg#i-dot"></use></svg>设计进行中</div><div class="tiny muted">评审/排期不用等设计</div></div></div>
+                <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-clock"></use></svg>等待设计</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-clock"></use></svg>S11-006 交易服务端等待设计</div><div class="tiny muted">仅该开发任务等待；其他平台/评审不受影响</div></div></div>
+                <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-lock"></use></svg>范围锁定</div><div class="bd"><div class="msg"><svg style="color:var(--amber)"><use href="icons.svg#i-lock"></use></svg>范围已锁定</div><div class="tiny muted">加/移需求需二次确认</div></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右列：活动日志 -->
+          <aside class="aside-col">
+            <div class="card">
+              <div class="card-hd"><span class="t">活动日志</span><span class="r"><button class="btn btn-sm btn-text">全部</button></span></div>
+              <div class="card-bd" style="padding:6px 0">
+                <div class="log-item"><span class="avatar sm av-3">王</span><div class="c"><div class="l1"><b>王五</b> 交付了 S11-003 的设计 v2</div><div class="l2">今天 10:24 · 设计交付</div></div></div>
+                <div class="log-item"><span class="avatar sm av-2">李</span><div class="c"><div class="l1"><b>李四</b> 变更了 S11-005 需求总述 v3</div><div class="l2">今天 09:58 · 需求变更</div></div></div>
+                <div class="log-item"><span class="avatar sm av-1">张</span><div class="c"><div class="l1"><b>张三</b> 调整设计阶段计划 11-05 → 11-12</div><div class="l2">昨天 17:40 · 阶段调整</div></div></div>
+                <div class="log-item"><span class="avatar sm av-1">张</span><div class="c"><div class="l1"><b>张三</b> 锁定迭代范围（12 需求）</div><div class="l2">11-01 09:00 · 范围锁定</div></div></div>
+              </div>
+            </div>
+            <div class="card" style="padding:13px 14px">
+              <div class="tiny muted" style="margin-bottom:8px">范围</div>
+              <div class="row gap-4" style="flex-wrap:wrap"><span class="chip chip--plain">已排期 8</span><span class="chip chip--prog">进行中 3</span><span class="chip chip--done">已完成 1</span></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 新建需求弹窗：只填名称，后台自动建文件夹 + 会话，落到会话/Design Studio -->
+  <div class="modal-host" id="new-req-modal">
+    <div class="modal">
+      <div class="modal-hd" style="display:flex;align-items:center;gap:8px">新建需求<a class="modal-close" href="#" style="margin-left:auto"><svg class="ic"><use href="icons.svg#i-x"></use></svg></a></div>
+      <div class="modal-bd">
+        <div class="tiny muted" style="margin-bottom:10px">归属 2026-S11 双十一改版 · 预计编号 S11-007</div>
+        <div class="field" style="margin-bottom:0"><div class="label">需求名称<span class="req">*</span></div><input class="input" placeholder="输入需求名称，例如：积分任务中心" autofocus></div>
+        <div class="field-help">只填名称即可。平台 / 负责人 / 验收标准等由 skill 在会话里问，不在这里填。</div>
+        <div class="row gap-2 wrap" style="margin-top:12px;align-items:center">
+          <span class="tiny muted" style="width:100%">点「创建需求」后自动完成：</span>
+          <span class="chip chip--plain">① 建需求文件夹</span><span class="tiny muted">→</span>
+          <span class="chip chip--plain">② 建会话</span><span class="tiny muted">→</span>
+          <span class="chip chip--plain">③ 打开会话 / Design Studio</span>
+        </div>
+      </div>
+      <div class="modal-bd" style="border-top:1px solid var(--line);padding-top:12px">
+        <div class="state-cards" style="grid-template-columns:repeat(2,1fr)">
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-refresh"></use></svg>创建中</div><div class="bd"><div class="msg"><span style="display:inline-block;width:12px;height:12px;border:1.8px solid var(--line-3);border-top-color:var(--primary);border-radius:50%"></span>正在建文件夹 / 会话…</div></div></div>
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-alert"></use></svg>创建失败</div><div class="bd"><div class="msg err"><svg><use href="icons.svg#i-alert"></use></svg>目录不可写 / 会话创建失败</div><div class="tiny muted">保留输入，可重试</div></div></div>
+        </div>
+      </div>
+      <div class="modal-ft"><a class="btn" href="#">取消</a><a class="btn btn-primary" href="requirement-workbench.html">创建需求</a></div>
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

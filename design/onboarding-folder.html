@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>首次使用 · 顶级文件夹 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="ob">
+  <div class="ob-card">
+    <div class="ob-brand">
+      <svg class="logo-mark" style="width:22px;height:22px"><use href="icons.svg#i-logo"></use></svg>
+      <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+      <span class="badge badge--mock" style="margin-left:8px">首次使用</span>
+    </div>
+    <div class="ob-steps">
+      <span class="s done"><span class="dot">✓</span>选择身份</span>
+      <span class="line"></span>
+      <span class="s active"><span class="dot">2</span>顶级文件夹</span>
+      <span class="line"></span>
+      <span class="s "><span class="dot">3</span>确认</span>
+    </div>
+    <div class="ob-panel">
+      <h1>选择个人顶级文件夹</h1>
+      <div class="sub">会话、需求草稿、原型 / 设计草稿都放这里；路径只存本地，不上传服务端。</div>
+
+      <div class="field">
+        <div class="label">文件夹路径</div>
+        <div class="path-box">
+          <svg class="ic" style="color:var(--text-3)"><use href="icons.svg#i-folder"></use></svg>
+          <span class="p">/Users/kirer/dsh-workbench</span>
+          <span class="chip chip--done"><span class="gl">✓</span>可写 · 12.4 GB</span>
+          <button class="btn btn-sm">更换</button>
+        </div>
+        <div class="field-help">服务端只存「已提交 / 已交付」的结果，本目录只放工作副本。</div>
+      </div>
+
+      <div class="field" style="margin-bottom:0">
+        <div class="label">校验状态 · 变体</div>
+        <div class="state-cards" style="grid-template-columns:repeat(2,1fr)">
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-refresh"></use></svg>校验中</div><div class="bd"><div class="msg"><span class="spin" style="display:inline-block;width:12px;height:12px;border:1.8px solid var(--line-3);border-top-color:var(--primary);border-radius:50%"></span>正在检查目录…</div></div></div>
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-alert"></use></svg>不可写</div><div class="bd"><div class="msg err"><svg><use href="icons.svg#i-alert"></use></svg>目录不可写</div><div class="tiny muted">请换一个目录</div></div></div>
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-lock"></use></svg>权限不足</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-lock"></use></svg>无访问权限</div><div class="tiny muted">在系统设置里授权</div></div></div>
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-check-circle"></use></svg>可用</div><div class="bd"><div class="msg"><svg style="color:var(--green)"><use href="icons.svg#i-check-circle"></use></svg>已就绪</div><div class="tiny muted">12.4 GB 可用</div></div></div>
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-refresh"></use></svg>保存中</div><div class="bd"><div class="msg"><span style="display:inline-block;width:12px;height:12px;border:1.8px solid var(--line-3);border-top-color:var(--primary);border-radius:50%"></span>正在保存配置…</div></div></div>
+          <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-alert"></use></svg>保存失败</div><div class="bd"><div class="msg err"><svg><use href="icons.svg#i-alert"></use></svg>保存失败</div><div class="tiny muted">检查网络/权限后重试</div></div></div>
+        </div>
+      </div>
+
+      <div class="ob-foot">
+        <a class="btn" href="onboarding.html">上一步</a>
+        <div class="spacer"></div>
+        <a class="btn btn-primary" href="onboarding-confirm.html">下一步：确认 <svg><use href="icons.svg#i-arrow-right"></use></svg></a>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

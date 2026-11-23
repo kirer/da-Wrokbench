@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>设置 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  .settings-layout { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: 26px; align-items: start; }
+  .set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 1px; }
+  .set-nav a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--r-sm); font-size: var(--fs-12); color: var(--text-2); }
+  .set-nav a:hover { background: var(--surface-2); color: var(--text); }
+  .set-nav a svg { width: 15px; height: 15px; color: var(--text-3); }
+  .set-sec { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); margin-bottom: 16px; }
+  .set-sec-hd { padding: 13px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+  .set-sec-hd .t { font-size: var(--fs-13); font-weight: var(--fw-semi); }
+  .set-sec-hd .d { font-size: var(--fs-11); color: var(--text-3); margin-left: 8px; }
+  .set-sec-bd { padding: 14px 16px; }
+  .ptog { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); font-size: var(--fs-12); color: var(--text-2); cursor: pointer; }
+  .ptog .box { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--line-3); display: flex; align-items: center; justify-content: center; }
+  .ptog.on { border-color: var(--primary-line); background: var(--primary-bg); color: var(--text); }
+  .ptog.on .box { background: var(--primary); border-color: var(--primary); }
+  .ptog.on .box::after { content: ""; width: 5px; height: 8px; border: solid #0e1424; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-top: -2px; }
+  html[data-theme="light"] .ptog.on .box::after { border-color: #fff; }
+  .radio-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .radio-card { flex: 1; min-width: 190px; border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 11px 12px; cursor: pointer; }
+  .radio-card.sel { border-color: var(--primary-line); background: var(--primary-bg); box-shadow: 0 0 0 1px var(--primary-line); }
+  .radio-card .rt { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); font-weight: var(--fw-med); color: var(--text); }
+  .radio-card .rd { font-size: var(--fs-11); color: var(--text-3); margin-top: 5px; line-height: var(--lh-snug); }
+  .radio-card .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-3); flex: none; display: flex; align-items: center; justify-content: center; }
+  .radio-card.sel .r { border-color: var(--primary); }
+  .radio-card.sel .r::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+  .path-box { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); }
+  .path-box .p { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text); flex: 1; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="traffic"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i></div>
+
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="logo">
+        <svg class="logo-mark"><use href="icons.svg#i-logo"></use></svg>
+        <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+        <svg class="logo-collapse ic"><use href="icons.svg#i-panel"></use></svg>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item plugin-entry active" href="iterations.html"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台<span class="badge badge--live" style="margin-left:auto">插件</span></a>
+    </nav>
+    <div class="rail-ph">
+      <div class="h"><svg><use href="icons.svg#i-panel"></use></svg>DSH 原生侧栏 · 占位</div>
+      <p>新会话、插件市场、自动化任务、工作区列表、身份等由 DSH 提供，不在本插件设计范围内。</p>
+      <div class="lines"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="identity ph-id">
+      <span class="avatar">·</span>
+      <div class="who"><div class="n">当前用户</div><div class="r">DSH 身份 · 占位</div></div>
+    </div>
+  </aside>
+
+  <main class="center">
+    <div class="topbar">
+      <div class="plugnac"><span class="plugnac-title"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台</span><span class="plugnac-sep"></span><a href="iterations.html">迭代列表</a><a href="my-workbench.html">我的工作台</a><a href="skill-library.html">技能库</a><a class="active" href="settings.html">设置</a><a href="notifications.html">通知</a></div>
+      <div class="spacer"></div>
+      <span class="badge badge--mock"><svg class="ic" style="width:11px"><use href="icons.svg#i-shield"></use></svg>Mock 模式</span>
+      <button class="theme-toggle" data-theme-toggle title="切换主题"><svg class="sun"><use href="icons.svg#i-sun"></use></svg><svg class="moon"><use href="icons.svg#i-moon"></use></svg></button>
+    </div>
+
+    <div class="scroll">
+      <div class="page" style="max-width:1000px">
+        <div class="page-head"><div class="ttl-block"><h1 class="page-title">设置</h1><div class="page-sub">身份与平台、文件夹、认证、通知、技能更新</div></div></div>
+
+        <div class="settings-layout">
+          <nav class="set-nav">
+            <a href="#identity"><svg><use href="icons.svg#i-user"></use></svg>身份与平台</a>
+            <a href="#platform"><svg><use href="icons.svg#i-package"></use></svg>平台配置</a>
+            <a href="#folder"><svg><use href="icons.svg#i-folder"></use></svg>顶级文件夹</a>
+            <a href="#auth"><svg><use href="icons.svg#i-shield"></use></svg>认证模式</a>
+            <a href="#notify"><svg><use href="icons.svg#i-bell"></use></svg>通知偏好</a>
+            <a href="#skill"><svg><use href="icons.svg#i-skills"></use></svg>技能更新策略</a>
+          </nav>
+
+          <div>
+            <section class="set-sec" id="identity">
+              <div class="set-sec-hd"><svg class="ic"><use href="icons.svg#i-user"></use></svg><span class="t">身份与平台</span><span class="d">可多选，权限取并集</span></div>
+              <div class="set-sec-bd">
+                <div class="field"><div class="label">职能<span class="hint">勾选后可切换当前身份</span></div>
+                  <div class="plat-toggles row gap-2 wrap">
+                    <div class="ptog on"><span class="box"></span>负责人 / 项目经理</div>
+                    <div class="ptog on"><span class="box"></span>产品</div>
+                    <div class="ptog on"><span class="box"></span>设计</div>
+                    <div class="ptog"><span class="box"></span>开发</div>
+                    <div class="ptog"><span class="box"></span>测试</div>
+                  </div>
+                </div>
+                <div class="field" style="margin-bottom:0"><div class="label">开发平台<span class="hint">按组展示 · 可配置</span></div>
+                  <div class="tiny muted" style="margin-bottom:6px">服务端组</div>
+                  <div class="plat-toggles row gap-2 wrap" style="margin-bottom:10px">
+                    <div class="ptog on"><span class="box"></span>交易服务端</div>
+                    <div class="ptog on"><span class="box"></span>商品服务端</div>
+                    <div class="ptog on"><span class="box"></span>用户服务端</div>
+                  </div>
+                  <div class="tiny muted" style="margin-bottom:6px">前端 / 客户端组</div>
+                  <div class="plat-toggles row gap-2 wrap" style="margin-bottom:10px">
+                    <div class="ptog on"><span class="box"></span>Web</div>
+                    <div class="ptog"><span class="box"></span>小程序</div>
+                    <div class="ptog on"><span class="box"></span>iOS</div>
+                    <div class="ptog"><span class="box"></span>Android</div>
+                    <div class="ptog"><span class="box"></span>鸿蒙</div>
+                  </div>
+                  <div class="tiny muted" style="margin-bottom:6px">中台组 <span class="badge" style="height:16px">未启用</span></div>
+                  <div class="plat-toggles row gap-2 wrap"><div class="ptog" style="color:var(--text-3)"><span class="box"></span>中台（未启用）</div></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="set-sec" id="platform">
+              <div class="set-sec-hd"><svg class="ic"><use href="icons.svg#i-package"></use></svg><span class="t">平台配置</span><span class="d">管理员 · 组 + 平台/团队，可增删改</span></div>
+              <div class="set-sec-bd">
+                <div class="row" style="align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+                  <span class="chip chip--plain" style="flex:none">服务端组</span>
+                  <div class="row gap-2 wrap" style="flex:1"><span class="chip">交易服务端</span><span class="chip">商品服务端</span><span class="chip">用户服务端</span><button class="btn btn-sm btn-text">＋ 新增平台</button></div>
+                  <button class="btn btn-sm btn-text">排序</button><button class="btn btn-sm btn-text">归档</button>
+                </div>
+                <div class="row" style="align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+                  <span class="chip chip--plain" style="flex:none">前端 / 客户端组</span>
+                  <div class="row gap-2 wrap" style="flex:1"><span class="chip">Web</span><span class="chip">小程序</span><span class="chip">iOS</span><span class="chip">Android</span><span class="chip">鸿蒙</span><button class="btn btn-sm btn-text">＋ 新增平台</button></div>
+                  <button class="btn btn-sm btn-text">排序</button><button class="btn btn-sm btn-text">归档</button>
+                </div>
+                <div class="row" style="align-items:flex-start;gap:10px;padding:8px 0">
+                  <span class="chip chip--plain" style="flex:none">中台组</span>
+                  <div class="row gap-2 wrap" style="flex:1"><span class="tiny muted">未启用（需要时再开）</span><button class="btn btn-sm btn-text">＋ 启用中台组</button></div>
+                </div>
+                <div class="banner banner--info" style="margin-top:10px"><svg><use href="icons.svg#i-dot"></use></svg><span>需求只选具体平台；矩阵与各端卡片按需求实际涉及的平台、按组动态渲染，不涉及的折叠成一行。</span></div>
+              </div>
+            </section>
+
+            <section class="set-sec" id="folder">
+              <div class="set-sec-hd"><svg class="ic"><use href="icons.svg#i-folder"></use></svg><span class="t">个人顶级文件夹</span><span class="d">只存本地，不上传真实路径</span></div>
+              <div class="set-sec-bd">
+                <div class="path-box">
+                  <svg class="ic" style="color:var(--text-3)"><use href="icons.svg#i-folder"></use></svg>
+                  <span class="p">/Users/kirer/dsh-workbench</span>
+                  <span class="chip chip--done"><span class="gl">✓</span>可写 · 12.4 GB</span>
+                  <button class="btn btn-sm">更换</button>
+                </div>
+                <div class="field-help">会话全文、需求草稿、原型/设计草稿都放这里；服务端只存已提交/已交付结果。</div>
+              </div>
+            </section>
+
+            <section class="set-sec" id="auth">
+              <div class="set-sec-hd"><svg class="ic"><use href="icons.svg#i-shield"></use></svg><span class="t">认证模式</span></div>
+              <div class="set-sec-bd">
+                <div class="banner banner--mock" style="margin-bottom:12px"><svg><use href="icons.svg#i-shield"></use></svg><span>当前为 <b>Mock 模式</b>，用于测试登录，不连接钉钉。切到正式需企业管理员开通通讯录权限。</span></div>
+                <div class="radio-row">
+                  <div class="radio-card sel"><div class="rt"><span class="r"></span>Mock 测试登录<span class="badge badge--mock" style="margin-left:auto">当前</span></div><div class="rd">从测试用户列表选人进入，界面与正式一致。</div></div>
+                  <div class="radio-card"><div class="rt"><span class="r"></span>钉钉授权登录</div><div class="rd">需管理员开通通讯录权限；切换后需重新登录。</div></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="set-sec" id="notify">
+              <div class="set-sec-hd"><svg class="ic"><use href="icons.svg#i-bell"></use></svg><span class="t">通知偏好</span></div>
+              <div class="set-sec-bd" style="padding-top:4px;padding-bottom:4px">
+                <div class="setting-row"><div class="info"><div class="t">设计指派 / 需求变更</div><div class="d">被指派设计、需求变更待同步时通知</div></div><span class="switch on"></span></div>
+                <div class="setting-row"><div class="info"><div class="t">设计交付</div><div class="d">设计交付或「设计已更新」时通知相关开发</div></div><span class="switch on"></span></div>
+                <div class="setting-row"><div class="info"><div class="t">系统消息</div><div class="d">迭代封板、范围锁定等系统事件</div></div><span class="switch"></span></div>
+                <div class="setting-row"><div class="info"><div class="t">每日摘要</div><div class="d">每天 09:00 汇总我的待办</div></div><span class="switch on"></span></div>
+              </div>
+            </section>
+
+            <section class="set-sec" id="skill" style="margin-bottom:0">
+              <div class="set-sec-hd"><svg class="ic"><use href="icons.svg#i-skills"></use></svg><span class="t">技能更新策略</span></div>
+              <div class="set-sec-bd">
+                <div class="field" style="margin-bottom:0"><div class="label">默认策略</div>
+                  <div class="select" style="display:flex;align-items:center;justify-content:space-between">自动更新到已发布的最新版<svg class="ic" style="color:var(--text-3)"><use href="icons.svg#i-chev-down"></use></svg></div>
+                  <div class="field-help">会话会固定所用技能版本；升级前做 DSH 兼容校验，避免升级后失效。可对单个技能「固定版本」。</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="state-band">
+          <div class="cap">页面状态 · 变体</div>
+          <div class="state-cards">
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-shield"></use></svg>Mock/正式切换</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-shield"></use></svg>正式需管理员开通</div><div class="tiny muted">显示不可用原因</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-folder"></use></svg>路径无效</div><div class="bd"><div class="msg err"><svg><use href="icons.svg#i-alert"></use></svg>目录不可写</div><div class="tiny muted">重新选择</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-check-circle"></use></svg>保存成功</div><div class="bd"><div class="msg"><svg style="color:var(--green)"><use href="icons.svg#i-check-circle"></use></svg>设置已保存</div><div class="tiny muted">立即生效</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-lock"></use></svg>无权限</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-lock"></use></svg>仅管理员可改</div><div class="tiny muted">联系管理员</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

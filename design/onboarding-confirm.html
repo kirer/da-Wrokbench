@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>首次使用 · 确认 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="ob">
+  <div class="ob-card">
+    <div class="ob-brand">
+      <svg class="logo-mark" style="width:22px;height:22px"><use href="icons.svg#i-logo"></use></svg>
+      <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+      <span class="badge badge--mock" style="margin-left:8px">首次使用</span>
+    </div>
+    <div class="ob-steps">
+      <span class="s done"><span class="dot">✓</span>选择身份</span>
+      <span class="line"></span>
+      <span class="s done"><span class="dot">✓</span>顶级文件夹</span>
+      <span class="line"></span>
+      <span class="s active"><span class="dot">3</span>确认</span>
+    </div>
+    <div class="ob-panel">
+      <h1>确认并进入</h1>
+      <div class="sub">确认无误就进入工作台；随时可在「设置」里修改。</div>
+
+      <dl class="ob-summary">
+        <dt>当前身份</dt><dd><span class="assignee"><span class="avatar sm av-3">张</span>张三 · 负责人</span></dd>
+        <dt>职能</dt><dd><span class="chip chip--plain">负责人</span><span class="chip chip--plain">产品</span><span class="chip chip--plain">设计</span></dd>
+        <dt>平台</dt><dd><span class="chip chip--plain">交易服务端</span><span class="chip chip--plain">商品服务端</span><span class="chip chip--plain">用户服务端</span><span class="chip chip--plain">Web</span><span class="chip chip--plain">iOS</span></dd>
+        <dt>顶级文件夹</dt><dd class="mono" style="font-size:12px">/Users/kirer/dsh-workbench <span class="chip chip--done"><span class="gl">✓</span>可写</span></dd>
+        <dt>认证模式</dt><dd><span class="badge badge--mock">Mock 测试登录</span></dd>
+      </dl>
+
+      <div class="banner banner--mock" style="margin-top:16px"><svg><use href="icons.svg#i-shield"></use></svg><span>当前为 Mock 模式，不连接钉钉；正式环境界面一致，仅换 Provider。</span></div>
+
+      <div class="ob-foot">
+        <a class="btn" href="onboarding-folder.html">返回修改</a>
+        <div class="spacer"></div>
+        <span class="tiny muted">完成后进入工作台</span>
+        <a class="btn btn-primary" href="iterations.html">进入工作台 <svg><use href="icons.svg#i-arrow-right"></use></svg></a>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

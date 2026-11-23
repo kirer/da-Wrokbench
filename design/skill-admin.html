@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>技能管理 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  .up-wizard { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .up-step { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px; }
+  .up-step .no { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line-3); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); margin-bottom: 8px; }
+  .up-step.done .no { background: var(--green); border-color: var(--green); color: #0e1a14; }
+  .up-step .t { font-size: var(--fs-12); font-weight: var(--fw-med); color: var(--text); }
+  .up-step .d { font-size: var(--fs-11); color: var(--text-3); margin-top: 3px; line-height: var(--lh-snug); }
+  .check-list { display: flex; flex-direction: column; gap: 6px; }
+  .check-item { display: flex; align-items: center; gap: 8px; font-size: var(--fs-12); color: var(--text-2); padding: 6px 9px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); }
+  .check-item svg { width: 14px; height: 14px; flex: none; }
+  .check-item.ok svg { color: var(--green); }
+  .check-item.bad { border-color: var(--red-line); }
+  .check-item.bad svg { color: var(--red); }
+  .pack-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+  .pack { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 13px; }
+  .pack .hd { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .pack .hd .ic-badge { width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--primary-bg); border: 1px solid var(--primary-line); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+  .pack .hd .ic-badge svg { width: 16px; height: 16px; }
+  .pack .hd .nm { font-size: var(--fs-13); font-weight: var(--fw-semi); }
+  .pack .hd .v { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+  .pack .items { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+  .pack .items .it { display: flex; align-items: center; gap: 6px; font-size: var(--fs-11); color: var(--text-2); }
+  .pack .items .it .mono { color: var(--text-3); margin-left: auto; }
+  .usage-row { display: grid; grid-template-columns: 160px 1fr 54px; align-items: center; gap: 12px; padding: 7px 0; font-size: var(--fs-12); }
+  .usage-row .nm { color: var(--text-2); }
+  .usage-row .track { height: 8px; border-radius: var(--r-pill); background: var(--surface-2); overflow: hidden; }
+  .usage-row .track span { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
+  .usage-row .n { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); text-align: right; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="traffic"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i></div>
+
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="logo">
+        <svg class="logo-mark"><use href="icons.svg#i-logo"></use></svg>
+        <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+        <svg class="logo-collapse ic"><use href="icons.svg#i-panel"></use></svg>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item plugin-entry active" href="iterations.html"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台<span class="badge badge--live" style="margin-left:auto">插件</span></a>
+    </nav>
+    <div class="rail-ph">
+      <div class="h"><svg><use href="icons.svg#i-panel"></use></svg>DSH 原生侧栏 · 占位</div>
+      <p>新会话、插件市场、自动化任务、工作区列表、身份等由 DSH 提供，不在本插件设计范围内。</p>
+      <div class="lines"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="identity ph-id">
+      <span class="avatar">·</span>
+      <div class="who"><div class="n">当前用户</div><div class="r">DSH 身份 · 占位</div></div>
+    </div>
+  </aside>
+
+  <main class="center">
+    <div class="topbar">
+      <div class="plugnac"><span class="plugnac-title"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台</span><span class="plugnac-sep"></span><a href="iterations.html">迭代列表</a><a href="my-workbench.html">我的工作台</a><a class="active" href="skill-library.html">技能库</a><a href="settings.html">设置</a><a href="notifications.html">通知</a></div><div class="crumb" style="margin-left:10px"><span class="sep">/</span><span class="cur">技能管理</span></div>
+      <div class="spacer"></div>
+      <span class="badge badge--mock">Phase 2 预览</span>
+      <button class="theme-toggle" data-theme-toggle title="切换主题"><svg class="sun"><use href="icons.svg#i-sun"></use></svg><svg class="moon"><use href="icons.svg#i-moon"></use></svg></button>
+    </div>
+
+    <div class="scroll">
+      <div class="page" style="max-width:1180px">
+        <div class="page-head">
+          <div class="ttl-block"><h1 class="page-title">技能管理</h1><div class="page-sub">上传 · 审核 · 角色技能包 · 使用统计（P1 可简化）</div></div>
+          <div class="page-actions"><a class="btn btn-ghost" href="skill-library.html"><svg><use href="icons.svg#i-package"></use></svg>返回技能库</a><span class="btn btn-disabled"><svg><use href="icons.svg#i-upload"></use></svg>上传技能 · Phase 2</span></div>
+        </div>
+
+                <div class="banner banner--mock" style="margin-bottom:16px"><svg><use href="icons.svg#i-shield"></use></svg><span><b>Phase 2 预览</b>：技能上传 / 审核 / 角色技能包第一版不启用，此处仅展示规划，按钮为灰置示例。</span></div>
+        <div class="kpis">
+          <div class="kpi"><div class="lab">待审版本</div><div class="v">2</div><div class="d">最久等待 1 天</div></div>
+          <div class="kpi"><div class="lab">已发布技能</div><div class="v">5</div><div class="d">本周 +1</div></div>
+          <div class="kpi"><div class="lab">角色技能包</div><div class="v">3</div><div class="d">产品 / 设计 / Web</div></div>
+          <div class="kpi"><div class="lab">本月调用</div><div class="v">1,284</div><div class="d">成功率 98.6%</div></div>
+        </div>
+
+        <!-- 审核队列 -->
+        <div class="section-hd" style="margin-top:0"><span class="t">审核队列</span><span class="n">2</span></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th style="width:180px">技能 / 版本</th><th>变更摘要</th><th style="width:110px">提交人</th><th style="width:120px">自动校验</th><th style="width:140px">操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><div class="rk">测试计划 <span class="badge">v0.7</span></div><div class="rksub">测试包</div></td>
+                <td class="muted2">新增「回归用例生成」步骤；调整命令名 /qa-plan</td>
+                <td><span class="assignee"><span class="avatar sm av-5">钱</span>钱七</span></td>
+                <td><span class="chip chip--done"><span class="gl">✓</span>通过</span></td>
+                <td><div class="row gap-2"><button class="btn btn-sm" disabled>通过</button><button class="btn btn-sm" disabled>打回</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="rk">设计交付 <span class="badge">v1.3</span></div><div class="rksub">设计包</div></td>
+                <td class="muted2">补充「设计系统检查」；体积 2.1 MB 接近上限</td>
+                <td><span class="assignee"><span class="avatar sm av-3">王</span>王五</span></td>
+                <td><span class="chip chip--warn"><span class="gl">◷</span>待确认</span></td>
+                <td><div class="row gap-2"><button class="btn btn-sm" disabled>对比 diff</button><button class="btn btn-sm btn-icon"><svg><use href="icons.svg#i-more"></use></svg></button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 角色技能包 -->
+        <div class="section-hd"><span class="t">角色技能包</span><span class="n">3</span><div class="r"><button class="btn btn-sm" disabled><svg><use href="icons.svg#i-plus"></use></svg>新建包</button></div></div>
+        <div class="pack-grid">
+          <div class="pack"><div class="hd"><span class="ic-badge"><svg><use href="icons.svg#i-file"></use></svg></span><div><div class="nm">产品包</div><div class="v">v1.4 · 5 技能</div></div><span class="badge badge--live" style="margin-left:auto">强制</span></div><div class="items"><div class="it">需求梳理 <span class="mono">v1.3</span></div><div class="it">用户故事 <span class="mono">v1.0</span></div><div class="it">验收标准 <span class="mono">v1.1</span></div></div><button class="btn btn-sm" style="width:100%" disabled>编辑</button></div>
+          <div class="pack"><div class="hd"><span class="ic-badge"><svg><use href="icons.svg#i-target"></use></svg></span><div><div class="nm">设计包</div><div class="v">v1.1 · 4 技能</div></div><span class="badge badge--live" style="margin-left:auto">强制</span></div><div class="items"><div class="it">设计 Brief <span class="mono">v1.1</span></div><div class="it">设计交付 <span class="mono">v1.2</span></div><div class="it">设计评审 <span class="mono">v1.0</span></div></div><button class="btn btn-sm" style="width:100%" disabled>编辑</button></div>
+          <div class="pack"><div class="hd"><span class="ic-badge"><svg><use href="icons.svg#i-code"></use></svg></span><div><div class="nm">Web 包</div><div class="v">v0.9 · 3 技能</div></div><span class="badge badge--mock" style="margin-left:auto">推荐</span></div><div class="items"><div class="it">按设计稿开发页面 <span class="mono">v0.9</span></div><div class="it">Web code review <span class="mono">v0.6</span></div><div class="it">组件库使用 <span class="mono">v0.4</span></div></div><button class="btn btn-sm" style="width:100%" disabled>编辑</button></div>
+        </div>
+
+        <!-- 使用统计 -->
+        <div class="section-hd"><span class="t">使用统计</span><div class="r"><div class="dropdown-trigger">本月 <svg class="chev"><use href="icons.svg#i-chev-down"></use></svg></div></div></div>
+        <div class="card"><div class="card-bd">
+          <div class="usage-row"><span class="nm">需求梳理 v1.3</span><div class="track"><span style="width:92%"></span></div><span class="n">512</span></div>
+          <div class="usage-row"><span class="nm">设计 Brief v1.1</span><div class="track"><span style="width:64%"></span></div><span class="n">356</span></div>
+          <div class="usage-row"><span class="nm">设计交付 v1.2</span><div class="track"><span style="width:48%"></span></div><span class="n">268</span></div>
+          <div class="usage-row"><span class="nm">用户故事 v1.0</span><div class="track"><span style="width:22%"></span></div><span class="n">148</span></div>
+        </div></div>
+
+        <div class="state-band">
+          <div class="cap">页面状态 · 变体</div>
+          <div class="state-cards">
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-alert"></use></svg>校验失败</div><div class="bd"><div class="msg err"><svg><use href="icons.svg#i-alert"></use></svg>命令名冲突</div><div class="tiny muted">/req-draft 已存在</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-clock"></use></svg>待审</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-clock"></use></svg>1 个版本待审</div><div class="tiny muted">等待审核人</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-check-circle"></use></svg>通过</div><div class="bd"><div class="msg"><svg style="color:var(--green)"><use href="icons.svg#i-check-circle"></use></svg>已发布</div><div class="tiny muted">可回滚到旧版</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-x"></use></svg>打回</div><div class="bd"><div class="msg err"><svg><use href="icons.svg#i-x"></use></svg>已打回</div><div class="tiny muted">原因已记录</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 上传技能弹窗 -->
+  <div class="modal-host" id="skill-upload-modal">
+    <div class="modal" style="width:520px">
+      <div class="modal-hd" style="display:flex;align-items:center;gap:8px">上传技能<a class="modal-close" href="#" style="margin-left:auto"><svg class="ic"><use href="icons.svg#i-x"></use></svg></a></div>
+      <div class="modal-bd">
+        <div class="wizard-step done"><span class="no">✓</span><div class="c"><div class="t">选择文件</div><div class="d">skill.zip · 184 KB</div></div></div>
+        <div class="wizard-step done"><span class="no">✓</span><div class="c"><div class="t">填写元数据</div><div class="d">名称 / 适用角色 / 平台 / 可见性</div></div></div>
+        <div class="wizard-step"><span class="no">3</span><div class="c"><div class="t">自动校验</div><div class="d">frontmatter、命令名冲突、密钥扫描、资源路径</div></div></div>
+        <div class="wizard-step"><span class="no">4</span><div class="c"><div class="t">预览并提交审核</div><div class="d">渲染 SKILL.md 预览 → 提交团队审核</div></div></div>
+        <div class="check-list" style="margin-top:12px">
+          <div class="check-item ok"><svg><use href="icons.svg#i-check"></use></svg>frontmatter 完整</div>
+          <div class="check-item ok"><svg><use href="icons.svg#i-check"></use></svg>命令名无冲突（/qa-plan）</div>
+          <div class="check-item ok"><svg><use href="icons.svg#i-check"></use></svg>资源路径合法 · 无外部 URL</div>
+          <div class="check-item bad"><svg><use href="icons.svg#i-alert"></use></svg>体积 2.1 MB 超过建议上限 2 MB（可继续）</div>
+        </div>
+      </div>
+      <div class="modal-ft"><a class="btn" href="#">取消</a><a class="btn btn-primary" href="#">提交审核</a></div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

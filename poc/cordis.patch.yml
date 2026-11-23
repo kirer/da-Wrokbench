@@ -1,0 +1,5 @@
+# dsh-workbench POC bundle patch.
+# The profile user layer can also insert this row directly; see README.
+- insert:
+    - id: dsh-workbench
+      name: dsh-workbench

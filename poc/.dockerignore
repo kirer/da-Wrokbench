@@ -1,0 +1,15 @@
+server/target
+server/data
+**/node_modules
+e2e
+screenshots
+runtime
+.local
+.env
+*.db
+*.db-shm
+*.db-wal
+design
+deploy/gitlab
+deploy/dsh-sim/runs
+deploy/dsh-sim/last-run.md

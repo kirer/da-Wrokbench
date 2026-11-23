@@ -1,0 +1,1704 @@
+/*
+ * 图表排版（设计类型 diagram）：思维导图 .mm、技术路线图 .tr、产品路线图 .rm、架构图 .ar。
+ * 复制到设计目录，接在 tokens.css 后面引用：
+ *   <link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="diagram.css">
+ * 只写结构（写法见技能的 references/diagram.md）：位置、连线、箭头都由这份样式排，颜色字体取 tokens.css 的变量。
+ * 纯 CSS、没有脚本：改字、加节点会自己重排。要改样子，在自己的样式里覆盖下面的 --dg-* 变量，别改这份文件。
+ * 字号整体放大 / 缩小：.dg-page { --dg-scale: 1.5 }（默认 1.25，所有字号都乘它）。
+ * 版块之间带关系词的箭头：.dg-link / .dg-links（见文件末尾），哪种图、自己写的版块都能用。
+ */
+
+/* ── 公共：配色、页面、标题、图例 ───────────────────────────────────────── */
+
+.dg-page,
+.dg {
+  --dg-ink: var(--color-text, #1f2329);
+  --dg-muted: var(--color-muted, #5f6670);
+  --dg-bg: var(--color-bg, #fbfbfc);
+  --dg-surface: var(--color-surface, #fff);
+  --dg-surface-2: var(--color-surface-2, #f2f3f5);
+  --dg-line: var(--color-line, #e2e4e8);
+  --dg-on-primary: var(--color-primary-ink, #fff);
+  --dg-muted-2: color-mix(in oklab, var(--dg-muted) 65%, var(--dg-ink)); /* 色块上的小字：比次要文字深一点，浅色底上也够清楚 */
+  --dg-wire: color-mix(in oklab, var(--dg-muted) 55%, var(--dg-line)); /* 中性连线 */
+  --dg-font: var(--font-sans, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif);
+  --dg-display: var(--font-display, var(--dg-font));
+  /* 分支 / 泳道 / 分层的颜色：第 1 个是主色，后面从主色转色相（挨着的两个差得远），亮度和饱和度拉到连线、色块都看得清的一档 */
+  --dg-c1: var(--color-primary, #3b6ef5);
+  --dg-c2: oklch(from var(--dg-c1) clamp(0.56, l, 0.68) max(c, 0.12) calc(h + 180));
+  --dg-c3: oklch(from var(--dg-c1) clamp(0.56, l, 0.68) max(c, 0.12) calc(h + 60));
+  --dg-c4: oklch(from var(--dg-c1) clamp(0.56, l, 0.68) max(c, 0.12) calc(h + 240));
+  --dg-c5: oklch(from var(--dg-c1) clamp(0.56, l, 0.68) max(c, 0.12) calc(h + 120));
+  --dg-c6: oklch(from var(--dg-c1) clamp(0.56, l, 0.68) max(c, 0.12) calc(h + 300));
+}
+
+.dg,
+.dg *,
+.dg *::before,
+.dg *::after {
+  box-sizing: border-box;
+}
+
+.dg {
+  font-family: var(--dg-font);
+  color: var(--dg-ink);
+  line-height: 1.45;
+}
+
+.dg ul,
+.dg ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dg h2,
+.dg h3,
+.dg h4,
+.dg p {
+  margin: 0;
+}
+
+/* 整页：底色铺满，图居中；图比画幅大时往右、往下长（不会被切到左边看不见） */
+.dg-page {
+  margin: 0;
+  background: var(--dg-bg);
+  color: var(--dg-ink);
+  font-family: var(--dg-font);
+}
+
+.dg-canvas {
+  box-sizing: border-box;
+  width: fit-content; /* 图比窗口宽时连右边的留白一起撑开 */
+  min-width: 100%;
+  min-height: 100vh;
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 36px;
+}
+
+.dg-canvas > * {
+  margin-inline: auto;
+}
+
+.dg-canvas > .dg-head,
+.dg-canvas > .dg-foot {
+  width: 100%;
+}
+
+.dg-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dg-head h1 {
+  margin: 0;
+  font: 700 calc(var(--text-3xl, 40px) * var(--dg-scale, 1.25)) / 1.15 var(--dg-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.dg-head p {
+  margin: 0;
+  max-width: 48em;
+  font-size: calc(var(--text-md, 16px) * var(--dg-scale, 1.25));
+  color: var(--dg-muted);
+}
+
+.dg-kicker {
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--dg-c1) 72%, var(--dg-ink)); /* 小字：比主色深一点，浅底上也看得清 */
+}
+
+.dg-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 32px;
+}
+
+.dg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  color: var(--dg-muted);
+}
+
+.dg-legend > * {
+  --b: var(--dg-c1);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dg-legend > *::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--b);
+}
+
+.dg-legend > .plan::before {
+  background: none;
+  border: 1.5px dashed var(--dg-muted);
+}
+
+.dg-note {
+  margin: 0;
+  font-size: calc(12.5px * var(--dg-scale, 1.25));
+  color: var(--dg-muted);
+}
+
+/* 节点里的字折行时两行差不多长，不留一两个字的尾巴（「用户研究访谈与需求分 / 析」） */
+.dg :is(.tr-out, .rm-name, .rm-bar, .ar-group > h4) {
+  text-wrap: balance;
+}
+
+/* ── 思维导图 .mm ──────────────────────────────────────────────────────────
+ * <div class="dg mm">
+ *   <div class="mm-root">中心主题</div>
+ *   <ul class="mm-side mm-right"> <li><span class="mm-node">分支</span><ul>…子节点 li…</ul></li> </ul>
+ *   <ul class="mm-side mm-left">…（可选：左右对称时一半分支放这边）</ul>
+ * </div>
+ * 每个孩子画自己那段竖线和横线，第一个、最后一个拐圆角；左边那半用 rtl 镜像，样式只写一份。
+ */
+
+.mm:where(.dg) {
+  --gx: 30px; /* 父节点到竖线、竖线到子节点 */
+  --gy: 12px; /* 上下两个兄弟之间 */
+  --w: 2px; /* 线粗 */
+  --rr: 12px; /* 拐角圆角 */
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: none;
+}
+
+:where(.dg.mm) .mm-root {
+  order: 2;
+  position: relative;
+  z-index: 1;
+  flex: none;
+  max-width: 12em;
+  padding: 18px 30px;
+  border-radius: var(--radius-lg, 16px);
+  background: var(--dg-c1);
+  color: var(--dg-on-primary);
+  font: 700 calc(var(--text-xl, 24px) * var(--dg-scale, 1.25)) / 1.3 var(--dg-display);
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-md, none);
+}
+
+:where(.dg.mm) .mm-root small {
+  display: block;
+  margin-top: 4px;
+  font: 500 calc(var(--text-sm, 14px) * var(--dg-scale, 1.25)) / 1.4 var(--dg-font);
+}
+
+:where(.dg.mm) .mm-right {
+  order: 3;
+}
+
+:where(.dg.mm) .mm-left {
+  order: 1;
+  direction: rtl;
+}
+
+:where(.dg.mm) .mm-left .mm-node {
+  direction: ltr;
+  text-align: right;
+}
+
+.mm:where(.dg) ul {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-inline-start: var(--gx);
+}
+
+.mm:where(.dg) li {
+  --wc: var(--b, var(--dg-wire));
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-block: calc(var(--gy) / 2);
+  padding-inline-start: var(--gx);
+}
+
+:where(.dg.mm) .mm-side {
+  --gx: 36px;
+  --w: 2.5px;
+}
+
+:where(.dg.mm) .mm-side ul {
+  --gx: 26px;
+  --gy: 8px;
+  --w: 2px;
+}
+
+:where(.dg.mm) .mm-side ul ul {
+  --gx: 22px;
+  --gy: 4px;
+  --w: 1.5px;
+}
+
+/* 中心到一级分支用中性色；分支里面跟着分支的颜色 */
+:where(.dg.mm) .mm-side > li {
+  --wc: var(--dg-wire);
+}
+
+:where(.dg.mm) .mm-side > li > ul {
+  --wc: var(--b);
+}
+
+/* 父节点 → 这一列的竖线 */
+.mm:where(.dg) ul::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(50% - var(--w) / 2);
+  width: calc(var(--gx) + var(--w));
+  border-top: var(--w) solid var(--wc, var(--dg-wire));
+}
+
+/* 竖线 + 横线：::before 是上半截加横线，::after 是下半截 */
+.mm:where(.dg) li::before,
+.mm:where(.dg) li::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  width: var(--gx);
+  border: 0 solid var(--wc);
+}
+
+.mm:where(.dg) li::before {
+  top: 0;
+  height: calc(50% + var(--w) / 2);
+  border-inline-start-width: var(--w);
+  border-bottom-width: var(--w);
+}
+
+.mm:where(.dg) li::after {
+  top: calc(50% - var(--w) / 2);
+  bottom: 0;
+  border-inline-start-width: var(--w);
+}
+
+.mm:where(.dg) li:first-child::before {
+  display: none;
+}
+
+.mm:where(.dg) li:first-child::after {
+  border-top-width: var(--w);
+  border-start-start-radius: var(--rr);
+}
+
+.mm:where(.dg) li:last-child::after {
+  display: none;
+}
+
+.mm:where(.dg) li:last-child::before {
+  border-end-start-radius: var(--rr);
+}
+
+.mm:where(.dg) li:only-child::before {
+  display: block;
+  border-inline-start-width: 0;
+  border-radius: 0;
+}
+
+:where(.dg.mm) .mm-node {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: block;
+  max-width: 17em;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm, 8px);
+  font-size: calc(var(--text-sm, 14px) * var(--dg-scale, 1.25));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+:where(.dg.mm) .mm-node small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.86em;
+  font-weight: 400;
+  color: var(--dg-muted-2);
+}
+
+/* 一级分支：带颜色的块 */
+:where(.dg.mm) .mm-side > li > .mm-node {
+  max-width: 12em;
+  padding: 10px 16px;
+  border: 1.5px solid var(--b);
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in oklab, var(--b) 14%, var(--dg-surface));
+  font-size: calc(var(--text-md, 16px) * var(--dg-scale, 1.25));
+  font-weight: 650;
+}
+
+/* 二级：白底细框 */
+:where(.dg.mm) .mm-side > li > ul > li > .mm-node {
+  padding: 6px 12px;
+  border: 1px solid color-mix(in oklab, var(--b) 40%, var(--dg-line));
+  background: var(--dg-surface);
+  font-size: calc(15px * var(--dg-scale, 1.25));
+  font-weight: 550;
+}
+
+/* 分支颜色：右边从第 1 色起，左边从第 4 色起（两边不撞色）；li 上写 c1–c6 可以指定 */
+:where(.dg.mm) .mm-right > li:nth-child(6n + 1) { --b: var(--dg-c1); }
+:where(.dg.mm) .mm-right > li:nth-child(6n + 2) { --b: var(--dg-c2); }
+:where(.dg.mm) .mm-right > li:nth-child(6n + 3) { --b: var(--dg-c3); }
+:where(.dg.mm) .mm-right > li:nth-child(6n + 4) { --b: var(--dg-c4); }
+:where(.dg.mm) .mm-right > li:nth-child(6n + 5) { --b: var(--dg-c5); }
+:where(.dg.mm) .mm-right > li:nth-child(6n + 6) { --b: var(--dg-c6); }
+:where(.dg.mm) .mm-left > li:nth-child(6n + 1) { --b: var(--dg-c4); }
+:where(.dg.mm) .mm-left > li:nth-child(6n + 2) { --b: var(--dg-c5); }
+:where(.dg.mm) .mm-left > li:nth-child(6n + 3) { --b: var(--dg-c6); }
+:where(.dg.mm) .mm-left > li:nth-child(6n + 4) { --b: var(--dg-c2); }
+:where(.dg.mm) .mm-left > li:nth-child(6n + 5) { --b: var(--dg-c3); }
+:where(.dg.mm) .mm-left > li:nth-child(6n + 6) { --b: var(--dg-c1); }
+.mm:where(.dg)[data-tone="mono"] .mm-side > li { --b: var(--dg-c1); }
+
+/* ── 技术路线图 .tr（申报书 / 论文那种：自上而下分阶段）──────────────────────
+ * <div class="dg tr">
+ *   <section class="tr-stage">
+ *     <h3 class="tr-label">阶段名<small>说明</small></h3>
+ *     <div class="tr-body">
+ *       <div class="tr-row"> <div class="tr-box">…</div> <div class="tr-box">…</div> </div>
+ *       <div class="tr-row"> <div class="tr-box">…</div> </div>
+ *     </div>
+ *     <div class="tr-out">这一阶段的成果（可选，放右边一栏）</div>
+ *   </section>
+ * </div>
+ * 阶段之间、一个阶段里的两行之间自动画箭头；一行几个框时自动画分叉 / 汇合。一行最多 6 个框。
+ */
+
+.tr:where(.dg) {
+  --tr-label-w: 9em;
+  --tr-out-w: 12em;
+  --tr-gap: 48px; /* 两行、两个阶段之间 */
+  --gx: 16px; /* 一行里两个框之间 */
+  --w: 2px;
+  --wc: var(--dg-wire);
+  display: grid;
+  grid-template-columns: var(--tr-label-w) minmax(0, 1fr);
+  column-gap: 28px;
+  row-gap: var(--tr-gap);
+  width: 100%;
+}
+
+.tr:where(.dg):has(.tr-out) {
+  grid-template-columns: var(--tr-label-w) minmax(0, 1fr) var(--tr-out-w);
+}
+
+:where(.dg.tr) .tr-stage {
+  --s: var(--dg-c1);
+  --s-ink: var(--dg-on-primary);
+  position: relative;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+:where(.dg.tr) .tr-label {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  border-radius: var(--radius-md, 12px);
+  background: var(--s);
+  color: var(--s-ink);
+  font: 700 calc(var(--text-md, 16px) * var(--dg-scale, 1.25)) / 1.35 var(--dg-display);
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+:where(.dg.tr) .tr-label small {
+  font: 500 calc(12.5px * var(--dg-scale, 1.25)) / 1.4 var(--dg-font);
+}
+
+/* 竖排的阶段名：<div class="dg tr" data-label="vertical"> */
+.tr:where(.dg)[data-label="vertical"] {
+  --tr-label-w: 3.6em;
+}
+
+.tr:where(.dg)[data-label="vertical"] .tr-label {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.18em;
+  padding: 14px 8px;
+}
+
+:where(.dg.tr) .tr-body {
+  grid-column: 2;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tr-gap);
+  padding: 22px 24px;
+  border: 1.5px dashed color-mix(in oklab, var(--s) 45%, var(--dg-line));
+  border-radius: var(--radius-lg, 16px);
+  background: color-mix(in oklab, var(--s) 4%, transparent);
+}
+
+:where(.dg.tr) .tr-title {
+  align-self: flex-start;
+  margin: -6px 0 calc(16px - var(--tr-gap));
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--s) 70%, var(--dg-ink));
+}
+
+:where(.dg.tr) .tr-row {
+  --n: 1;
+  --bw: calc((100% - (var(--n) - 1) * var(--gx)) / var(--n)); /* 一个框多宽 */
+  --tile: calc((100% + var(--gx)) / var(--n)); /* 一个框连一份间距 */
+  --mid: calc(50% - var(--gx) / 2); /* 框的中线在一份里的位置 */
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--gx);
+}
+
+:where(.dg.tr) .tr-row:has(> :nth-child(2)) { --n: 2; }
+:where(.dg.tr) .tr-row:has(> :nth-child(3)) { --n: 3; }
+:where(.dg.tr) .tr-row:has(> :nth-child(4)) { --n: 4; }
+:where(.dg.tr) .tr-row:has(> :nth-child(5)) { --n: 5; }
+:where(.dg.tr) .tr-row:has(> :nth-child(6)) { --n: 6; }
+
+/* 同一阶段里的上下两行：上面一行底下汇合到中间（::before），下面一行从中间分到每个框、带箭头（::after） */
+:where(.dg.tr) .tr-row:not(:last-child)::before,
+:where(.dg.tr) .tr-row + .tr-row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(var(--tr-gap) / 2);
+  pointer-events: none;
+}
+
+:where(.dg.tr) .tr-row:not(:last-child)::before {
+  top: 100%;
+  background:
+    linear-gradient(to right, transparent calc(var(--mid) - var(--w) / 2), var(--wc) 0 calc(var(--mid) + var(--w) / 2), transparent 0) 0 0 / var(--tile) calc(var(--tr-gap) / 3) repeat-x,
+    linear-gradient(var(--wc), var(--wc)) 50% calc(var(--tr-gap) / 3 - var(--w) / 2) / calc(100% - var(--bw) + var(--w)) var(--w) no-repeat,
+    linear-gradient(var(--wc), var(--wc)) 50% calc(var(--tr-gap) / 3 - var(--w) / 2) / var(--w) calc(var(--tr-gap) / 6 + var(--w) / 2) no-repeat;
+}
+
+:where(.dg.tr) .tr-row + .tr-row::after {
+  bottom: 100%;
+  background:
+    linear-gradient(var(--wc), var(--wc)) 50% 0 / var(--w) calc(var(--tr-gap) / 6 + var(--w) / 2) no-repeat,
+    linear-gradient(var(--wc), var(--wc)) 50% calc(var(--tr-gap) / 6 - var(--w) / 2) / calc(100% - var(--bw) + var(--w)) var(--w) no-repeat,
+    linear-gradient(to right, transparent calc(var(--mid) - var(--w) / 2), var(--wc) 0 calc(var(--mid) + var(--w) / 2), transparent 0) 0 calc(var(--tr-gap) / 6) / var(--tile) calc(var(--tr-gap) / 3 - 9px) repeat-x,
+    conic-gradient(from -30deg at var(--mid) 100%, var(--wc) 0 60deg, transparent 0) 0 100% / var(--tile) 10px repeat-x;
+}
+
+/* 一行里一个接一个（A → B → C）：<div class="tr-row seq">，上下的箭头只接这一行的正中 */
+:where(.dg.tr) .tr-row.seq {
+  --n: 1;
+  --gx: 40px;
+  grid-auto-flow: column;
+}
+
+:where(.dg.tr) .tr-row.seq > * + *::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: calc(50% - 6px);
+  width: 40px;
+  height: 12px;
+  background:
+    linear-gradient(var(--wc), var(--wc)) 6px 50% / calc(100% - 19px) var(--w) no-repeat,
+    conic-gradient(from 240deg at 100% 50%, var(--wc) 0 60deg, transparent 0) calc(100% - 6px) 50% / 8px 12px no-repeat;
+}
+
+/* 阶段之间：上一阶段的框底下 → 这一阶段的框顶上 */
+:where(.dg.tr) .tr-stage + .tr-stage > .tr-body::before {
+  content: "";
+  position: absolute;
+  left: calc(50% - 7px);
+  bottom: calc(100% + 1.5px);
+  width: 14px;
+  height: var(--tr-gap);
+  background:
+    linear-gradient(var(--dg-wire), var(--dg-wire)) 50% 0 / 2.5px calc(100% - 8px) no-repeat,
+    conic-gradient(from -32deg at 50% 100%, var(--dg-wire) 0 64deg, transparent 0) 50% 100% / 14px 10px no-repeat;
+}
+
+:where(.dg.tr) .tr-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 1.5px solid color-mix(in oklab, var(--s) 40%, var(--dg-line));
+  border-radius: var(--radius-md, 12px);
+  background: var(--dg-surface);
+  font-size: calc(var(--text-sm, 14px) * var(--dg-scale, 1.25));
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-sm, none);
+}
+
+:where(.dg.tr) .tr-box small {
+  font-size: calc(12.5px * var(--dg-scale, 1.25));
+  font-weight: 400;
+  color: var(--dg-muted-2);
+}
+
+:where(.dg.tr) .tr-box ul {
+  text-align: left;
+  font-weight: 400;
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  color: var(--dg-muted-2);
+}
+
+:where(.dg.tr) .tr-box li::before {
+  content: "· ";
+}
+
+:where(.dg.tr) .tr-box.key {
+  border-color: var(--s);
+  background: var(--s);
+  color: var(--s-ink);
+}
+
+:where(.dg.tr) .tr-box.key small,
+:where(.dg.tr) .tr-box.key ul {
+  color: inherit;
+}
+
+:where(.dg.tr) .tr-box.soft {
+  border-color: transparent;
+  background: color-mix(in oklab, var(--s) 10%, var(--dg-surface));
+  box-shadow: none;
+}
+
+:where(.dg.tr) .tr-out {
+  grid-column: 3;
+  position: relative;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1.5px dashed color-mix(in oklab, var(--s) 55%, var(--dg-line));
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in oklab, var(--s) 8%, var(--dg-surface));
+  font-size: calc(var(--text-sm, 14px) * var(--dg-scale, 1.25));
+  line-height: 1.5;
+}
+
+:where(.dg.tr) .tr-out b,
+:where(.dg.tr) .tr-out strong {
+  font-weight: 700;
+}
+
+:where(.dg.tr) .tr-out::before {
+  content: "";
+  position: absolute;
+  right: calc(100% + 1.5px);
+  top: calc(50% - 6px);
+  width: 28px;
+  height: 12px;
+  background:
+    linear-gradient(var(--dg-wire), var(--dg-wire)) 0 50% / calc(100% - 7px) 2px no-repeat,
+    conic-gradient(from 240deg at 100% 50%, var(--dg-wire) 0 60deg, transparent 0) 100% 50% / 8px 12px no-repeat;
+}
+
+/* 多色：<div class="dg tr" data-tone="multi">，每个阶段一个颜色（阶段名换成浅底深字，保证看得清） */
+.tr:where(.dg)[data-tone="multi"] > .tr-stage:nth-child(6n + 1) { --s: var(--dg-c1); }
+.tr:where(.dg)[data-tone="multi"] > .tr-stage:nth-child(6n + 2) { --s: var(--dg-c2); }
+.tr:where(.dg)[data-tone="multi"] > .tr-stage:nth-child(6n + 3) { --s: var(--dg-c3); }
+.tr:where(.dg)[data-tone="multi"] > .tr-stage:nth-child(6n + 4) { --s: var(--dg-c4); }
+.tr:where(.dg)[data-tone="multi"] > .tr-stage:nth-child(6n + 5) { --s: var(--dg-c5); }
+.tr:where(.dg)[data-tone="multi"] > .tr-stage:nth-child(6n + 6) { --s: var(--dg-c6); }
+
+/* 手动给某个阶段 / 框指定了主色以外的颜色（c2–c6）：白字压不住这些颜色，一样换成浅底深字 */
+.tr:where(.dg)[data-tone="multi"] .tr-label,
+:where(.dg.tr) .tr-stage:is(.c2, .c3, .c4, .c5, .c6) > .tr-label {
+  background: color-mix(in oklab, var(--s) 16%, var(--dg-surface));
+  color: var(--dg-ink);
+  box-shadow: inset 4px 0 0 var(--s);
+}
+
+.tr:where(.dg)[data-tone="multi"] .tr-box.key,
+:where(.dg.tr) .tr-stage:is(.c2, .c3, .c4, .c5, .c6) .tr-box.key,
+:where(.dg.tr) .tr-box.key:is(.c2, .c3, .c4, .c5, .c6) {
+  background: color-mix(in oklab, var(--s) 16%, var(--dg-surface));
+  color: var(--dg-ink);
+  border-width: 2px;
+}
+
+/* ── 产品路线图 .rm（横轴时间，每行一条线）────────────────────────────────
+ * <div class="dg rm" style="--cols: 4">
+ *   <div class="rm-head"><span>2026 Q1</span><span>Q2</span><span>Q3</span><span>Q4</span></div>
+ *   <section class="rm-lane">
+ *     <h3 class="rm-name">体验<small>说明</small></h3>
+ *     <div class="rm-track">
+ *       <div class="rm-bar" style="--from: 1; --span: 2">做什么<small>补一句</small></div>
+ *       <div class="rm-ms" style="--at: 3">里程碑</div>
+ *     </div>
+ *   </section>
+ *   <div class="rm-now" style="--at: 2.4"><span>今天</span></div>
+ * </div>
+ * --from 从第几段开始、--span 占几段；同一行放不下的自动挪到下面一行，不会叠。
+ */
+
+.rm:where(.dg) {
+  --cols: 4;
+  --rm-name-w: 9em;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--rm-name-w) repeat(var(--cols), minmax(0, 1fr));
+  width: 100%;
+}
+
+:where(.dg.rm) .rm-head {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+}
+
+:where(.dg.rm) .rm-head > * {
+  grid-column: span var(--span, 1);
+  padding: 10px 12px;
+  border-inline-start: 1px solid var(--dg-line);
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--dg-muted);
+}
+
+:where(.dg.rm) .rm-head.big > * {
+  font: 700 calc(var(--text-md, 16px) * var(--dg-scale, 1.25)) / 1.3 var(--dg-display);
+  color: var(--dg-ink);
+}
+
+:where(.dg.rm) .rm-lane {
+  --b: var(--dg-c1);
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  border-top: 1px solid var(--dg-line);
+}
+
+:where(.dg.rm) .rm-lane:last-of-type {
+  border-bottom: 1px solid var(--dg-line);
+}
+
+:where(.dg.rm) .rm-name {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 14px 16px 14px 18px;
+  position: relative;
+  font: 700 calc(15px * var(--dg-scale, 1.25)) / 1.35 var(--dg-display);
+  overflow-wrap: anywhere;
+}
+
+:where(.dg.rm) .rm-name::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(50% - 5px);
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--b);
+}
+
+:where(.dg.rm) .rm-name small {
+  font: 400 calc(12.5px * var(--dg-scale, 1.25)) / 1.4 var(--dg-font);
+  color: var(--dg-muted-2);
+}
+
+:where(.dg.rm) .rm-track {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-auto-flow: row dense;
+  align-content: center;
+  row-gap: 8px;
+  padding-block: 14px;
+  background: repeating-linear-gradient(to right, var(--dg-line) 0 1px, transparent 1px calc(100% / var(--cols)));
+}
+
+:where(.dg.rm) .rm-bar {
+  position: relative;
+  z-index: 1;
+  grid-column: var(--from, 1) / span var(--span, 1);
+  min-width: 0;
+  margin-inline: 6px;
+  padding: 8px 12px;
+  border-inline-start: 4px solid var(--b);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in oklab, var(--b) 15%, var(--dg-surface));
+  font-size: calc(var(--text-sm, 14px) * var(--dg-scale, 1.25));
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+:where(.dg.rm) .rm-bar small {
+  display: block;
+  margin-top: 2px;
+  font-size: calc(12.5px * var(--dg-scale, 1.25));
+  font-weight: 400;
+  color: var(--dg-muted-2);
+}
+
+/* 已完成：颜色更实；规划中（还没定）：虚线框 */
+:where(.dg.rm) .rm-bar.done {
+  background: color-mix(in oklab, var(--b) 30%, var(--dg-surface));
+}
+
+:where(.dg.rm) .rm-bar.plan {
+  background: transparent;
+  border: 1.5px dashed color-mix(in oklab, var(--b) 60%, var(--dg-line));
+  border-inline-start: 4px solid color-mix(in oklab, var(--b) 60%, var(--dg-line));
+}
+
+:where(.dg.rm) .rm-ms {
+  position: relative;
+  z-index: 1;
+  grid-column: var(--at, 1) / span var(--span, 1);
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-inline-start: -5.5px;
+  padding-block: 4px;
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  font-weight: 650;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+:where(.dg.rm) .rm-ms::before {
+  content: "";
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--b);
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 3px var(--dg-bg);
+}
+
+/* 菱形钉在时间点上，字跟在旁边：mid 菱形在这一段正中、字在右半段；end 菱形在这一段结尾、字在它左边 */
+:where(.dg.rm) .rm-ms.mid,
+:where(.dg.rm) .rm-ms.end {
+  justify-self: stretch;
+}
+
+:where(.dg.rm) .rm-ms.mid {
+  margin-inline-start: 0;
+  padding-inline-start: calc(50% - 5.5px);
+}
+
+:where(.dg.rm) .rm-ms.end {
+  flex-direction: row-reverse;
+  margin-inline: 0 -5.5px;
+  text-align: end;
+}
+
+/* 「今天」那条竖线：--at 可以是小数（2.5 = 第二段正中） */
+:where(.dg.rm) .rm-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--rm-name-w) + (100% - var(--rm-name-w)) * (var(--at, 1) - 1) / var(--cols));
+  z-index: 0;
+  width: 0;
+  border-inline-start: 2px dashed var(--dg-c1);
+  pointer-events: none;
+}
+
+:where(.dg.rm) .rm-now > * {
+  position: absolute;
+  top: -12px;
+  left: -1px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--dg-c1);
+  color: var(--dg-on-primary);
+  font-size: calc(12px * var(--dg-scale, 1.25));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 泳道颜色：轮着用；<section class="rm-lane c3"> 可以指定 */
+.rm:where(.dg) > .rm-lane:nth-of-type(6n + 1) { --b: var(--dg-c1); }
+.rm:where(.dg) > .rm-lane:nth-of-type(6n + 2) { --b: var(--dg-c2); }
+.rm:where(.dg) > .rm-lane:nth-of-type(6n + 3) { --b: var(--dg-c3); }
+.rm:where(.dg) > .rm-lane:nth-of-type(6n + 4) { --b: var(--dg-c4); }
+.rm:where(.dg) > .rm-lane:nth-of-type(6n + 5) { --b: var(--dg-c5); }
+.rm:where(.dg) > .rm-lane:nth-of-type(6n + 6) { --b: var(--dg-c6); }
+.rm:where(.dg)[data-tone="mono"] > .rm-lane { --b: var(--dg-c1); }
+
+/* ── 架构图 .ar（一层一层叠，旁边可以竖着放贯穿各层的一栏）──────────────────
+ * <div class="dg ar">
+ *   <div class="ar-main">
+ *     <section class="ar-layer">
+ *       <h3 class="ar-name">接入层</h3>
+ *       <div class="ar-mods">
+ *         <div class="ar-mod">Web</div>
+ *         <div class="ar-group"><h4>交易</h4><div class="ar-mods"><div class="ar-mod">订单</div>…</div></div>
+ *       </div>
+ *     </section>
+ *   </div>
+ *   <aside class="ar-side"><h3 class="ar-name">安全</h3><div class="ar-mods"><div class="ar-mod">鉴权</div>…</div></aside>
+ * </div>
+ */
+
+.ar:where(.dg) {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+}
+
+:where(.dg.ar) .ar-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+:where(.dg.ar) .ar-layer {
+  --b: var(--dg-c1);
+  display: grid;
+  grid-template-columns: var(--ar-name-w, 8em) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in oklab, var(--b) 24%, var(--dg-line));
+  border-radius: var(--radius-lg, 16px);
+  background: color-mix(in oklab, var(--b) 6%, var(--dg-surface));
+}
+
+:where(.dg.ar) .ar-name {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--radius-md, 12px);
+  background: color-mix(in oklab, var(--b) 18%, var(--dg-surface));
+  font: 700 calc(15px * var(--dg-scale, 1.25)) / 1.35 var(--dg-display);
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+:where(.dg.ar) .ar-name small {
+  font: 400 calc(12px * var(--dg-scale, 1.25)) / 1.4 var(--dg-font);
+  color: var(--dg-muted-2);
+}
+
+:where(.dg.ar) .ar-mods {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+:where(.dg.ar) .ar-mod {
+  flex: 1 1 7.5em;
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--dg-line);
+  border-radius: var(--radius-md, 12px);
+  background: var(--dg-surface);
+  font-size: calc(var(--text-sm, 14px) * var(--dg-scale, 1.25));
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  box-shadow: var(--shadow-sm, none);
+}
+
+:where(.dg.ar) .ar-mod small {
+  font-size: calc(12px * var(--dg-scale, 1.25));
+  font-weight: 400;
+  color: var(--dg-muted-2);
+}
+
+:where(.dg.ar) .ar-mod.key {
+  border: 1.5px solid var(--b);
+  background: color-mix(in oklab, var(--b) 12%, var(--dg-surface));
+}
+
+:where(.dg.ar) .ar-group {
+  --g: 1;
+  flex: var(--g) 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1.5px dashed color-mix(in oklab, var(--b) 45%, var(--dg-line));
+  border-radius: var(--radius-md, 12px);
+}
+
+:where(.dg.ar) .ar-group:has(> .ar-mods > :nth-child(2)) { --g: 2; }
+:where(.dg.ar) .ar-group:has(> .ar-mods > :nth-child(3)) { --g: 3; }
+:where(.dg.ar) .ar-group:has(> .ar-mods > :nth-child(4)) { --g: 4; }
+:where(.dg.ar) .ar-group:has(> .ar-mods > :nth-child(5)) { --g: 5; }
+:where(.dg.ar) .ar-group:has(> .ar-mods > :nth-child(6)) { --g: 6; }
+
+:where(.dg.ar) .ar-group .ar-mod {
+  flex-basis: 4.5em;
+}
+
+:where(.dg.ar) .ar-group > h4 {
+  font-size: calc(13px * var(--dg-scale, 1.25));
+  font-weight: 700;
+  color: color-mix(in oklab, var(--b) 60%, var(--dg-ink));
+}
+
+:where(.dg.ar) .ar-side {
+  --b: var(--dg-c1);
+  flex: 0 0 var(--ar-side-w, 10em);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in oklab, var(--b) 24%, var(--dg-line));
+  border-radius: var(--radius-lg, 16px);
+  background: color-mix(in oklab, var(--b) 6%, var(--dg-surface));
+}
+
+:where(.dg.ar) .ar-side .ar-mods {
+  flex: 1;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-content: stretch;
+}
+
+:where(.dg.ar) .ar-side .ar-mod {
+  flex: 1 1 0;
+  box-shadow: none;
+}
+
+/* 分层颜色：轮着用（data-tone="mono" 全用主色）；左右两栏从第 5 色起 */
+:where(.dg.ar) .ar-main > .ar-layer:nth-child(6n + 1 of :where(.ar-layer)) { --b: var(--dg-c1); }
+:where(.dg.ar) .ar-main > .ar-layer:nth-child(6n + 2 of :where(.ar-layer)) { --b: var(--dg-c2); }
+:where(.dg.ar) .ar-main > .ar-layer:nth-child(6n + 3 of :where(.ar-layer)) { --b: var(--dg-c3); }
+:where(.dg.ar) .ar-main > .ar-layer:nth-child(6n + 4 of :where(.ar-layer)) { --b: var(--dg-c4); }
+:where(.dg.ar) .ar-main > .ar-layer:nth-child(6n + 5 of :where(.ar-layer)) { --b: var(--dg-c5); }
+:where(.dg.ar) .ar-main > .ar-layer:nth-child(6n + 6 of :where(.ar-layer)) { --b: var(--dg-c6); }
+.ar:where(.dg) > .ar-side { --b: var(--dg-c5); }
+.ar:where(.dg) > .ar-side ~ .ar-side { --b: var(--dg-c6); }
+.ar:where(.dg)[data-tone="mono"] .ar-layer,
+.ar:where(.dg)[data-tone="mono"] .ar-side { --b: var(--dg-c1); }
+
+/* ── 版块之间的关系：带关系词的箭头（支撑、驱动、对应、反馈…），哪种图都能用 ─────
+ * 放在两个版块中间（flex / grid 里的一格，或者两层之间单独一行）：
+ *   <div class="dg-link"><b>支撑</b></div>         往下 ↓
+ *   <div class="dg-link up"><b>反馈</b></div>      往上 ↑
+ *   <div class="dg-link right"><b>驱动</b></div>   往右 →（left 往左 ←）
+ *   再加 two：两头都有箭头（↕ / ↔）。不写 <b> 就是光箭头。
+ * 一排箭头对着上下的几栏：<div class="dg-links">几个 dg-link</div>，一个孩子一栏（空栏放 <i></i>），
+ * 间距写成和上下版块一样（style="gap: 16px"）；架构图里放在两个 .ar-layer 中间会自动对齐模块那几栏。
+ * 颜色跟着所在版块的 --b（没有就主色），要指定写 c1–c6。
+ */
+.dg-link {
+  --lc: var(--b, var(--dg-c1, #3b6ef5));
+  --lw: 3px;
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 56px;
+  padding-block: 24px; /* 关系词上下各留一段线和箭头，字放大了也盖不住 */
+}
+
+.dg-link::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 8px);
+  width: 16px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--lc), var(--lc)) 50% 0 / var(--lw) calc(100% - 11px) no-repeat,
+    conic-gradient(from -30deg at 50% 100%, var(--lc) 0 60deg, transparent 0) 50% 100% / 16px 13px no-repeat;
+}
+
+.dg-link.up::before {
+  background:
+    linear-gradient(var(--lc), var(--lc)) 50% 100% / var(--lw) calc(100% - 11px) no-repeat,
+    conic-gradient(from 150deg at 50% 0, var(--lc) 0 60deg, transparent 0) 50% 0 / 16px 13px no-repeat;
+}
+
+.dg-link.two::before {
+  background:
+    linear-gradient(var(--lc), var(--lc)) 50% 50% / var(--lw) calc(100% - 22px) no-repeat,
+    conic-gradient(from 150deg at 50% 0, var(--lc) 0 60deg, transparent 0) 50% 0 / 16px 13px no-repeat,
+    conic-gradient(from -30deg at 50% 100%, var(--lc) 0 60deg, transparent 0) 50% 100% / 16px 13px no-repeat;
+}
+
+.dg-link:is(.right, .left) {
+  min-width: 64px;
+  min-height: 24px;
+  padding-block: 0;
+  padding-inline: 28px; /* 关系词左右各留一段线和箭头 */
+}
+
+.dg-link:is(.right, .left)::before {
+  top: calc(50% - 8px);
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 16px;
+  background:
+    linear-gradient(var(--lc), var(--lc)) 0 50% / calc(100% - 11px) var(--lw) no-repeat,
+    conic-gradient(from 240deg at 100% 50%, var(--lc) 0 60deg, transparent 0) 100% 50% / 13px 16px no-repeat;
+}
+
+.dg-link.left::before {
+  background:
+    linear-gradient(var(--lc), var(--lc)) 100% 50% / calc(100% - 11px) var(--lw) no-repeat,
+    conic-gradient(from 60deg at 0 50%, var(--lc) 0 60deg, transparent 0) 0 50% / 13px 16px no-repeat;
+}
+
+.dg-link:is(.right, .left).two::before {
+  background:
+    linear-gradient(var(--lc), var(--lc)) 50% 50% / calc(100% - 22px) var(--lw) no-repeat,
+    conic-gradient(from 60deg at 0 50%, var(--lc) 0 60deg, transparent 0) 0 50% / 13px 16px no-repeat,
+    conic-gradient(from 240deg at 100% 50%, var(--lc) 0 60deg, transparent 0) 100% 50% / 13px 16px no-repeat;
+}
+
+.dg-link > b {
+  position: relative;
+  padding: 3px 12px;
+  border: 1.5px solid var(--lc);
+  border-radius: 999px;
+  background: var(--dg-surface, #fff);
+  color: color-mix(in oklab, var(--lc) 70%, var(--dg-ink, #1f2329));
+  font-size: calc(14px * var(--dg-scale, 1.25));
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.dg-links {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* 架构图两层之间：让开左边的层名，和模块那几栏对齐，箭头伸进上下两层之间的空隙 */
+:where(.dg.ar) .ar-main > .dg-links {
+  gap: var(--ar-link-gap, 36px);
+  margin-block: -12px;
+  padding-inline: calc(15px + var(--ar-name-w, 8em) + 14px) 15px;
+}
+
+/* 挨着一排箭头的层：模块间距和箭头那排一样、不换行（换了行，箭头就对不上了），放不下就各自变窄、字折行 */
+:where(.dg.ar) .ar-main > .ar-layer:has(+ .dg-links) > .ar-mods,
+:where(.dg.ar) .ar-main > .dg-links + .ar-layer > .ar-mods {
+  flex-wrap: nowrap;
+  gap: var(--ar-link-gap, 36px);
+}
+
+/* 一层里一个接一个（A → B → C）：<div class="ar-mods seq">，箭头画在模块之间的空隙里、不占位，上下的箭头照样对得上 */
+:where(.dg.ar) .ar-mods.seq {
+  flex-wrap: nowrap;
+  gap: var(--ar-link-gap, 36px);
+}
+
+:where(.dg.ar) .ar-mods.seq > * {
+  position: relative;
+}
+
+:where(.dg.ar) .ar-mods.seq > * + *::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: calc(50% - 7px);
+  width: var(--ar-link-gap, 36px);
+  height: 14px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--b), var(--b)) 5px 50% / calc(100% - 18px) 2.5px no-repeat,
+    conic-gradient(from 240deg at 100% 50%, var(--b) 0 60deg, transparent 0) calc(100% - 5px) 50% / 9px 14px no-repeat;
+}
+
+/* ── 指定颜色：在分支 li、泳道、层、阶段上写 c1–c6 ───────────────────────── */
+
+:where(.dg, .dg-legend) .c1 { --b: var(--dg-c1) !important; --s: var(--dg-c1) !important; }
+:where(.dg, .dg-legend) .c2 { --b: var(--dg-c2) !important; --s: var(--dg-c2) !important; }
+:where(.dg, .dg-legend) .c3 { --b: var(--dg-c3) !important; --s: var(--dg-c3) !important; }
+:where(.dg, .dg-legend) .c4 { --b: var(--dg-c4) !important; --s: var(--dg-c4) !important; }
+:where(.dg, .dg-legend) .c5 { --b: var(--dg-c5) !important; --s: var(--dg-c5) !important; }
+:where(.dg, .dg-legend) .c6 { --b: var(--dg-c6) !important; --s: var(--dg-c6) !important; }
+
+/* ── 申报书「炫酷」部件 fx-*（课题申报、结题报告、教学成果那种架构图）──────────────
+ * 不是一种图，是一套零件，自己用 grid / flex 排版面时拿来用（写法见 references/diagram.md「申报书炫酷样式」）：
+ *   页面底 .fx-page（加在 body 上）、渐变大标题 .fx-title、大面板 .fx-panel、层名竖条 .fx-rail、
+ *   渐变色带 .fx-band（<i></i> 是左边的 » 圆标）、立体标签 .fx-tag、立体板 .fx-slab、编号条目 .fx-list / .fx-num、
+ *   条目块 .fx-item（.solid 实心）、粗箭头 .fx-arrow（.down / .up / .left）、发光核心 .fx-core、立体圆台 .fx-disc、丝带横幅 .fx-ribbon、小徽章 .fx-gem、
+ *   回环箭头 .fx-loop、转变 .fx-shift、白卡片 .fx-card；排版帮手 .fx-wrap（整页）、.fx-head（页头）、.fx-sec（竖条 + 内容）、
+ *   .fx-flow（等宽几栏，栏间自动画粗箭头）、.fx-col（一栏）、.fx-bridge（层间箭头 + 横幅）、.fx-map（问题→内容→目标对照）
+ * 三种色调：主色 fx-main、暖色（红）fx-warm、冷色（蓝）fx-cool，写在部件或它外面的任何一层上，里面的部件都跟着变。
+ * 字号乘 --dg-scale（默认 1.25）；颜色取 tokens.css，深浅色都能用。
+ */
+/* 变量放在根上：body 没写 fx-page / fx 部件也有颜色；局部换了 tokens 的，在那一层加 .fx 重新取 */
+:root,
+.fx-page,
+.fx {
+  --fx-1: var(--color-primary, #6a4cc4);
+  --fx-2: var(--color-danger, #d9452f);
+  --fx-3: oklch(from var(--fx-1) l c calc(h - 45));
+  --fx-surface: var(--color-surface, #fff);
+  --fx-ink: var(--color-text, #24203a);
+  --fx-muted: var(--color-muted, #625d78);
+  --fx-font: var(--font-sans, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif);
+  --fx-display: var(--font-display, var(--fx-font));
+}
+
+.fx-main { --fx-tone: var(--fx-1); }
+.fx-warm { --fx-tone: var(--fx-2); }
+.fx-cool { --fx-tone: var(--fx-3); }
+
+/* 整页底：三团柔光 + 点阵（至少一屏高，导出的画幅比内容高也不露出接缝） */
+.fx-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 520px at 6% -6%, color-mix(in oklab, var(--fx-1) 18%, transparent), transparent 70%) no-repeat,
+    radial-gradient(800px 480px at 100% 4%, color-mix(in oklab, var(--fx-3) 16%, transparent), transparent 70%) no-repeat,
+    radial-gradient(700px 420px at 60% 110%, color-mix(in oklab, var(--fx-2) 10%, transparent), transparent 70%) no-repeat,
+    radial-gradient(circle at 1.5px 1.5px, color-mix(in oklab, var(--fx-1) 16%, transparent) 1.2px, transparent 1.8px) 0 0 / 24px 24px,
+    var(--color-bg, #f7f6fb);
+  color: var(--fx-ink);
+  font-family: var(--fx-font);
+}
+
+/* 渐变大标题 */
+.fx-title {
+  margin: 0;
+  color: var(--fx-1);
+  font: 900 calc(51px * var(--dg-scale, 1.25)) / 1.12 var(--fx-display);
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+  background: linear-gradient(100deg, var(--fx-1), var(--fx-3) 55%, var(--fx-1));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 大面板：渐变描边 + 彩色柔影 */
+.fx-panel {
+  position: relative;
+  padding: 26px;
+  border: 2px solid transparent;
+  border-radius: 30px;
+  background:
+    linear-gradient(var(--fx-surface), var(--fx-surface)) padding-box,
+    linear-gradient(135deg, color-mix(in oklab, var(--fx-1) 55%, var(--fx-surface)), color-mix(in oklab, var(--fx-3) 30%, var(--fx-surface)) 50%, color-mix(in oklab, var(--fx-1) 30%, var(--fx-surface))) border-box;
+  box-shadow: 0 24px 60px -18px color-mix(in oklab, var(--fx-1) 40%, transparent), 0 4px 14px -6px color-mix(in oklab, var(--fx-1) 25%, transparent);
+}
+
+/* 白卡片 */
+.fx-card {
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: var(--fx-surface);
+  box-shadow: 0 10px 24px -14px color-mix(in oklab, var(--fx-tone, var(--fx-1)) 55%, transparent), inset 0 0 0 1.5px color-mix(in oklab, var(--fx-tone, var(--fx-1)) 16%, transparent);
+  font: 600 calc(16px * var(--dg-scale, 1.25)) / 1.4 var(--fx-font);
+}
+
+.fx-card > small {
+  display: block;
+  color: color-mix(in oklab, var(--fx-tone, var(--fx-1)) 75%, var(--fx-ink));
+  font: 700 calc(14.4px * var(--dg-scale, 1.25)) / 1.3 var(--fx-font);
+  letter-spacing: 0.08em;
+}
+
+.fx-card > b {
+  display: block;
+  color: var(--fx-ink);
+  font: 800 calc(20.8px * var(--dg-scale, 1.25)) / 1.35 var(--fx-display);
+}
+
+.fx-card > small + b { margin-top: 6px; }
+
+.fx-card > p {
+  margin: 6px 0 0;
+  color: var(--fx-muted);
+  font: 600 calc(16px * var(--dg-scale, 1.25)) / 1.35 var(--fx-font);
+}
+
+/* 条目块：左边一道色条、淡色底（问题、目标、措施一条一条列）；.solid 是实心渐变块、白字（重点那一栏） */
+.fx-item {
+  --b: var(--fx-tone, var(--fx-1));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  color: var(--fx-ink);
+  font: 700 calc(17.6px * var(--dg-scale, 1.25)) / 1.35 var(--fx-font);
+  background: linear-gradient(90deg, color-mix(in oklab, var(--b) 10%, var(--fx-surface)), var(--fx-surface));
+  box-shadow: inset 4px 0 0 var(--b), 0 8px 18px -12px color-mix(in oklab, var(--b) 70%, transparent);
+}
+
+.fx-item.solid {
+  color: #fff;
+  background: linear-gradient(100deg, color-mix(in oklab, var(--b) 85%, black), var(--b) 45%, color-mix(in oklab, var(--b) 82%, white));
+  box-shadow: 0 6px 0 color-mix(in oklab, var(--b) 55%, black), 0 14px 24px -10px color-mix(in oklab, var(--b) 70%, transparent);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.22);
+}
+
+.fx-item > div { min-width: 0; }
+.fx-item > div > b { display: block; font: 800 calc(17.6px * var(--dg-scale, 1.25)) / 1.3 var(--fx-display); }
+.fx-item > div > span { display: block; margin-top: 2px; font: 600 calc(14.4px * var(--dg-scale, 1.25)) / 1.35 var(--fx-font); opacity: 0.92; }
+
+/* 层名竖条：圆柱感 */
+.fx-rail {
+  --b: var(--fx-tone, var(--fx-1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3em;
+  padding: 24px 0;
+  border-radius: 999px;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  color: #fff;
+  font: 800 calc(22.4px * var(--dg-scale, 1.25)) / 1 var(--fx-display);
+  letter-spacing: 0.3em;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--b) 62%, white), var(--b) 42%, color-mix(in oklab, var(--b) 72%, black));
+  box-shadow: inset 0 3px 0 rgb(255 255 255 / 0.45), inset 0 -10px 18px color-mix(in oklab, var(--b) 55%, black), 0 14px 26px -10px color-mix(in oklab, var(--b) 70%, transparent);
+  text-shadow: 0 2px 2px rgb(0 0 0 / 0.18);
+}
+
+/* 渐变色带标题：左边白圆里一对 »（写 <i></i>），右边可放 <small> */
+.fx-band {
+  --b: var(--fx-tone, var(--fx-1));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 26px 8px 8px;
+  border-radius: 999px;
+  color: #fff;
+  font: 800 calc(22.4px * var(--dg-scale, 1.25)) / 1.25 var(--fx-display);
+  letter-spacing: 0.04em;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--b) 85%, black), var(--b) 35%, color-mix(in oklab, var(--b) 72%, white));
+  box-shadow: 0 10px 20px -8px color-mix(in oklab, var(--b) 65%, transparent), inset 0 2px 0 rgb(255 255 255 / 0.35);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+.fx-band > i {
+  flex: none;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background:
+    conic-gradient(from 227deg at 100% 50%, var(--b) 0 86deg, transparent 0) 26% 50% / 26% 46% no-repeat,
+    conic-gradient(from 227deg at 100% 50%, var(--b) 0 86deg, transparent 0) 74% 50% / 26% 46% no-repeat,
+    #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+}
+
+.fx-band small {
+  margin-inline-start: auto;
+  font-size: calc(14.4px * var(--dg-scale, 1.25));
+  font-weight: 700;
+}
+
+/* 立体标签：上亮下暗，底下一条厚边 */
+.fx-tag {
+  --b: var(--fx-tone, var(--fx-2));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 24px;
+  border-radius: 10px;
+  color: #fff;
+  font: 800 calc(20.8px * var(--dg-scale, 1.25)) / 1.25 var(--fx-display);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--b) 72%, white), var(--b) 52%, color-mix(in oklab, var(--b) 85%, black));
+  box-shadow: 0 6px 0 color-mix(in oklab, var(--b) 58%, black), 0 14px 20px -6px color-mix(in oklab, var(--b) 70%, transparent), inset 0 2px 0 rgb(255 255 255 / 0.45);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+}
+
+/* 立体板：右下有厚度（像一块砖） */
+.fx-slab {
+  --b: var(--fx-tone, var(--fx-2));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  color: #fff;
+  font: 800 calc(20.8px * var(--dg-scale, 1.25)) / 1.3 var(--fx-display);
+  letter-spacing: 0.06em;
+  text-align: center;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--b) 78%, white), var(--b) 60%);
+  box-shadow: 7px 7px 0 color-mix(in oklab, var(--b) 55%, black), 10px 14px 22px -6px color-mix(in oklab, var(--b) 60%, transparent);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+}
+
+/* 编号条目：<ol class="fx-list"><li><b>1</b>文字</li></ol>；编号单独用 <b class="fx-num">1</b> */
+.fx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fx-list > li {
+  --b: var(--fx-tone, var(--fx-1));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px 9px 9px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--b) 10%, var(--fx-surface)), var(--fx-surface));
+  box-shadow: 0 6px 14px -8px color-mix(in oklab, var(--b) 45%, transparent), inset 0 0 0 1.5px color-mix(in oklab, var(--b) 18%, transparent);
+  font: 700 calc(17.6px * var(--dg-scale, 1.25)) / 1.35 var(--fx-font);
+}
+
+.fx-list > li > b,
+.fx-num {
+  --b: var(--fx-tone, var(--fx-1));
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.8em;
+  height: 1.8em;
+  border-radius: 50%;
+  color: #fff;
+  font: 800 calc(16px * var(--dg-scale, 1.25)) / 1 var(--fx-font);
+  background: radial-gradient(circle at 35% 30%, color-mix(in oklab, var(--b) 45%, white), var(--b) 62%, color-mix(in oklab, var(--b) 80%, black));
+  box-shadow: 0 4px 8px -2px color-mix(in oklab, var(--b) 65%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.5);
+}
+
+.fx-item.solid > .fx-num {
+  background: #fff;
+  color: var(--b);
+  text-shadow: none;
+}
+
+/* 粗箭头（渐变）：<i class="fx-arrow"></i> 往右；.left / .down / .up */
+.fx-arrow {
+  --b: var(--fx-tone, var(--fx-1));
+  flex: none;
+  display: inline-block;
+  width: 64px;
+  height: 48px;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--b) 30%, white), var(--b)) 0 50% / calc(100% - 24px) 20px no-repeat,
+    conic-gradient(from 225deg at 100% 50%, var(--b) 0 90deg, transparent 0) 100% 50% / 26px 48px no-repeat;
+}
+
+.fx-arrow.left {
+  background:
+    linear-gradient(270deg, color-mix(in oklab, var(--b) 30%, white), var(--b)) 100% 50% / calc(100% - 24px) 20px no-repeat,
+    conic-gradient(from 45deg at 0 50%, var(--b) 0 90deg, transparent 0) 0 50% / 26px 48px no-repeat;
+}
+
+.fx-arrow:is(.down, .up) {
+  width: 48px;
+  height: 56px;
+}
+
+.fx-arrow.down {
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--b) 30%, white), var(--b)) 50% 0 / 20px calc(100% - 24px) no-repeat,
+    conic-gradient(from -45deg at 50% 100%, var(--b) 0 90deg, transparent 0) 50% 100% / 48px 26px no-repeat;
+}
+
+.fx-arrow.up {
+  background:
+    linear-gradient(0deg, color-mix(in oklab, var(--b) 30%, white), var(--b)) 50% 100% / 20px calc(100% - 24px) no-repeat,
+    conic-gradient(from 135deg at 50% 0, var(--b) 0 90deg, transparent 0) 50% 0 / 48px 26px no-repeat;
+}
+
+/* 发光核心：圆球 + 两圈光环（模型名、核心理念） */
+.fx-core {
+  --b: var(--fx-tone, var(--fx-1));
+  display: grid;
+  place-items: center;
+  width: 6.4em;
+  aspect-ratio: 1;
+  padding: 0.6em;
+  border-radius: 50%;
+  color: #fff;
+  font: 900 calc(22.4px * var(--dg-scale, 1.25)) / 1.25 var(--fx-display);
+  text-align: center;
+  background: radial-gradient(circle at 34% 26%, color-mix(in oklab, var(--b) 40%, white), var(--b) 52%, color-mix(in oklab, var(--b) 68%, black));
+  box-shadow:
+    0 0 0 12px color-mix(in oklab, var(--b) 16%, transparent),
+    0 0 0 26px color-mix(in oklab, var(--b) 8%, transparent),
+    0 24px 40px -10px color-mix(in oklab, var(--b) 70%, transparent),
+    inset 0 -12px 24px color-mix(in oklab, var(--b) 60%, black);
+  text-shadow: 0 2px 3px rgb(0 0 0 / 0.25);
+}
+
+/* 立体圆台（底座、核心要素） */
+.fx-disc {
+  --b: var(--fx-tone, var(--fx-2));
+  display: grid;
+  place-items: center;
+  width: 10em;
+  height: 3.3em;
+  border-radius: 50%;
+  color: #fff;
+  font: 900 calc(22.4px * var(--dg-scale, 1.25)) / 1.2 var(--fx-display);
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 30%, color-mix(in oklab, var(--b) 55%, white), var(--b) 72%);
+  box-shadow: 0 16px 0 color-mix(in oklab, var(--b) 62%, black), 0 30px 34px -8px color-mix(in oklab, var(--b) 55%, transparent), inset 0 3px 0 rgb(255 255 255 / 0.4);
+  text-shadow: 0 2px 2px rgb(0 0 0 / 0.28);
+}
+
+/* 丝带横幅：一圈白边一圈彩边 */
+.fx-ribbon {
+  --b: var(--fx-tone, var(--fx-3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 56px;
+  border-radius: 999px;
+  color: #fff;
+  font: 800 calc(22.4px * var(--dg-scale, 1.25)) / 1.3 var(--fx-display);
+  letter-spacing: 0.06em;
+  text-align: center;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--b) 70%, white), var(--b) 22% 78%, color-mix(in oklab, var(--b) 70%, white));
+  box-shadow: 0 0 0 5px var(--fx-surface), 0 0 0 8px color-mix(in oklab, var(--b) 35%, transparent), 0 14px 26px -10px color-mix(in oklab, var(--b) 70%, transparent);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+}
+
+/* 小徽章 */
+.fx-gem {
+  --b: var(--fx-tone, var(--fx-1));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  border-radius: 10px;
+  color: color-mix(in oklab, var(--b) 70%, var(--fx-ink));
+  font: 800 calc(16px * var(--dg-scale, 1.25)) / 1.3 var(--fx-font);
+  background: linear-gradient(180deg, var(--fx-surface), color-mix(in oklab, var(--b) 12%, var(--fx-surface)));
+  box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--b) 45%, transparent), 0 4px 8px -4px color-mix(in oklab, var(--b) 50%, transparent);
+}
+
+/* 回环箭头：放在一排下面，右端往下拐回左端、左端箭头朝上（闭环、螺旋上升）；<span> 里写说明 */
+.fx-loop {
+  --b: var(--fx-tone, var(--fx-1));
+  position: relative;
+  height: 52px;
+  margin-top: 18px;
+  border: 4px solid var(--b);
+  border-top: 0;
+  border-radius: 0 0 28px 28px;
+}
+
+.fx-loop::before {
+  content: "";
+  position: absolute;
+  left: -13px;
+  top: -18px;
+  width: 22px;
+  height: 20px;
+  background: conic-gradient(from 145deg at 50% 0, var(--b) 0 70deg, transparent 0);
+}
+
+.fx-loop > span {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+  padding: 6px 22px;
+  border-radius: 999px;
+  background: var(--fx-surface);
+  box-shadow: inset 0 0 0 2.5px var(--b), 0 6px 14px -6px color-mix(in oklab, var(--b) 60%, transparent);
+  color: color-mix(in oklab, var(--b) 75%, var(--fx-ink));
+  font: 800 calc(17.6px * var(--dg-scale, 1.25)) / 1.3 var(--fx-font);
+  white-space: nowrap;
+}
+
+/* 转变：<div class="fx-shift"><span>原来</span><span>现在</span></div>，灰框 → 红色立体块 */
+.fx-shift {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 2px dashed color-mix(in oklab, var(--fx-1) 30%, transparent);
+  border-radius: 16px;
+  background: var(--fx-surface);
+}
+
+.fx-shift > :first-child {
+  padding: 12px 8px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--fx-1) 7%, var(--fx-surface));
+  color: var(--fx-muted);
+  font: 700 calc(16px * var(--dg-scale, 1.25)) / 1.3 var(--fx-font);
+  text-align: center;
+}
+
+.fx-shift::before {
+  content: "";
+  order: 1;
+  height: 34px;
+  background:
+    linear-gradient(var(--fx-2), var(--fx-2)) 0 50% / calc(100% - 16px) 10px no-repeat,
+    conic-gradient(from 225deg at 100% 50%, var(--fx-2) 0 90deg, transparent 0) 100% 50% / 18px 34px no-repeat;
+}
+
+.fx-shift > :last-child {
+  --b: var(--fx-tone, var(--fx-2));
+  order: 2;
+  padding: 12px 8px;
+  border-radius: 10px;
+  color: #fff;
+  font: 800 calc(16px * var(--dg-scale, 1.25)) / 1.3 var(--fx-display);
+  text-align: center;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--b) 72%, white), var(--b) 55%, color-mix(in oklab, var(--b) 85%, black));
+  box-shadow: 0 5px 0 color-mix(in oklab, var(--b) 58%, black);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+}
+
+/* 排版帮手：整页竖排、页头居中、一栏从上到下、层间那一排（箭头 + 横幅）、问题→内容→目标对照表 */
+.fx-wrap {
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 48px 56px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.fx-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.fx-head > p {
+  margin: 0;
+  color: var(--fx-muted);
+  font: 600 calc(16px * var(--dg-scale, 1.25)) / 1.4 var(--fx-font);
+}
+
+.fx-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fx-col > .fx-card { flex: 1; }
+.fx-col > :is(.fx-tag, .fx-gem) { align-self: center; }
+
+.fx-bridge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  margin-block: 26px;
+}
+
+.fx-map {
+  display: grid;
+  grid-template-columns: var(--fx-cols, minmax(0, 1fr) 64px minmax(0, 1.25fr) 64px minmax(0, 1.1fr));
+  gap: 16px 14px;
+  align-items: center;
+}
+
+.fx-map > .fx-arrow { justify-self: center; }
+
+/* 一节 = 左边竖条 + 右边内容 */
+.fx-sec {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 22px;
+}
+
+/* 等宽几栏，栏和栏之间自动画一个粗箭头（箭头在栏高的 --fx-at 处，默认正中） */
+.fx-flow {
+  --fx-gap: 56px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: var(--fx-gap);
+}
+
+.fx-flow > * {
+  position: relative;
+  min-width: 0;
+}
+
+.fx-flow > * + *::before {
+  --b: var(--fx-tone, var(--fx-1));
+  content: "";
+  position: absolute;
+  right: calc(100% + 6px);
+  top: calc(var(--fx-at, 50%) - 20px);
+  width: calc(var(--fx-gap) - 12px);
+  height: 40px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--b) 30%, white), var(--b)) 0 50% / calc(100% - 18px) 16px no-repeat,
+    conic-gradient(from 225deg at 100% 50%, var(--b) 0 90deg, transparent 0) 100% 50% / 20px 40px no-repeat;
+}

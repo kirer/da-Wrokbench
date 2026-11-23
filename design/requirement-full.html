@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>需求全量页 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  .rf-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+  .rf-head .lft { flex: 1; min-width: 0; }
+  .rf-head .l1 { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .rf-head .l1 .code { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+  .rf-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 2px 0 10px; }
+  .rf-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-3); }
+  .rf-meta .it { display: flex; align-items: center; gap: 6px; }
+  .rf-meta b { color: var(--text-2); font-weight: 500; }
+  .spec-line { font-size: 13px; color: var(--text-2); line-height: var(--lh-loose); }
+  .spec-line b { color: var(--text); font-weight: 500; }
+  .shot3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .shot { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
+  .shot .img { height: 60px; background: linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 16px, linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%, var(--surface-2); display: flex; align-items: center; justify-content: center; }
+  .shot .img .wf { width: 48px; height: 36px; border: 1px solid var(--line-3); border-radius: 4px; background: var(--surface); display: flex; flex-direction: column; gap: 3px; padding: 5px; }
+  .shot .img .wf i { height: 4px; background: var(--line-3); border-radius: 2px; display: block; }
+  .shot .img .wf i:first-child { width: 50%; height: 6px; background: var(--primary-line); }
+  .shot .cap { padding: 5px 7px; font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 5px; border-top: 1px solid var(--line); }
+  .vline { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+  .vline:last-child { border-bottom: 0; }
+  .vline .v { font-family: var(--font-mono); color: var(--text-2); width: 26px; }
+  .vline .d { color: var(--text-3); }
+  .sub-label { font-size: 12px; color: var(--text-3); margin: 12px 0 8px; display: flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="traffic"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i></div>
+
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="logo">
+        <svg class="logo-mark"><use href="icons.svg#i-logo"></use></svg>
+        <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+        <svg class="logo-collapse ic"><use href="icons.svg#i-panel"></use></svg>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item plugin-entry active" href="iterations.html"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台<span class="badge badge--live" style="margin-left:auto">插件</span></a>
+    </nav>
+    <div class="rail-ph">
+      <div class="h"><svg><use href="icons.svg#i-panel"></use></svg>DSH 原生侧栏 · 占位</div>
+      <p>新会话、插件市场、自动化任务、工作区列表、身份等由 DSH 提供，不在本插件设计范围内。</p>
+      <div class="lines"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="identity ph-id"><span class="avatar">·</span><div class="who"><div class="n">当前用户</div><div class="r">DSH 身份 · 占位</div></div></div>
+  </aside>
+
+  <main class="center">
+    <div class="topbar">
+      <div class="plugnac">
+        <span class="plugnac-title"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台</span>
+        <span class="plugnac-sep"></span>
+        <a class="active" href="iterations.html">迭代列表</a>
+        <a href="my-workbench.html">我的工作台</a>
+        <a href="skill-library.html">技能库</a>
+        <a href="settings.html">设置</a>
+        <a href="notifications.html">通知</a>
+      </div>
+      <div class="spacer"></div>
+      <a class="btn btn-sm btn-ghost" href="iteration-detail.html"><svg><use href="icons.svg#i-chev-left"></use></svg>返回迭代</a>
+      <a class="btn btn-sm btn-ghost" href="requirement-workbench.html"><svg><use href="icons.svg#i-external"></use></svg>会话 / Design Studio</a>
+      <span class="badge badge--live"><svg class="ic" style="width:11px"><use href="icons.svg#i-check-circle"></use></svg>只读 · 已提交版本</span>
+      <button class="theme-toggle" data-theme-toggle title="切换主题"><svg class="sun"><use href="icons.svg#i-sun"></use></svg><svg class="moon"><use href="icons.svg#i-moon"></use></svg></button>
+    </div>
+
+    <div class="scroll">
+      <div class="page" style="max-width:1180px">
+        <div class="rf-head">
+          <div class="lft">
+            <div class="l1"><span class="code">S11-001</span><span class="chip chip--prog"><span class="gl">◐</span>已排期</span><span class="chip chip--warn"><span class="gl">◷</span>设计已更新</span></div>
+            <h1>会员积分改版</h1>
+            <div class="rf-meta">
+              <span class="it">迭代 <b>2026-S11</b></span>
+              <span class="it">产品 <span class="assignee"><span class="avatar sm av-2">李</span><b>李四</b></span></span>
+              <span class="it">设计 <span class="assignee"><span class="avatar sm av-3">王</span><b>王五</b></span></span>
+              <span class="it">优先级 <span class="chip chip--warn">P1</span></span>
+              <span class="it">设计状态 <span class="chip chip--warn"><span class="gl">◷</span>设计已更新</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="banner banner--info" style="margin-bottom:16px"><svg><use href="icons.svg#i-lock"></use></svg><span>这是需求的沉淀视图，只有<b>已提交 / 已交付</b>的版本在这里；草稿留在本地不出现。写操作都在会话里由 skill 完成。</span></div>
+
+        <div class="cardwall">
+          <!-- 总述 + 需求版本历史 -->
+          <div class="dcard2 span2">
+            <div class="ch"><svg class="ic"><use href="icons.svg#i-file"></use></svg><span class="t">总述</span><span class="r"><span class="badge badge--live">需求 v3 · 最新</span><button class="btn btn-sm btn-text">历史</button></span></div>
+            <div class="spec-line">
+              <p style="margin:0 0 6px"><b>背景：</b>近三月日活下滑 8%，签到与复购偏低，需要积分体系拉动。</p>
+              <p style="margin:0 0 6px"><b>目标：</b>上线后 30 天签到率 +15%，积分核销率 ≥ 20%。</p>
+              <p style="margin:0">抵扣上限从 10% 调整为 20%；积分有效期 12 个月，到期前 7 天提醒。</p>
+            </div>
+            <div class="sub-label"><svg class="ic" style="width:13px"><use href="icons.svg#i-history"></use></svg>需求版本历史</div>
+            <div>
+              <div class="vline"><span class="v">v3</span><span class="d">抵扣上限 / 过期提醒</span><span class="badge" style="margin-left:auto">最新</span></div>
+              <div class="vline"><span class="v">v2</span><span class="d">增加过期规则</span></div>
+              <div class="vline"><span class="v">v1</span><span class="d">初稿</span></div>
+            </div>
+          </div>
+
+          <!-- 原型 + 原型版本历史（v2 最新，不混需求 v3） -->
+          <div class="dcard2">
+            <div class="ch"><svg class="ic"><use href="icons.svg#i-workbench"></use></svg><span class="t">原型</span><span class="r"><span class="badge">原型 v2 · 最新</span><a class="btn btn-sm btn-text" href="requirement-workbench.html"><svg><use href="icons.svg#i-external"></use></svg>打开</a></span></div>
+            <div class="canvas-preview"><div class="bar"><span class="dots"><i></i><i></i><i></i></span>prototype v2</div><div class="stage" style="height:80px"><div class="wire" style="width:118px;height:60px"><i></i><i></i><i></i></div></div></div>
+            <div class="sub-label"><svg class="ic" style="width:13px"><use href="icons.svg#i-history"></use></svg>原型版本历史</div>
+            <div>
+              <div class="vline"><span class="v">v2</span><span class="d">补充规则弹窗</span><span class="badge" style="margin-left:auto">最新</span></div>
+              <div class="vline"><span class="v">v1</span><span class="d">初稿</span></div>
+            </div>
+          </div>
+
+          <!-- 设计稿 + 人员 + 打开 + 设计组件 + 设计系统 + 进入设计会话 -->
+          <div class="dcard2">
+            <div class="ch"><svg class="ic"><use href="icons.svg#i-package"></use></svg><span class="t">设计稿</span><span class="r"><span class="assignee"><span class="avatar sm av-3">王</span>王五</span><span class="chip chip--warn"><span class="gl">◷</span>v3 已更新</span><a class="btn btn-sm btn-text" href="design-workbench.html"><svg><use href="icons.svg#i-external"></use></svg>打开</a></span></div>
+            <div class="shot3">
+              <div class="shot"><div class="img"><div class="wf"><i></i><i></i><i></i></div></div><div class="cap">积分卡片</div></div>
+              <div class="shot"><div class="img"><div class="wf"><i></i><i></i></div></div><div class="cap">规则弹窗</div></div>
+              <div class="shot"><div class="img"><div class="wf"><i></i><i></i><i></i></div></div><div class="cap">过期提醒</div></div>
+            </div>
+            <div class="sub-label"><svg class="ic" style="width:13px"><use href="icons.svg#i-tag"></use></svg>设计组件 · 部门设计系统</div>
+            <div class="row gap-2 wrap"><span class="chip chip--plain">积分卡片</span><span class="chip chip--plain">规则弹窗</span><span class="chip chip--plain">进度条</span><span class="chip chip--plain">状态 chip</span><span class="chip chip--plain">Toast</span></div>
+            <div class="tiny" style="color:var(--amber)">设计晚于开发更新，影响 Web / iOS，需评估返工。</div>
+            <div class="foot" style="border-top:1px dashed var(--line);padding-top:9px"><span class="tiny muted">设计版本历史见设计会话</span><a class="btn btn-sm btn-ghost" style="margin-left:auto" href="design-workbench.html"><svg><use href="icons.svg#i-workbench"></use></svg>进入设计会话</a></div>
+          </div>
+        </div>
+
+        <!-- 各端：按组分区，每端一张卡；不涉及折叠 -->
+        <div class="endsec">
+          <div class="endsec-h"><span class="t">服务端组</span><span class="n">3</span><div class="r" style="margin-left:auto"><span class="tiny muted">接口文档 / commits / 下游依赖</span></div></div>
+          <div class="egrid">
+            <div class="endcard2">
+              <div class="eh"><span class="nm">服务端 · 交易服务端</span><span class="st chip chip--prog"><span class="gl">◐</span>开发中</span></div>
+              <div class="kv2">
+                <dt>负责人</dt><dd><span class="avatar sm av-4">赵</span>赵六</dd>
+                <dt>时间</dt><dd>计划 11-10→11-18 · 实际 11-12 开始</dd>
+                <dt>关键产物</dt><dd>接口文档 <b class="mono" style="font-weight:500">v1.2</b> 已就绪 · 3 commits / 1 MR</dd>
+                <dt>下游依赖</dt><dd>Web、iOS 依赖此接口</dd>
+              </div>
+              <div class="foot"><a class="btn btn-sm btn-ghost" href="requirement-workbench.html">进入会话</a><span class="upd">赵六 · 2 小时前</span></div>
+            </div>
+            <div class="endcard2">
+              <div class="eh"><span class="nm">服务端 · 商品服务端</span><span class="st chip chip--prog"><span class="gl">◐</span>开发中</span></div>
+              <div class="kv2">
+                <dt>负责人</dt><dd><span class="avatar sm av-5">孙</span>孙八</dd>
+                <dt>时间</dt><dd>计划 11-10→11-20 · 预计 11-21</dd>
+                <dt>关键产物</dt><dd>接口文档 <b class="mono" style="font-weight:500">v1.0</b> 已就绪 · 2 commits</dd>
+                <dt>下游依赖</dt><dd>Web 依赖此接口</dd>
+              </div>
+              <div class="risk"><svg class="ic" style="width:12px"><use href="icons.svg#i-alert"></use></svg>接口字段待确认，可能影响 Web</div>
+              <div class="foot"><a class="btn btn-sm btn-ghost" href="requirement-workbench.html">进入会话</a><span class="upd">孙八 · 昨天</span></div>
+            </div>
+            <div class="endcard2">
+              <div class="eh"><span class="nm">服务端 · 用户服务端</span><span class="st chip chip--idle"><span class="gl">○</span>待认领</span></div>
+              <div class="kv2">
+                <dt>负责人</dt><dd class="muted">待认领 · 进入会话认领</dd>
+                <dt>时间</dt><dd>计划 11-12→11-20</dd>
+                <dt>关键产物</dt><dd>接口文档 草稿</dd>
+                <dt>依赖/阻塞</dt><dd class="chip chip--block" style="display:inline-flex;height:18px"><span class="gl">!</span>等待交易服务端接口</dd>
+              </div>
+              <div class="foot"><a class="btn btn-sm btn-ghost" href="requirement-workbench.html">进入会话认领</a><span class="upd">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="endsec">
+          <div class="endsec-h"><span class="t">前端 / 客户端组</span><span class="n">2</span><div class="r" style="margin-left:auto"><span class="tiny muted">设计版本 / 接口就绪 / 目标端</span></div></div>
+          <div class="egrid">
+            <div class="endcard2">
+              <div class="eh"><span class="nm">前端 · Web</span><span class="st chip chip--prog"><span class="gl">◐</span>开发中</span></div>
+              <div class="kv2">
+                <dt>负责人</dt><dd><span class="avatar sm av-5">孙</span>孙八</dd>
+                <dt>目标端</dt><dd>Web（Chrome / Safari）</dd>
+                <dt>关键产物</dt><dd>设计稿 v3 · 接口 交易/商品 已就绪 · 1 commit</dd>
+                <dt>依赖/阻塞</dt><dd class="chip chip--warn" style="display:inline-flex;height:18px"><span class="gl">◷</span>设计 v3 晚到，需返工评估</dd>
+              </div>
+              <div class="foot"><a class="btn btn-sm btn-ghost" href="requirement-workbench.html">进入会话</a><span class="upd">孙八 · 昨天</span></div>
+            </div>
+            <div class="endcard2">
+              <div class="eh"><span class="nm">客户端 · iOS</span><span class="st chip chip--idle"><span class="gl">○</span>待认领</span></div>
+              <div class="kv2">
+                <dt>负责人</dt><dd class="muted">待认领 · 进入会话认领</dd>
+                <dt>目标端</dt><dd>iOS 15+</dd>
+                <dt>关键产物</dt><dd>设计稿 v3 · 接口待交易服务端</dd>
+                <dt>依赖/阻塞</dt><dd>依赖交易服务端接口</dd>
+              </div>
+              <div class="foot"><a class="btn btn-sm btn-ghost" href="requirement-workbench.html">进入会话认领</a><span class="upd">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="endsec">
+          <div class="endsec-h"><span class="t">测试组</span><span class="n">1</span><div class="r" style="margin-left:auto"><span class="tiny muted">用例 / Bug / 提测环境</span></div></div>
+          <div class="egrid">
+            <div class="endcard2">
+              <div class="eh"><span class="nm">测试</span><span class="st chip chip--idle"><span class="gl">○</span>未开始</span></div>
+              <div class="kv2">
+                <dt>负责人</dt><dd><span class="avatar sm av-6">钱</span>钱七</dd>
+                <dt>用例</dt><dd>0 / 48 就绪</dd>
+                <dt>Bug</dt><dd>阻塞 0 · 待复测 0 · 已关闭 0</dd>
+                <dt>提测环境</dt><dd>预发（待服务端提测）</dd>
+              </div>
+              <div class="foot"><a class="btn btn-sm btn-ghost" href="requirement-workbench.html">进入会话</a><span class="upd">钱七 · 今天</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="narep" style="margin-bottom:20px"><svg><use href="icons.svg#i-minus"></use></svg>不涉及：安卓、鸿蒙（产品已确认，本需求不改）</div>
+
+        <!-- 需求日志 -->
+        <div class="dcard2">
+          <div class="ch"><svg class="ic"><use href="icons.svg#i-history"></use></svg><span class="t">需求日志</span><span class="r tiny muted">谁在什么时候做了什么</span></div>
+          <div class="card-bd" style="padding:6px 0">
+            <div class="log-item"><span class="avatar sm av-3">王</span><div class="c"><div class="l1"><b>王五</b> 交付设计 v3（积分过期提醒）</div><div class="l2">今天 10:24 · 设计交付 · 标记「设计已更新」</div></div></div>
+            <div class="log-item"><span class="avatar sm av-4">赵</span><div class="c"><div class="l1"><b>赵六</b> 提交交易服务端接口</div><div class="l2">今天 09:12 · 开发提交 · 3 commits</div></div></div>
+            <div class="log-item"><span class="avatar sm av-2">李</span><div class="c"><div class="l1"><b>李四</b> 变更需求总述 v3（抵扣上限 20%）</div><div class="l2">昨天 17:30 · 需求变更</div></div></div>
+            <div class="log-item"><span class="avatar sm av-1">张</span><div class="c"><div class="l1"><b>张三</b> 评审通过，排期进入 S11</div><div class="l2">11-02 14:00 · 评审通过（会话内完成）</div></div></div>
+          </div>
+        </div>
+
+        <div class="state-band">
+          <div class="cap">页面状态 · 变体</div>
+          <div class="state-cards">
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-package"></use></svg>无设计</div><div class="bd"><div class="msg"><svg style="color:var(--text-3)"><use href="icons.svg#i-package"></use></svg>无需设计</div><div class="tiny muted">不显示设计卡</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-clock"></use></svg>设计未交付</div><div class="bd"><div class="msg"><svg style="color:var(--text-3)"><use href="icons.svg#i-clock"></use></svg>设计中</div><div class="tiny muted">不显示空白</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-alert"></use></svg>设计已更新</div><div class="bd"><div class="msg warn"><svg><use href="icons.svg#i-alert"></use></svg>v3 晚于开发</div><div class="tiny muted">提示评估返工</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-minus"></use></svg>不涉及折叠</div><div class="bd"><div class="msg"><svg style="color:var(--text-3)"><use href="icons.svg#i-minus"></use></svg>安卓、鸿蒙</div><div class="tiny muted">一行折叠，不占整卡</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

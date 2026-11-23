@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="dsh-design" content="web">
+<title>通知中心 · DSH 研发工作台</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  .notif { display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); position: relative; }
+  .notif:last-child { border-bottom: 0; }
+  .notif.unread { background: var(--primary-bg); }
+  .notif.unread::before { content: ""; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+  .notif .ico { width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--text-2); flex: none; }
+  .notif .ico svg { width: 15px; height: 15px; }
+  .notif .c { flex: 1; min-width: 0; }
+  .notif .c .t { font-size: var(--fs-13); color: var(--text); line-height: var(--lh-snug); }
+  .notif .c .t b { font-weight: var(--fw-semi); }
+  .notif .c .s { font-size: var(--fs-11); color: var(--text-3); margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+  .notif .rt { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex: none; }
+  .notif .rt .time { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+  .sim { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 13px 14px; margin-bottom: 18px; }
+  .sim .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .sim .hd .t { font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--text); }
+  .sim .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="traffic"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i></div>
+
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="logo">
+        <svg class="logo-mark"><use href="icons.svg#i-logo"></use></svg>
+        <span class="logo-name">deepseek</span><span class="logo-badge">HARNESS</span>
+        <svg class="logo-collapse ic"><use href="icons.svg#i-panel"></use></svg>
+      </div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item plugin-entry active" href="iterations.html"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台<span class="badge badge--live" style="margin-left:auto">插件</span></a>
+    </nav>
+    <div class="rail-ph">
+      <div class="h"><svg><use href="icons.svg#i-panel"></use></svg>DSH 原生侧栏 · 占位</div>
+      <p>新会话、插件市场、自动化任务、工作区列表、身份等由 DSH 提供，不在本插件设计范围内。</p>
+      <div class="lines"><i></i><i></i><i></i><i></i></div>
+    </div>
+    <div class="identity ph-id">
+      <span class="avatar">·</span>
+      <div class="who"><div class="n">当前用户</div><div class="r">DSH 身份 · 占位</div></div>
+    </div>
+  </aside>
+
+  <main class="center">
+    <div class="topbar">
+      <div class="plugnac"><span class="plugnac-title"><svg><use href="icons.svg#i-workbench"></use></svg>研发工作台</span><span class="plugnac-sep"></span><a href="iterations.html">迭代列表</a><a href="my-workbench.html">我的工作台</a><a href="skill-library.html">技能库</a><a href="settings.html">设置</a><a class="active" href="notifications.html">通知</a></div>
+      <div class="spacer"></div>
+      <button class="theme-toggle" data-theme-toggle title="切换主题"><svg class="sun"><use href="icons.svg#i-sun"></use></svg><svg class="moon"><use href="icons.svg#i-moon"></use></svg></button>
+      <button class="btn btn-sm">全部标为已读</button>
+    </div>
+
+    <div class="scroll">
+      <div class="page" style="max-width:920px">
+        <div class="page-head">
+          <div class="ttl-block"><h1 class="page-title">通知中心</h1><div class="page-sub">2 条未读 · 共 6 条 · 指派 / 变更 / 交付 / 系统</div></div>
+        </div>
+
+        <div class="sim">
+          <div class="hd"><span class="badge badge--mock"><svg class="ic" style="width:11px"><use href="icons.svg#i-shield"></use></svg>Mock</span><span class="t">通知模拟器</span><span class="tiny muted" style="margin-left:auto">第一版用于演示，不会真实发送钉钉</span></div>
+          <div class="btns">
+            <button class="btn btn-sm"><svg><use href="icons.svg#i-user"></use></svg>模拟设计指派</button>
+            <button class="btn btn-sm"><svg><use href="icons.svg#i-edit"></use></svg>模拟需求变更</button>
+            <button class="btn btn-sm"><svg><use href="icons.svg#i-package"></use></svg>模拟设计交付</button>
+            <button class="btn btn-sm"><svg><use href="icons.svg#i-bell"></use></svg>模拟系统消息</button>
+            <button class="btn btn-sm"><svg><use href="icons.svg#i-file"></use></svg>模拟需求提交</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="seg"><button class="active">全部</button><button>未读 2</button><button>指派</button><button>变更</button><button>系统</button></div>
+        </div>
+
+        <div class="card"><div class="card-bd" style="padding:0">
+          <div class="notif unread" data-href="design-workbench.html">
+            <span class="ico" style="color:var(--violet)"><svg><use href="icons.svg#i-package"></use></svg></span>
+            <div class="c"><div class="t"><b>王五</b> 交付了 <b>S11-003 会员中心改版</b> 的设计 v2</div><div class="s"><span>设计交付</span><span>·</span><span>影响开发：iOS / Web 可开始</span></div></div>
+            <div class="rt"><span class="time">10:24</span><a class="btn btn-sm" href="design-workbench.html">查看</a></div>
+          </div>
+          <div class="notif unread" data-href="requirement-full.html">
+            <span class="ico" style="color:var(--amber)"><svg><use href="icons.svg#i-clock"></use></svg></span>
+            <div class="c"><div class="t"><b>李四</b> 提交了 <b>S11-002 积分规则说明页</b>，待你评审</div><div class="s"><span>待评审</span><span>·</span><span>无需设计</span></div></div>
+            <div class="rt"><span class="time">09:58</span><a class="btn btn-sm" href="requirement-workbench.html">进入会话评审</a></div>
+          </div>
+          <div class="notif" data-href="design-workbench.html">
+            <span class="ico" style="color:var(--red)"><svg><use href="icons.svg#i-alert"></use></svg></span>
+            <div class="c"><div class="t"><b>张三</b> 退回了 <b>S11-005 生日礼包弹窗</b> 的设计，需补充空状态</div><div class="s"><span>设计退回</span><span>·</span><span>指派给 王五</span></div></div>
+            <div class="rt"><span class="time">09:12</span><a class="btn btn-sm btn-ghost" href="design-workbench.html">查看</a></div>
+          </div>
+          <div class="notif" data-href="iteration-detail.html">
+            <span class="ico"><svg style="color:var(--text-3)"><use href="icons.svg#i-check-circle"></use></svg></span>
+            <div class="c"><div class="t"><b>S10 会员体系升级</b> 已封板</div><div class="s"><span>系统消息</span><span>·</span><span>9 需求 · 全部完成</span></div></div>
+            <div class="rt"><span class="time">昨天 18:00</span></div>
+          </div>
+          <div class="notif" data-href="requirement-full.html">
+            <span class="ico" style="color:var(--amber)"><svg><use href="icons.svg#i-edit"></use></svg></span>
+            <div class="c"><div class="t"><b>李四</b> 变更了 <b>S11-001 会员积分改版</b> 的需求总述 v3</div><div class="s"><span>需求变更</span><span>·</span><span>抵扣上限 → 20%</span></div></div>
+            <div class="rt"><span class="time">昨天 17:30</span><a class="btn btn-sm btn-ghost" href="requirement-full.html">查看</a></div>
+          </div>
+          <div class="notif" data-href="iteration-detail.html">
+            <span class="ico"><svg style="color:var(--text-3)"><use href="icons.svg#i-lock"></use></svg></span>
+            <div class="c"><div class="t"><b>张三</b> 锁定了 <b>2026-S11</b> 迭代范围（12 个需求）</div><div class="s"><span>系统消息</span><span>·</span><span>范围锁定</span></div></div>
+            <div class="rt"><span class="time">11-01 09:00</span></div>
+          </div>
+        </div></div>
+
+        <div class="state-band">
+          <div class="cap">页面状态 · 变体</div>
+          <div class="state-cards">
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-inbox"></use></svg>空态</div><div class="bd"><div class="msg"><svg style="color:var(--text-3)"><use href="icons.svg#i-bell"></use></svg>没有通知</div><div class="tiny muted">有指派 / 变更时会提醒</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-dot"></use></svg>未读</div><div class="bd"><div class="msg"><svg style="color:var(--primary)"><use href="icons.svg#i-dot"></use></svg>2 条未读</div><div class="tiny muted">左侧圆点 + 底色</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-shield"></use></svg>Mock 通知</div><div class="bd"><div class="msg"><svg style="color:var(--amber)"><use href="icons.svg#i-shield"></use></svg>模拟推送</div><div class="tiny muted">标 Mock，不真发</div></div></div>
+            <div class="state-prev"><div class="h"><svg><use href="icons.svg#i-refresh"></use></svg>加载中</div><div class="bd"><div class="ln w80"></div><div class="ln w60"></div><div class="ln w40"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
