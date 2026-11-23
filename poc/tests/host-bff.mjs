@@ -175,6 +175,36 @@ try {
     method: 'POST', cookie: lisiCookie, headers: browserLoginHeaders, body: { title: '产品可以新建需求' },
   })
   check('产品可以新建需求', productCreate.status === 201, `HTTP ${productCreate.status}`)
+  const productState = await jsonFetch('/dsh-workbench/api/state', { cookie: lisiCookie })
+  const createdRequirement = (productState.data?.requirements ?? []).find(item => item.title === '产品可以新建需求')
+  check(
+    '需求目录按名称命名，不带编号',
+    String(createdRequirement?.folderPath ?? '').endsWith('/产品可以新建需求'),
+    createdRequirement?.folderPath ?? '',
+  )
+  const sessionRoot = path.join(WORKBENCH_BASE, 'ITER-TEST')
+  const artifactDir = path.join(sessionRoot, '资料目录')
+  fs.mkdirSync(sessionRoot, { recursive: true })
+  const sessionRecord = await jsonFetch(`/dsh-workbench/api/requirements/${encodeURIComponent(createdRequirement.id)}/sessions`, {
+    method: 'POST',
+    cookie: lisiCookie,
+    headers: browserLoginHeaders,
+    body: {
+      type: 'requirement',
+      label: '需求会话',
+      dshSessionId: 'bff-dsh-session',
+      workspaceId: 'bff-workspace',
+      folderPath: sessionRoot,
+      requirementFolder: artifactDir,
+    },
+  })
+  check(
+    '会话可挂在迭代目录、资料目录单独记录',
+    sessionRecord.status === 200
+      && sessionRecord.data?.requirement?.folderPath === artifactDir
+      && (sessionRecord.data?.requirement?.sessions ?? []).some(item => item.folderPath === sessionRoot),
+    sessionRecord.text,
+  )
   const crossClaim = await jsonFetch('/dsh-workbench/api/sessions/claim', {
     method: 'POST', cookie: zhangsanLogin.cookie, body: { sessionId }, headers: { origin: bff.base },
   })
@@ -198,6 +228,25 @@ try {
   const put = await jsonFetch('/dsh-workbench/api/state', { method: 'PUT', cookie: lisiCookie, body: {} })
   check('代理只允许 GET/HEAD/POST', put.status === 405, `HTTP ${put.status}`)
 
+  console.log('== 预览票据 ==')
+  const ticketAnonymous = await jsonFetch('/dsh-workbench/api/preview-ticket', {
+    method: 'POST', body: { requirementId: 'req-x' },
+  })
+  check('未登录不能换预览票据', ticketAnonymous.status === 401, `HTTP ${ticketAnonymous.status}`)
+  const ticketBad = await jsonFetch('/dsh-workbench/api/preview-ticket', {
+    method: 'POST', cookie: lisiCookie, body: {}, headers: { origin: bff.base },
+  })
+  check('缺少需求 ID 时拒绝换票', ticketBad.status === 400, `HTTP ${ticketBad.status}`)
+  const ticketOk = await jsonFetch('/dsh-workbench/api/preview-ticket', {
+    method: 'POST', cookie: lisiCookie, body: { requirementId: createdRequirement.id }, headers: { origin: bff.base },
+  })
+  const ticket = ticketOk.data?.tickets?.[createdRequirement.id]
+  check('登录后可按需求换预览票据', ticketOk.status === 200 && typeof ticket === 'string' && ticket.length > 20, ticketOk.text)
+  const forgedPreview = await jsonFetch(`/dsh-workbench/api/design-preview?requirementId=${encodeURIComponent(createdRequirement.id)}&path=prototype%2Fx.html&ticket=forged`)
+  check('伪造票据读不了预览', forgedPreview.status === 401, `HTTP ${forgedPreview.status}`)
+  const crossPreview = await jsonFetch(`/dsh-workbench/api/design-preview?requirementId=req-other&path=prototype%2Fx.html&ticket=${encodeURIComponent(String(ticket))}`)
+  check('票据不能读别的需求', crossPreview.status === 403, `HTTP ${crossPreview.status}`)
+
   console.log('== 本地文件夹边界 ==')
   const outside = await jsonFetch('/dsh-workbench/api/folders/ensure', {
     method: 'POST', cookie: lisiCookie, body: { parent: os.tmpdir(), name: 'escape' }, headers: { origin: bff.base },
@@ -214,6 +263,27 @@ try {
     '目录名穿越被消解在工作台内',
     traversal.status === 200 && (traversalPath.startsWith(WORKBENCH_BASE) || traversalPath.startsWith(realBase)),
     traversal.text,
+  )
+  const topLevel = await jsonFetch('/dsh-workbench/api/folders/ensure', {
+    method: 'POST', cookie: lisiCookie, body: { parent: WORKBENCH_BASE, name: 'ITER-TOP' }, headers: { origin: bff.base },
+  })
+  check(
+    '允许在顶级文件夹下建迭代目录',
+    topLevel.status === 200 && path.basename(String(topLevel.data?.path ?? '')) === 'ITER-TOP',
+    topLevel.text,
+  )
+  const sameName1 = await jsonFetch('/dsh-workbench/api/folders/ensure', {
+    method: 'POST', cookie: lisiCookie, body: { parent: iterationDir, name: '同名需求', unique: true }, headers: { origin: bff.base },
+  })
+  const sameName2 = await jsonFetch('/dsh-workbench/api/folders/ensure', {
+    method: 'POST', cookie: lisiCookie, body: { parent: iterationDir, name: '同名需求', unique: true }, headers: { origin: bff.base },
+  })
+  check(
+    '同名需求目录自动加序号',
+    sameName1.status === 200 && sameName2.status === 200
+      && path.basename(String(sameName1.data?.path ?? '')) === '同名需求'
+      && path.basename(String(sameName2.data?.path ?? '')) === '同名需求 (2)',
+    `${sameName1.text} ${sameName2.text}`,
   )
   const rootFolder = await jsonFetch('/dsh-workbench/api/onboarding/complete', {
     method: 'POST', cookie: lisiCookie, body: { topLevelFolder: '/', platformIds: [], activeRole: null }, headers: { origin: bff.base },

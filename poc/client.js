@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({
     let react = null
     try { react = require('react') } catch (_) { react = null }
 
-    const INJECT = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'sessions', 'workspaces', 'uiWorkspace', 'layout']
+    const INJECT = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'conversation']
     if (!react) {
       exports.apply = () => {}
       exports.inject = INJECT
@@ -2020,6 +2020,10 @@ window.__ModuleLoader__.load({
 .dsh-wb-canvas-empty b{color:var(--dsw-alias-label-primary);font-size:13px}
 .dsh-wb-canvas-empty p{max-width:300px;margin:0}
 .dsh-wb-canvas-empty-actions{display:flex;align-items:center;gap:6px;margin-top:4px}
+.dsh-wb-greet{display:flex;align-items:flex-start;gap:8px;padding:2px 2px 10px;max-width:640px;margin:0 auto;width:100%}
+.dsh-wb-greet-mark{flex:none;width:20px;height:20px;margin-top:2px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:9px;color:#fff;background:linear-gradient(135deg,#8ea0ff,#4d6bfe 55%,#3a55e0)}
+.dsh-wb-greet-bubble{min-width:0;display:flex;flex-direction:column;gap:3px;padding:8px 11px;border:1px solid var(--dsw-alias-border-l1);border-radius:2px 10px 10px 10px;background:var(--dsw-alias-bg-layer-1);font-size:11.5px;line-height:1.5;color:var(--dsw-alias-label-tertiary)}
+.dsh-wb-greet-bubble b{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary)}
 .dsh-wb-canvas-drawer{position:absolute;left:0;right:0;bottom:0;z-index:6;display:flex;flex-direction:column;max-height:62%;border-top:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);box-shadow:0 -12px 36px rgba(0,0,0,.28)}
 .dsh-wb-canvas-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;height:32px;padding:0 8px 0 10px;border-bottom:1px solid var(--dsw-alias-border-l1);font-size:11px;color:var(--dsw-alias-label-secondary)}
 .dsh-wb-canvas-drawer-body{flex:1;min-height:0;overflow:auto}
@@ -2740,28 +2744,69 @@ window.__ModuleLoader__.load({
       return String(title).replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 48)
     }
 
-    async function ensureChildDirectory(parent, name) {
+    async function ensureChildDirectory(parent, name, options = {}) {
       // The web surface has no native directory picker (`directory-picker/unavailable`),
       // so folder creation goes through the host half, which runs on the same machine.
       const body = await api('folders/ensure', {
         method: 'POST',
-        body: JSON.stringify({ parent, name }),
+        body: JSON.stringify({ parent, name, unique: options.unique === true }),
       })
       return body.path
     }
 
-    async function finishRequirementCreation(ctx, requirement, iterationDir) {
-      const folderPath = await ensureChildDirectory(iterationDir, `${requirement.code}-${slugTitle(requirement.title)}`)
-      // 原型和设计稿分开放：产品在 prototype/ 里出原型，设计师在 design/ 里出设计稿；
-      // 早期需求根目录直接放设计稿，读取时仍兼容。
-      await ensureChildDirectory(folderPath, 'prototype')
-      await ensureChildDirectory(folderPath, 'design')
-      const workspace = await ctx.workspaces.create({ path: folderPath })
-      const workspaceId = workspace.workspaceId
+    function splitDirectory(dirPath) {
+      const normalized = String(dirPath ?? '').replace(/\/+$/, '')
+      const cut = normalized.lastIndexOf('/')
+      if (cut <= 0 || cut === normalized.length - 1) return null
+      return { parent: normalized.slice(0, cut), name: normalized.slice(cut + 1) }
+    }
+
+    async function ensureIterationWorkspace(ctx, iterationDir, requirement) {
+      // 需求会话直接挂在迭代目录（如 workbench/436）的工作区里，不再给每条需求
+      // 单建一个工作区/文件夹；DSH 对同一路径幂等复用已登记的工作区。
+      const split = splitDirectory(iterationDir)
+      if (split !== null) await ensureChildDirectory(split.parent, split.name)
+      try {
+        const workspace = await ctx.workspaces.create({ path: iterationDir })
+        return { workspaceId: workspace.workspaceId, folderPath: iterationDir }
+      } catch (reason) {
+        if (reason?.rpcError?.code !== 'workspace/invalid-path') throw reason
+        // 退路：迭代目录无法作为工作区时，才建「迭代编码-需求名称」目录。
+        const name = `${split?.name ?? '迭代'}-${slugTitle(requirement.title)}`
+        const folderPath = await ensureChildDirectory(iterationDir, name, { unique: true })
+        const workspace = await ctx.workspaces.create({ path: folderPath })
+        return { workspaceId: workspace.workspaceId, folderPath }
+      }
+    }
+
+    async function finishRequirementCreation(ctx, requirement, state) {
+      const iterationDir = String(state.iterationDir ?? state.baseDir).replace(/\/+$/, '')
+      const baseDir = String(state.baseDir ?? '').replace(/\/+$/, '')
+      // 会话落在迭代目录下，标题就是需求名称；需求自己的原型/设计资料目录由右栏按需创建。
+      const ensured = iterationDir === baseDir
+        ? { workspaceId: null, folderPath: baseDir }
+        : await ensureIterationWorkspace(ctx, iterationDir, requirement)
+      let workspaceId = ensured.workspaceId
+      const folderPath = ensured.folderPath
+      if (!workspaceId) {
+        const workspace = await ctx.workspaces.create({ path: baseDir })
+        workspaceId = workspace.workspaceId
+      }
       const sessionId = await ctx.sessions.create({ workspaceId })
       await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
-        const result = await reference.binding.session.rename(`${requirement.code} ${requirement.title}`)
+        const result = await reference.binding.session.rename(requirement.title)
         if (result.ok !== true) throw new Error(result.error?.message || '会话标题设置失败')
+        // 新会话的输入框直接放一份需求描述模板：用户补全后发送，模型就按原型流程出图。
+        const input = ctx.conversation?.input
+        if (input?.requestDraftInitialization !== undefined) {
+          try {
+            input.requestDraftInitialization(reference.binding, {
+              prompt: requirementDescriptionPrompt(requirement, state),
+            })
+          } catch (reason) {
+            console.warn('[dsh-workbench] 需求描述模板写入失败', reason)
+          }
+        }
       })
       // 服务端只保存会话记录，不保存 DSH 会话 ID 和本机路径；两者由 host 半端写进本机映射。
       const recorded = await api(`requirements/${encodeURIComponent(requirement.id)}/sessions`, {
@@ -3563,10 +3608,11 @@ window.__ModuleLoader__.load({
           setStep('创建需求记录')
           const created = await api('requirements', { method: 'POST', body: JSON.stringify({ title: value }) })
           requirement = created.requirement
-          setStep('创建需求文件夹')
-          const done = await finishRequirementCreation(ctx, requirement, state.iterationDir ?? state.baseDir)
+          setStep('准备迭代目录')
+          const done = await finishRequirementCreation(ctx, requirement, state)
           setStep('打开会话')
           ctx.uiWorkspace.openSession(done.sessionId)
+          focusComposer()
           setTimeout(() => openRightTab(ctx), 350)
           onToast(`${done.requirement.code} ${done.requirement.title} 已创建`, false)
           onCreated(done.requirement)
@@ -3576,12 +3622,12 @@ window.__ModuleLoader__.load({
           setStep('')
           setBusy(false)
         }
-      }, [title, busy, ctx, onCreated, onToast, state.iterationDir, state.baseDir])
+      }, [title, busy, ctx, onCreated, onToast, state])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
           h('h2', { id: modal.titleId }, '新建需求'),
-          h('p', null, `迭代 ${state.iteration.code} · 只需填写需求名称。创建后自动在本地顶级文件夹下建目录、创建 DSH 会话，并打开右栏的需求与设计面板。`),
+          h('p', null, `迭代 ${state.iteration.code} · 只需填写需求名称。创建后自动在迭代目录下创建 DSH 会话，并打开右栏的需求与设计面板。`),
           h('input', {
             ref: inputRef,
             className: 'dsh-wb-input',
@@ -3634,6 +3680,8 @@ window.__ModuleLoader__.load({
             method: 'POST',
             body: JSON.stringify({ code: code.trim(), name: name.trim(), startDate, endDate }),
           })
+          // 迭代目录就是之后需求会话的工作区，建迭代时先把目录落好。
+          await ensureChildDirectory(state.baseDir, code.trim())
           await onReload()
           onToast(`迭代 ${code.trim()} 已创建并切换`, false)
           onClose()
@@ -3641,7 +3689,7 @@ window.__ModuleLoader__.load({
           setError(reason instanceof Error ? reason.message : String(reason))
           setBusy(false)
         }
-      }, [busy, code, name, startDate, endDate, onReload, onToast, onClose])
+      }, [busy, code, name, startDate, endDate, onReload, onToast, onClose, state.baseDir])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
@@ -3783,39 +3831,28 @@ window.__ModuleLoader__.load({
       const [step, setStep] = useState('')
       const [error, setError] = useState('')
       const modal = useModalBehavior(onClose, !busy)
-      const folderPath = requirement.folderPath
+      // 同一需求的后续会话也挂在迭代目录下，不另建需求工作区。
+      const sessionRoot = String(state.iterationDir ?? state.baseDir ?? '').replace(/\/+$/, '')
+      const baseDir = String(state.baseDir ?? '').replace(/\/+$/, '')
 
       const submit = useCallback(async () => {
-        if (busy || !folderPath) return
+        if (busy || sessionRoot === '') return
         setBusy(true)
         setError('')
         try {
-          // 种子需求或换机后的记录可能只有路径、没有目录；先按现有路径补齐，再建 DSH 工作区。
-          setStep('准备需求文件夹')
-          const normalized = String(folderPath).replace(/\/+$/, '')
-          const cut = normalized.lastIndexOf('/')
-          if (cut > 0 && cut < normalized.length - 1) {
-            await ensureChildDirectory(normalized.slice(0, cut), normalized.slice(cut + 1))
+          setStep('准备迭代目录')
+          const split = splitDirectory(sessionRoot)
+          if (sessionRoot !== baseDir && split !== null) {
+            await ensureChildDirectory(split.parent, split.name)
           }
           setStep('创建工作区')
-          let workspaceId = requirement.workspaceId
-          let sessionId
-          try {
-            if (!workspaceId) {
-              const workspace = await ctx.workspaces.create({ path: folderPath })
-              workspaceId = workspace.workspaceId
-            }
-            setStep('创建会话')
-            sessionId = await ctx.sessions.create({ workspaceId })
-          } catch (_) {
-            // 旧工作区可能已经不在当前 DSH profile；重新按需求文件夹建一个。
-            const workspace = await ctx.workspaces.create({ path: folderPath })
-            workspaceId = workspace.workspaceId
-            sessionId = await ctx.sessions.create({ workspaceId })
-          }
+          const workspace = await ctx.workspaces.create({ path: sessionRoot })
+          const workspaceId = workspace.workspaceId
+          setStep('创建会话')
+          const sessionId = await ctx.sessions.create({ workspaceId })
           setStep('设置会话标题')
           await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
-            const result = await reference.binding.session.rename(`${requirement.code} ${requirement.title} · ${sessionTypeLabel(type)}`)
+            const result = await reference.binding.session.rename(`${requirement.title} · ${sessionTypeLabel(type)}`)
             if (result.ok !== true) throw new Error(result.error?.message || '会话标题设置失败')
           })
           setStep('记录会话')
@@ -3826,7 +3863,7 @@ window.__ModuleLoader__.load({
               label: `${sessionTypeLabel(type)}会话`,
               dshSessionId: sessionId,
               workspaceId,
-              folderPath,
+              folderPath: sessionRoot,
             }),
           })
           ctx.uiWorkspace.openSession(sessionId)
@@ -3840,7 +3877,7 @@ window.__ModuleLoader__.load({
           setStep('')
           setBusy(false)
         }
-      }, [busy, folderPath, requirement, type, ctx, onCreated, onClose, onToast])
+      }, [busy, sessionRoot, baseDir, requirement, type, ctx, onCreated, onClose, onToast])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
@@ -3868,7 +3905,7 @@ window.__ModuleLoader__.load({
                     ? '评审会话里用 /req-review 给出评审结论；负责人可用 /req-schedule、/req-scope。'
                     : '需求会话里用 /req-submit 提交需求，之后在评审会话里用 /req-review 评审。',
           ),
-          h('div', { className: 'dsh-wb-note mono', style: { overflowWrap: 'anywhere' } }, folderPath ?? '需求文件夹还没有创建'),
+          h('div', { className: 'dsh-wb-note mono', style: { overflowWrap: 'anywhere' } }, `会话目录：${sessionRoot || '迭代目录尚未就绪'}`),
           busy ? h('div', { className: 'dsh-wb-progress' }, h('span', { className: 'dsh-wb-spinner' }), `${step}…`) : null,
           error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
           h('div', { className: 'dsh-wb-dialog-actions' },
@@ -3876,7 +3913,7 @@ window.__ModuleLoader__.load({
             h('button', {
               className: 'dsh-wb-btn dsh-wb-btn--primary',
               type: 'button',
-              disabled: busy || types.length === 0 || !folderPath,
+              disabled: busy || types.length === 0 || sessionRoot === '',
               onClick: () => { void submit() },
             }, busy ? '创建中…' : '创建会话'),
           ),
@@ -6808,7 +6845,7 @@ window.__ModuleLoader__.load({
       const retryCreate = useCallback(async (requirement) => {
         setRetrying(requirement.id)
         try {
-          const done = await finishRequirementCreation(ctx, requirement, state.iterationDir)
+          const done = await finishRequirementCreation(ctx, requirement, state)
           showToast(`${done.requirement.code} 已创建`, false)
           await workbench.reload()
           ctx.uiWorkspace.openSession(done.sessionId)
@@ -6820,7 +6857,7 @@ window.__ModuleLoader__.load({
         } finally {
           setRetrying('')
         }
-      }, [ctx, state?.iterationDir, showToast, workbench])
+      }, [ctx, state, showToast, workbench])
 
       const handleSessionCreated = async (requirement) => {
         setSessionFor(null)
@@ -7370,7 +7407,26 @@ window.__ModuleLoader__.load({
       const [opening, setOpening] = useState(false)
       useEffect(() => {
         setError('')
-        if (typeof sid !== 'string' || sid === '' || typeof targetPath !== 'string' || targetPath === '') return undefined
+        if (typeof sid !== 'string' || sid === '') return undefined
+        if (typeof targetPath !== 'string' || targetPath === '') {
+          // 开始页：关掉这个会话残留的预览（别的会话看过的设计），否则首页出不来。
+          let alive = true
+          void (async () => {
+            try {
+              const response = await fetch(`${DS_API}state?session=${encodeURIComponent(sid)}`, { cache: 'no-store' })
+              if (!response.ok) return
+              const current = await response.json()
+              if (!current || !current.target) return
+              if (!alive) return
+              await fetch(`${DS_API}close`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ session: sid }),
+              })
+            } catch (_) { /* 关不掉就让首页照常显示 */ }
+          })()
+          return () => { alive = false }
+        }
         let alive = true
         const run = async () => {
           try {
@@ -7410,6 +7466,47 @@ window.__ModuleLoader__.load({
       ].join('\n')
     }
 
+    // 新建需求后填进会话输入框的模板：先引导产品把需求讲清楚，再让模型直接出原型。
+    function requirementDescriptionPrompt(requirement, state) {
+      const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
+        .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
+        .join('；')
+      return [
+        '/design-start',
+        '',
+        `需求：${requirement.code}「${requirement.title}」`,
+        `平台：${platforms || '未设置'}`,
+        '',
+        '我先描述需求（补全下面几项后发送）：',
+        '- 目标用户：',
+        '- 核心场景：',
+        '- 关键页面 / 流程：',
+        '- 状态与边界：',
+        '- 验收标准：',
+        '',
+        '请按我补全后的描述直接做产品原型：一屏一个 HTML 写进 prototype/，写完调用 wb_preview_page 打开第一屏，让右侧画布直接出图。',
+      ].join('\n')
+    }
+
+    async function seedRequirementPrompt(ctx, sessionId, requirement, state) {
+      if (!sessionId || !requirement) return false
+      try {
+        return await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
+          const input = ctx.conversation?.input
+          if (input?.requestDraftInitialization === undefined) return false
+          // 默认 keep：输入框里已经有用户写的内容时不覆盖。
+          const result = input.requestDraftInitialization(reference.binding, {
+            prompt: requirementDescriptionPrompt(requirement, state),
+          })
+          if (result !== 'applied') console.warn('[dsh-workbench] 描述模板未写入输入框：', result)
+          return result === 'applied'
+        })
+      } catch (reason) {
+        console.warn('[dsh-workbench] 需求描述模板写入失败', reason)
+        return false
+      }
+    }
+
     function designInstruction(requirement, state) {
       const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
         .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
@@ -7427,7 +7524,31 @@ window.__ModuleLoader__.load({
       ].join('\n')
     }
 
-    function CanvasToolbar({ kindLabel, pathLabel, count, promptText, onRefresh, otherLabel, onOther, otherDisabled }) {
+    // 工作台会话开场白：需求会话还是空白时，在输入框上方显示一句固定的助手开场，
+    // 引导产品直接描述需求。不发模型请求，纯前端展示，发出第一条消息后自动收起。
+    // 新建需求时输入框里已经有描述模板，所以这里不看草稿内容。
+    function RequirementGreeting({ session, input }) {
+      const sid = typeof session?.sessionId === 'string' ? session.sessionId : ''
+      const { requirement } = useRequirementForSession(sid)
+      if (requirement === null || requirement === undefined) return null
+      if (session?.blank !== true) return null
+      if (input?.phase !== undefined && input.phase !== 'plain') return null
+      const design = requirement.sessions?.find?.(item => item.type === 'design' && item.sessionId === sid)
+      const text = design
+        ? '请描述这次要做的设计稿：页面、关键状态和参考风格。'
+        : '请描述你的需求。'
+      return h('div', { className: 'dsh-wb-greet' },
+        h('span', { className: 'dsh-wb-greet-mark', 'aria-hidden': true }, '◆'),
+        h('div', { className: 'dsh-wb-greet-bubble' },
+          h('b', null, text),
+          h('span', null, design
+            ? '补全后发送，模型会把一屏一个 HTML 写进 design/，右栏画布直接出图。'
+            : '补全后发送，模型会把一屏一个 HTML 写进 prototype/，右栏画布直接出图。'),
+        ),
+      )
+    }
+
+    function CanvasToolbar({ kindLabel, pathLabel, count, promptText, onRefresh, otherLabel, onOther, otherDisabled, onDescribe }) {
       const [notice, setNotice] = useState('')
       useEffect(() => {
         if (notice === '') return undefined
@@ -7445,6 +7566,7 @@ window.__ModuleLoader__.load({
         ),
         h('div', { className: 'dsh-wb-canvas-toolbar-actions' },
           notice !== '' ? h('span', { className: 'dsh-wb-canvas-notice' }, notice) : null,
+          onDescribe ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--primary', type: 'button', onClick: onDescribe }, '描述需求') : null,
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => { void copy() } }, '复制指令'),
           otherLabel ? h('button', {
             className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--ghost',
@@ -7480,10 +7602,57 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // 工作台的作品（按迭代分组）：喂给 Design Studio 的首页，代替它的「接着做」和模板。
+    // thumbKey 变化（预览票据换好）时重算，缩略图地址才会带上票据。
+    function startWorkGroups(state, thumbKey) {
+      const groups = []
+      for (const iteration of (state?.iterations ?? [])) {
+        if (iteration.archived === true) continue
+        const works = []
+        for (const requirement of iterationRequirements(state, iteration.id)) {
+          const prototypes = Array.isArray(requirement.prototypeFiles) ? requirement.prototypeFiles : []
+          const screens = Array.isArray(requirement.designScreens) ? requirement.designScreens : []
+          const items = prototypes.length > 0 ? prototypes : screens
+          if (items.length === 0) continue
+          works.push({
+            id: requirement.id,
+            code: requirement.code,
+            title: requirement.title,
+            screens: items.length,
+            updatedAt: items[0].updatedAt,
+            sessionId: typeof requirement.sessionId === 'string' ? requirement.sessionId : '',
+            thumb: designPreviewUrl(requirement.id, items[0]),
+          })
+        }
+        if (works.length > 0) groups.push({ iteration, works })
+      }
+      void thumbKey
+      return groups
+    }
+
     function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh }) {
       const studio = useDesignStudio()
       const t = useMemo(() => (studio.runtime ? studio.runtime.makeT(ctx) : key => key), [studio.runtime, ctx])
       const { error, opening } = useCanvasTarget(sid, targetPath)
+      const { state } = useWorkbench()
+      const workIds = useMemo(() => {
+        const ids = []
+        for (const iteration of (state?.iterations ?? [])) {
+          if (iteration.archived === true) continue
+          for (const requirement of iterationRequirements(state, iteration.id)) {
+            const count = (requirement.prototypeFiles?.length ?? 0) + (requirement.designScreens?.length ?? 0)
+            if (count > 0) ids.push(requirement.id)
+          }
+        }
+        return ids
+      }, [state])
+      // 首页缩略图走同源 design-preview：先把这些需求的预览票据换好，卡片才会出图。
+      const thumbKey = usePreviewTickets(workIds)
+      const groups = useMemo(() => startWorkGroups(state, thumbKey), [state, thumbKey])
+      const openWork = useCallback((work) => {
+        if (typeof work?.sessionId !== 'string' || work.sessionId === '') return
+        try { ctx.uiWorkspace.openSession(work.sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
+      }, [ctx])
       if (studio.error) {
         return h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '设计画布加载失败'),
@@ -7501,7 +7670,7 @@ window.__ModuleLoader__.load({
           error,
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: onRefresh }, '重试'),
         ) : null,
-        h(studio.runtime.PreviewTab, { sid, t }),
+        h(studio.runtime.PreviewTab, { sid, t, works: groups, onOpenWork: openWork }),
       )
     }
 
@@ -7520,8 +7689,8 @@ window.__ModuleLoader__.load({
         const timer = setTimeout(() => openDesignTab(ctx), 220)
         return () => clearTimeout(timer)
       }, [requirement?.id, sid, state?.currentUser?.activeRole, ctx])
-      const ensuredPrototype = useEnsuredChild(requirement?.folderPath, 'prototype')
-      const prototypePath = requirement?.prototypePath || ensuredPrototype
+      // 不再随需求出现就建 prototype/ 目录：只有真正开始做原型时才由设计流程建。
+      const prototypePath = requirement?.prototypePath ?? ''
       const prototypeFiles = requirement?.prototypeFiles ?? []
       const designCount = Math.max(
         requirement?.designFiles?.length ?? 0,
@@ -7540,16 +7709,13 @@ window.__ModuleLoader__.load({
           error,
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => { void reload() } }, '重试'),
         )
-      } else if (requirement === null) {
-        body = h('div', { className: 'dsh-wb-design-msg' },
-          h('b', null, '这个会话还没有关联需求'),
-          '从研发工作台的迭代里点“进入会话”，或先在会话中提交需求。',
-        )
-      } else if (!hasPrototype) {
-        body = h(CanvasEmpty, {
-          kindLabel: '产品原型',
-          pathLabel: 'prototype/',
-          promptText: prompt,
+      } else if (requirement === null || !hasPrototype) {
+        // 没有原型（或这个会话还没有关联需求）时进 Design Studio 的首页：工作台内嵌时
+        // 它只显示工作台自己的需求作品（按迭代分组），没有输入框、市场、灵感。
+        body = h(DesignStudioCanvas, {
+          sid,
+          ctx,
+          targetPath: '',
           onRefresh: () => { void reload() },
         })
       } else {
@@ -7578,6 +7744,9 @@ window.__ModuleLoader__.load({
               count: prototypeFiles.length,
               promptText: prompt,
               onRefresh: () => { void reload() },
+              onDescribe: () => {
+                void seedRequirementPrompt(ctx, sid, requirement, state).then((ok) => { if (ok) focusComposer() })
+              },
               otherLabel: designCount > 0 ? `设计交付 ${designCount}` : '',
               otherDisabled: designCount === 0,
               onOther: () => openDesignTab(ctx),
@@ -7645,12 +7814,75 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // 预览票据：沙箱 iframe 带不上 Authorization（桌面端登录靠 localStorage 的
+    // Bearer），所以先按需求换一张短期票据，再把票据拼进 iframe 的 src。
+    const previewTickets = new Map() // requirementId -> { ticket, expiresAt }
+    const previewTicketSubs = new Set()
+    let previewTicketInFlight = null
+    let previewTicketQueued = new Set()
+
+    function notifyPreviewTickets() {
+      for (const sub of previewTicketSubs) {
+        try { sub() } catch (_) { /* 组件已经卸载 */ }
+      }
+    }
+
+    function fetchPreviewTickets(ids) {
+      for (const id of ids) previewTicketQueued.add(id)
+      if (previewTicketInFlight !== null) return previewTicketInFlight
+      previewTicketInFlight = (async () => {
+        try {
+          while (previewTicketQueued.size > 0) {
+            const batch = [...previewTicketQueued].slice(0, 50)
+            for (const id of batch) previewTicketQueued.delete(id)
+            const body = await api('preview-ticket', {
+              method: 'POST',
+              body: JSON.stringify({ requirementIds: batch }),
+            })
+            const now = Date.now()
+            const ttl = Number(body.expiresIn) > 0 ? Number(body.expiresIn) * 1000 : 120000
+            for (const [id, ticket] of Object.entries(body.tickets ?? {})) {
+              previewTickets.set(id, { ticket, expiresAt: now + ttl })
+            }
+            notifyPreviewTickets()
+          }
+        } catch (reason) {
+          console.warn('[dsh-workbench] 预览票据获取失败', reason)
+        } finally {
+          previewTicketInFlight = null
+        }
+      })()
+      return previewTicketInFlight
+    }
+
+    // 页面里要预览哪些需求就声明哪些：缺票据或快过期时自动换一张。
+    function usePreviewTickets(requirementIds) {
+      const key = (requirementIds ?? []).filter(id => typeof id === 'string' && id !== '').join('|')
+      const [rev, bump] = useState(0)
+      useEffect(() => {
+        const sub = () => bump(n => n + 1)
+        previewTicketSubs.add(sub)
+        const now = Date.now()
+        const missing = (requirementIds ?? []).filter((id) => {
+          if (typeof id !== 'string' || id === '') return false
+          const entry = previewTickets.get(id)
+          return entry === undefined || entry.expiresAt - now < 30000
+        })
+        if (missing.length > 0) void fetchPreviewTickets(missing)
+        return () => { previewTicketSubs.delete(sub) }
+      }, [key])
+      // 返回值带上 rev：票据到手后依赖它的地方会重算，缩略图地址才会换成带票据的。
+      return `${key}#${rev}`
+    }
+
     function designPreviewUrl(requirementId, item) {
       if (!requirementId || !item) return ''
       const params = new URLSearchParams({ requirementId })
       if (item.artifactId) params.set('artifactId', item.artifactId)
       else if (item.relativePath) params.set('path', item.relativePath)
       else return ''
+      const entry = previewTickets.get(requirementId)
+      if (entry !== undefined && entry.expiresAt > Date.now()) params.set('ticket', entry.ticket)
       return `${API}design-preview?${params.toString()}`
     }
 
@@ -7668,6 +7900,7 @@ window.__ModuleLoader__.load({
       }, [itemsKey, selectedKey])
 
       const chosen = items.find(item => designItemKey(item) === selectedKey) ?? null
+      usePreviewTickets(requirement === null ? [] : [requirement.id])
       const src = requirement !== null && chosen !== null ? designPreviewUrl(requirement.id, chosen) : ''
 
       useEffect(() => {
@@ -8032,6 +8265,13 @@ window.__ModuleLoader__.load({
         key: DESIGN_TAB_ID,
         inject: (sessionId) => ({ sid: sessionId }),
       }, (props) => h(DesignTab, { ...props, ctx }))), 'dsh-workbench: design tab body')
+
+      // 会话开场的固定一句：需求会话空白时显示在输入框上方，引导用户直接描述需求。
+      ctx.effect(() => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+        name: 'conversation.input.dock',
+        id: 'dsh-workbench.greeting',
+        order: 20,
+      }, RequirementGreeting)), 'dsh-workbench: session greeting')
 
       ctx.effect(() => ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay',

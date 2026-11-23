@@ -2639,6 +2639,15 @@ window.__ModuleLoader__.load({
 .ddp-recent .tx,.ddp-tplstart .tx{display:flex;flex-direction:column;gap:1px;min-width:0;padding:0 2px}
 .ddp-recent .tx b,.ddp-tplstart .tx b{font-size:12.5px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ddp-recent .tx span,.ddp-tplstart .tx span{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 内嵌工作台：首页只放工作台自己的需求原型，按迭代分组 */
+.ddp-wbworks>.hd{flex-wrap:wrap}
+.ddp-wb-hint{margin-left:auto;font-size:11px;color:var(--dsw-alias-label-tertiary)}
+.ddp-wb-empty{margin:0;padding:18px 14px;border:1px dashed var(--dsw-alias-separator-primary,rgba(127,127,127,.3));border-radius:12px;font-size:12px;line-height:1.6;color:var(--dsw-alias-label-tertiary);text-align:center}
+.ddp-wb-iter+.ddp-wb-iter{margin-top:20px}
+.ddp-wb-iterhead{display:flex;align-items:baseline;gap:7px;margin:0 0 10px;padding-bottom:6px;border-bottom:.5px solid var(--dsw-alias-separator-primary,rgba(127,127,127,.3))}
+.ddp-wb-iterhead .code{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-size:11px;font-weight:600;color:${ACCENT}}
+.ddp-wb-iterhead .nm{flex:1;min-width:0;font-size:12px;font-weight:500;color:var(--dsw-alias-label-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddp-wb-iterhead .ct{flex:none;font-size:11px;color:var(--dsw-alias-label-tertiary)}
 @container (max-width:470px){
 .ddp-homebar .nm b{display:none}
 .ddp-homebd{padding:0 14px 28px}
@@ -8221,7 +8230,9 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
     const mkRevoked = (v, id, rev) => !!v && (v.revoked || []).some((r) => r.id === id && (!r.rev || !rev || r.rev === rev))
 
     // 首页顶上一条：左边名字，右边「开始 / 市场 / 我的作品 / 灵感」——设计库并进首页的页签
+    // 内嵌到研发工作台时不开放市场和灵感：那里是工作台自己的需求与原型。
     const HOME_TABS = [['', 'homeTab'], ['market', 'libMarket'], ['works', 'libWorks'], ['inspire', 'libInspire']]
+    const homeTabs = () => (EMBED === null ? HOME_TABS : []) // 内嵌工作台：首页没有市场 / 作品库 / 灵感页签
     function HomeBar({ t, tab, onTab, lead }) {
       // 左右方向键在几栏之间挪焦点，回车 / 空格再打开（按到哪就开哪会一路弹设计库）
       const onKey = (e) => {
@@ -8234,8 +8245,8 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
       }
       return h('header', { className: 'ddp-homebar' + (lead ? ' led' : '') },
         lead || null,
-        h('div', { className: 'nm' }, h('i', { className: 'mk', 'aria-hidden': true }), h('b', null, t('title'))),
-        h('div', { className: 'seg', role: 'tablist', onKeyDown: onKey }, ...HOME_TABS.map(([k, key]) => h('button', { key: k || 'home', role: 'tab', 'aria-selected': tab === k, tabIndex: tab === k ? 0 : -1, className: tab === k ? 'on' : '', onClick: () => onTab(k) }, t(key)))))
+        h('div', { className: 'nm' }, h('i', { className: 'mk', 'aria-hidden': true }), h('b', null, EMBED === null ? t('title') : '开始页')),
+        h('div', { className: 'seg', role: 'tablist', onKeyDown: onKey }, ...homeTabs().map(([k, key]) => h('button', { key: k || 'home', role: 'tab', 'aria-selected': tab === k, tabIndex: tab === k ? 0 : -1, className: tab === k ? 'on' : '', onClick: () => onTab(k) }, t(key)))))
     }
 
     // 首页大输入框：说一句 + 类型 + 风格 → onSend（发给模型）。没写字时 Tab 用占位里的例子
@@ -8292,6 +8303,76 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         kind === 'framed' && frames && frames.length ? h('div', { className: 'ddp-askkinds ddp-askframes', role: 'radiogroup', 'aria-label': t('askFrames') },
           h('button', { key: '', role: 'radio', 'aria-checked': !frame, className: !frame ? 'on' : '', ...tipA(t('askFrameNew'), t('askFrameNewD')), onClick: () => setFrame(null) }, h(I.plus), h('span', null, t('askFrameNew'))),
           ...frames.slice(0, 12).map((f) => h('button', { key: f.id, role: 'radio', 'aria-checked': !!frame && frame.id === f.id, className: frame && frame.id === f.id ? 'on' : '', title: `${f.size[0]}×${f.size[1]} · ${(f.positions || []).join(' / ')}`, onClick: () => setFrame({ id: f.id, name: en && f.nameEn ? f.nameEn : f.name }) }, h(I.framed), h('span', null, en && f.nameEn ? f.nameEn : f.name)))) : null)
+    }
+
+    // 工作台作品缩略图：原型是 HTML，<img> 出不了图，按 1440 宽画好后等比缩进卡片。
+    function WbThumb({ src, title }) {
+      const box = useRef(null)
+      const [width, setWidth] = useState(0)
+      useEffect(() => {
+        const node = box.current
+        if (node === null) return undefined
+        const update = () => setWidth(node.clientWidth)
+        update()
+        if (typeof ResizeObserver === 'undefined') return undefined
+        const observer = new ResizeObserver(update)
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [])
+      const scale = width > 0 ? width / 1440 : 0
+      return h('span', { className: 'im ddp-wbthumb', ref: box },
+        scale > 0 && src ? h('iframe', {
+          src,
+          title,
+          loading: 'lazy',
+          sandbox: 'allow-scripts allow-forms allow-modals allow-popups',
+          referrerPolicy: 'no-referrer',
+          style: {
+            width: '1440px',
+            height: '900px',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            border: '0',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            zIndex: 1,
+            background: '#fff',
+            pointerEvents: 'none',
+          },
+        }) : null)
+    }
+
+    // 工作台内嵌首页的作品区：按迭代分组展示工作台里已有原型的需求，点一张进它的会话。
+    // 数据由工作台传入（works = [{ iteration, works: [{ id, code, title, screens, updatedAt, thumb }] }]）。
+    function WorkbenchWorks({ t, groups, onOpenWork }) {
+      if (!Array.isArray(groups) || groups.length === 0) {
+        return h('section', { className: 'ddp-homesec' },
+          h('div', { className: 'hd' }, h('b', null, '需求原型')),
+          h('p', { className: 'ddp-wb-empty' }, '在需求会话里描述需求，原型会按迭代归档到这里。'),
+        )
+      }
+      return h('section', { className: 'ddp-homesec ddp-wbworks' },
+        h('div', { className: 'hd' }, h('b', null, '需求原型'), h('span', { className: 'ddp-wb-hint' }, '按迭代归档')),
+        ...groups.map((group) => h('div', { className: 'ddp-wb-iter', key: group.iteration.id },
+          h('div', { className: 'ddp-wb-iterhead' },
+            h('span', { className: 'code' }, group.iteration.shortCode ?? group.iteration.code),
+            h('span', { className: 'nm' }, group.iteration.name),
+            h('span', { className: 'ct' }, `${group.works.length} 个作品`),
+          ),
+          h('div', { className: 'ddp-recent' }, ...group.works.map((work) => h('button', {
+            key: work.id,
+            className: 'wk',
+            title: `${work.code} ${work.title}`,
+            onClick: () => onOpenWork(work),
+          },
+            h(WbThumb, { src: work.thumb, title: work.title }),
+            h('span', { className: 'tx' },
+              h('b', null, work.title),
+              h('span', null, `${work.code} · ${t('wkScreens', { n: work.screens })} · ${agoText(t, Date.parse(work.updatedAt))}`)),
+          ))),
+        )),
+      )
     }
 
     // 首页「接着做」：最近的三套（找不到文件夹的不放），点了直接打开
@@ -8482,7 +8563,9 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
     }
 
     function LibraryView({ t, tab, setTab, focus, hasDesign, homey, curRoot, onClose, onOpen, onPack, onShare, onSaveStyle, onUseStyle, onUseTpl, onRef, onExtract, onMarket, onSay }) {
-      const tabs = [['market', t('libMarket')], ['works', t('libWorks')], ['inspire', t('libInspire')]]
+      const tabs = EMBED === null
+        ? [['market', t('libMarket')], ['works', t('libWorks')], ['inspire', t('libInspire')]]
+        : [['works', t('libWorks')]] // 工作台内嵌：只有本机作品，不开放市场 / 灵感
       const [mkCur, setMkCur] = useState(focus || '') // 市场里点开的那一套（详情页）
       useEffect(() => { if (focus) setMkCur(focus) }, [focus])
       const inDetail = tab === 'market' && !!mkCur
@@ -10076,7 +10159,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         return () => window.removeEventListener('keydown', esc)
       }, [homeAt])
       const [libFocus, setLibFocus] = useState('') // 从空白页「从模板开始」点进来的那一套
-      const libDefault = () => (marketStore.has ? 'market' : 'works')
+      const libDefault = () => (EMBED !== null ? 'works' : (marketStore.has ? 'market' : 'works'))
       // 市场还没读过（刚开页面）：等读完（本地缓存，很快）再定开哪一页
       const libDefaultThen = (go) => (marketStore.v ? go(libDefault()) : loadMarket(false).then(() => go(libDefault()), () => go('works')))
       useEffect(() => { loadMarket(false).catch(() => {}) }, []) // 先读一下（缓存优先），设计库默认开哪一栏要用
@@ -11237,7 +11320,9 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         style: { display: 'none' },
         onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) openLocal(pathOf(f)) },
       })
-      const libLayer = lib ? h('div', { key: 'lib', className: 'ddp-libwrap' },
+      // 内嵌工作台不开放市场和灵感：即使状态里残留这两栏，也不渲染设计库叠层。
+      const libShown = lib !== '' && (EMBED === null || lib === 'works')
+      const libLayer = libShown ? h('div', { key: 'lib', className: 'ddp-libwrap' },
         h(LibraryView, {
           t,
           tab: lib,
@@ -11434,37 +11519,45 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         }),
         h('div', { className: 'ddp-homebd' },
           h('div', { className: 'ddp-start' },
-            h('div', { className: 'ddp-hero' }, h('h1', null, t('emptyHead')), h('p', null, t('emptySub'))),
-            !over && st && st.hint ? h('button', {
-              className: 'ddp-go',
-              onClick: () => post('open', { session: sid, target: st.hint }).then((x) => { if (poll) poll.set(x) }, (e) => say(t('openFailed', { msg: e.message }))),
-            }, t('hintOpen', { name: st.hint.split(/[\\/]/).pop() })) : null,
-            h(HomeAsk, {
-              t,
-              draft: homeDraft,
-              autoFocus: over,
-              note: over ? t('askNewNote') : '',
-              onSend: homeSend,
-              onRef: pickRef,
-              plus: [
-                ['', I.page, t('askOpenHtml'), false, false, openHtml],
-                ['', I.palette, t('askBrand'), false, false, () => { if (over) homeClose(); openPane('systems') }],
-                ['', I.library, t('askLib'), false, false, () => { setLibFocus(''); libDefaultThen((k) => setLib((c) => c || k)) }],
-              ],
-            }),
-            h(HomeWorks, {
-              t,
-              cur: over && fileTarget ? st.target.root : '',
-              onBack: homeClose,
-              onOpen: (w) => openTarget(sid, w.dir).then(() => { setEditing(false); if (over) homeClose() }, (e) => say(t('wkOpenFail', { msg: e.message }))),
-              onAll: () => toLib('works'),
-            }),
-            h(TplStart, { t, onOpen: (id) => toLib('market', id), onMore: () => toLib('market') }),
-            over ? null : h('details', { className: 'ddp-ways' },
-              h('summary', null, h(I.caret), t('waysHtml')),
-              h('div', { className: 'in' },
-                h('p', null, t(browse ? 'emptyHintPick' : 'emptyHint')),
-                h(AddressForm, { t, sid, className: 'ddp-form', onDone: () => {}, onBrowse: browse }))))),
+            EMBED === null
+              ? [
+                  h('div', { className: 'ddp-hero', key: 'hero' }, h('h1', null, t('emptyHead')), h('p', null, t('emptySub'))),
+                  !over && st && st.hint ? h('button', {
+                    key: 'hint',
+                    className: 'ddp-go',
+                    onClick: () => post('open', { session: sid, target: st.hint }).then((x) => { if (poll) poll.set(x) }, (e) => say(t('openFailed', { msg: e.message }))),
+                  }, t('hintOpen', { name: st.hint.split(/[\\/]/).pop() })) : null,
+                  h(HomeAsk, {
+                    key: 'ask',
+                    t,
+                    draft: homeDraft,
+                    autoFocus: over,
+                    note: over ? t('askNewNote') : '',
+                    onSend: homeSend,
+                    onRef: pickRef,
+                    plus: [
+                      ['', I.page, t('askOpenHtml'), false, false, openHtml],
+                      ['', I.palette, t('askBrand'), false, false, () => { if (over) homeClose(); openPane('systems') }],
+                      ['', I.library, t('askLib'), false, false, () => { setLibFocus(''); libDefaultThen((k) => setLib((c) => c || k)) }],
+                    ],
+                  }),
+                  h(HomeWorks, {
+                    key: 'works',
+                    t,
+                    cur: over && fileTarget ? st.target.root : '',
+                    onBack: homeClose,
+                    onOpen: (w) => openTarget(sid, w.dir).then(() => { setEditing(false); if (over) homeClose() }, (e) => say(t('wkOpenFail', { msg: e.message }))),
+                    onAll: () => toLib('works'),
+                  }),
+                  h(TplStart, { key: 'tpl', t, onOpen: (id) => toLib('market', id), onMore: () => toLib('market') }),
+                  over ? null : h('details', { key: 'ways', className: 'ddp-ways' },
+                    h('summary', null, h(I.caret), t('waysHtml')),
+                    h('div', { className: 'in' },
+                      h('p', null, t(browse ? 'emptyHintPick' : 'emptyHint')),
+                      h(AddressForm, { t, sid, className: 'ddp-form', onDone: () => {}, onBrowse: browse }))),
+                ]
+              // 内嵌工作台：首页只承载工作台自己的需求原型，没有对话框、市场、灵感。
+              : h(WorkbenchWorks, { key: 'wb', t, groups: props.works, onOpenWork: props.onOpenWork }))),
         h(HoverTip, { key: 'tip' }))
 
       if (!url) {
@@ -11730,7 +11823,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
             onPickStyle: (x) => { setPanel(false); insert(formatStyle(t, x, true), 'insertedSend') },
             onRef: pickRef,
             onSaveStyle: saveMyStyle,
-            onInspire: () => { setPanel(false); setLib('inspire') },
+            onInspire: EMBED === null ? () => { setPanel(false); setLib('inspire') } : null,
             brand: lookTab === 'brand' ? h(SystemsPanel, {
               t,
               bare: true,

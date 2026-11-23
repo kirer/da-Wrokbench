@@ -234,18 +234,32 @@ function resolveAndCreateTopFolder(input, local, userId) {
   return real
 }
 
-function ensureRequirementFolder(parent, name, local, userId) {
+function freeSiblingPath(parent, name) {
+  const direct = path.join(parent, name)
+  if (!fs.existsSync(direct)) return direct
+  const stem = name.replace(/ \(\d+\)$/, '')
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = path.join(parent, `${stem} (${index})`)
+    if (!fs.existsSync(candidate)) return candidate
+  }
+  throw httpError(409, '同名需求目录过多，请换一个名称')
+}
+
+function ensureRequirementFolder(parent, name, local, userId, unique = false) {
   if (typeof parent !== 'string' || parent.trim() === '') throw httpError(400, '缺少父目录')
   if (typeof name !== 'string' || name.trim() === '') throw httpError(400, '缺少目录名')
   const base = baseDirFor(local, userId)
   const resolvedParent = path.resolve(parent)
-  if (!isInside(base, resolvedParent) || resolvedParent === base) {
+  // 允许直接在顶级文件夹下创建迭代目录（迭代目录同时是需求会话的工作区）；
+  // 更深的目录仍必须落在工作台范围内。
+  if (!isInside(base, resolvedParent)) {
     throw httpError(403, '需求目录只能建在工作台顶级文件夹内')
   }
   assertNoSymlinkBetween(base, resolvedParent)
   const safeName = safeSegment(name, '')
   if (safeName === '') throw httpError(400, '目录名为空或非法')
-  const target = path.join(resolvedParent, safeName)
+  // 需求根目录按名称冲突自动加「 (2)」；prototype/design 等固定子目录直接复用。
+  const target = unique ? freeSiblingPath(resolvedParent, safeName) : path.join(resolvedParent, safeName)
   fs.mkdirSync(target, { recursive: true })
   const realBase = fs.realpathSync(base)
   const realTarget = fs.realpathSync(target)
@@ -393,6 +407,43 @@ async function authConfig() {
 // ---------------------------------------------------------------------------
 // HTTP helpers / auth cookies
 // ---------------------------------------------------------------------------
+
+// 预览票据：内存里的一张短期票，绑定 用户 + 需求 + 当时的登录 token。
+// 只用来让沙箱 iframe 读 design-preview，不落盘、不写日志，过期即失效。
+const PREVIEW_TICKET_TTL_MS = 120 * 1000
+const PREVIEW_TICKET_MAX = 200
+const previewTickets = new Map()
+
+function sweepPreviewTickets(now) {
+  for (const [id, entry] of previewTickets) {
+    if (entry.expiresAt <= now) previewTickets.delete(id)
+  }
+  // 超过上限时先丢最早的：票据只是一次预览的通行证，丢了大不了重新换一张。
+  while (previewTickets.size > PREVIEW_TICKET_MAX) {
+    const oldest = previewTickets.keys().next()
+    if (oldest.done) break
+    previewTickets.delete(oldest.value)
+  }
+}
+
+function mintPreviewTicket(userId, requirementId, token) {
+  const now = Date.now()
+  sweepPreviewTickets(now)
+  const ticket = crypto.randomBytes(24).toString('base64url')
+  previewTickets.set(ticket, { userId, requirementId, token, expiresAt: now + PREVIEW_TICKET_TTL_MS })
+  return ticket
+}
+
+function verifyPreviewTicket(ticket) {
+  if (typeof ticket !== 'string' || ticket === '') return null
+  const entry = previewTickets.get(ticket)
+  if (entry === undefined) return null
+  if (entry.expiresAt <= Date.now()) {
+    previewTickets.delete(ticket)
+    return null
+  }
+  return entry
+}
 
 function parseCookies(req) {
   const raw = req.headers.cookie
@@ -601,11 +652,16 @@ function folderPathFor(localState, baseDir, state, requirement) {
   if (localState.folders[requirement.id]) return localState.folders[requirement.id]
   const iteration = iterationOf(state, requirement)
   if (!iteration) return ''
-  return path.join(
-    baseDir,
-    safeSegment(iteration.code, '未命名迭代'),
-    `${safeSegment(requirement.code, 'REQ')}-${slugTitle(requirement.title)}`,
-  )
+  const iterationDir = path.join(baseDir, safeSegment(iteration.code, '未命名迭代'))
+  const titled = path.join(iterationDir, slugTitle(requirement.title))
+  // 兼容旧数据：早期目录是「编号-名称」。新目录优先；旧目录仍然存在时继续用它，
+  // 避免升级后找不到已有的原型和设计稿。
+  const legacy = path.join(iterationDir, `${safeSegment(requirement.code, 'REQ')}-${slugTitle(requirement.title)}`)
+  try {
+    if (fs.existsSync(titled)) return titled
+    if (fs.existsSync(legacy)) return legacy
+  } catch { /* fall through */ }
+  return titled
 }
 
 function decorateRequirement(localState, baseDir, state, requirement) {
@@ -768,20 +824,43 @@ function makeRoute(local) {
       }
 
       // ---- authenticated -------------------------------------------------------
-      const session = await sessionFromRequest(req, local)
-      if (session === null) {
+      // design-preview 走 iframe：沙箱里的请求带不上 Authorization（桌面端靠
+      // localStorage 的 Bearer），也不能读父页面的 localStorage。所以它接受一次性
+      // 的预览票据（短时、绑定用户与需求），其余接口仍然只认 Cookie / Bearer。
+      const previewTicket = req.method === 'GET' && route === '/design-preview'
+        ? verifyPreviewTicket(url.searchParams.get('ticket') || '')
+        : null
+      const session = previewTicket === null ? await sessionFromRequest(req, local) : null
+      if (previewTicket === null && session === null) {
         return json(res, 401, { error: '请先在工作台登录', code: 'unauthorized' })
       }
-      const userId = session.user.id
+      const userId = previewTicket === null ? session.user.id : previewTicket.userId
+
+      // 页面里的缩略图 iframe 先来换预览票据：短时、绑定用户与需求，只能读 design-preview。
+      // 一次最多换 50 条需求（开始页一屏的作品数远小于这个量）。
+      if (req.method === 'POST' && route === '/preview-ticket') {
+        const body = await readJson(req)
+        const ids = Array.isArray(body.requirementIds) ? body.requirementIds : [body.requirementId]
+        const unique = [...new Set(ids.filter(id => typeof id === 'string' && id.trim() !== '').map(id => id.trim()))]
+        if (unique.length === 0) return json(res, 400, { error: '缺少需求 ID' })
+        if (unique.length > 50) return json(res, 400, { error: '一次最多换 50 条需求的预览票据' })
+        const tickets = {}
+        for (const id of unique) tickets[id] = mintPreviewTicket(userId, id, session.token)
+        return json(res, 200, { tickets, expiresIn: PREVIEW_TICKET_TTL_MS / 1000 })
+      }
 
       // 设计稿预览：工作台自己的同源路由，不依赖 Design Studio 的随机端口预览服务。
       // 交付版本从团队服务端取，本机文件从当前用户的需求文件夹取，都只读、只允许文本/图片。
       if (req.method === 'GET' && route === '/design-preview') {
         const requirementId = url.searchParams.get('requirementId') || ''
         if (requirementId === '') return json(res, 400, { error: '缺少需求 ID' })
+        if (previewTicket !== null && previewTicket.requirementId !== requirementId) {
+          return json(res, 403, { error: '预览票据不适用于这条需求' })
+        }
+        const token = previewTicket !== null ? previewTicket.token : session.token
         const artifactId = url.searchParams.get('artifactId') || ''
         if (artifactId !== '') {
-          const data = await serverJson(`/artifacts/${encodeURIComponent(artifactId)}`, { token: session.token })
+          const data = await serverJson(`/artifacts/${encodeURIComponent(artifactId)}`, { token })
           const artifact = data.artifact
           if (!artifact || artifact.kind !== 'design' || artifact.requirementId !== requirementId) {
             return json(res, 404, { error: '设计文件不存在或不属于这个需求' })
@@ -794,7 +873,7 @@ function makeRoute(local) {
         if (relativePath === '' || path.isAbsolute(relativePath)) {
           return json(res, 400, { error: '缺少合法的文件路径' })
         }
-        const stateData = await serverJson('/state', { token: session.token })
+        const stateData = await serverJson('/state', { token })
         const baseRequirement = (stateData.requirements || []).find(item => item.id === requirementId)
         if (!baseRequirement) return json(res, 404, { error: '需求不存在或无权访问' })
         const baseDir = baseDirFor(local, userId)
@@ -881,7 +960,7 @@ function makeRoute(local) {
 
       if (req.method === 'POST' && route === '/folders/ensure') {
         const body = await readJson(req)
-        const folderPath = ensureRequirementFolder(body.parent, body.name, local, userId)
+        const folderPath = ensureRequirementFolder(body.parent, body.name, local, userId, body.unique === true)
         return json(res, 200, { path: folderPath })
       }
 
@@ -905,7 +984,10 @@ function makeRoute(local) {
         const dshSessionId = typeof body.dshSessionId === 'string' ? body.dshSessionId : ''
         const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : null
         const folderPath = typeof body.folderPath === 'string' ? body.folderPath : null
-        if (dshSessionId.length > 200 || (workspaceId !== null && workspaceId.length > 200) || (folderPath !== null && folderPath.length > 2000)) {
+        // 需求资料目录（原型/设计稿）与会话工作区可能不同：新流程会话挂在迭代
+        // 目录下，资料目录由 requirementFolder 单独记录。
+        const requirementFolder = typeof body.requirementFolder === 'string' ? body.requirementFolder : null
+        if (dshSessionId.length > 200 || (workspaceId !== null && workspaceId.length > 200) || (folderPath !== null && folderPath.length > 2000) || (requirementFolder !== null && requirementFolder.length > 2000)) {
           return json(res, 400, { error: '会话映射字段过长' })
         }
         if (dshSessionId !== '') {
@@ -920,6 +1002,12 @@ function makeRoute(local) {
             return json(res, 403, { error: '需求文件夹必须位于本机顶级文件夹内' })
           }
         }
+        if (requirementFolder !== null) {
+          const base = baseDirFor(local, userId)
+          if (!isInside(base, path.resolve(requirementFolder))) {
+            return json(res, 403, { error: '需求资料目录必须位于本机顶级文件夹内' })
+          }
+        }
         if (record && record.id) {
           if (dshSessionId !== '') {
             localState.sessions[record.id] = { dshSessionId, workspaceId, folderPath }
@@ -927,7 +1015,9 @@ function makeRoute(local) {
             localState.sessionOwners[dshSessionId] = record.id
             localState.sessionUsers[dshSessionId] = userId
           }
-          if (folderPath) localState.folders[id] = folderPath
+          // 只有显式给出资料目录时才覆盖需求文件夹映射；新流程把会话放进
+          // 迭代目录，不能让迭代目录冒充需求的资料目录。
+          if (requirementFolder) localState.folders[id] = requirementFolder
           saveLocal(local)
         }
         const stateData = await serverJson('/state', { token: session.token })
