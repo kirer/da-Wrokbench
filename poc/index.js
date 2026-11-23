@@ -565,14 +565,22 @@ async function sessionFromRequest(req, local) {
   return { token, payload: result.data, user: result.data.user }
 }
 
-function issueAuthCookie(res, payload) {
+function isDesktopClient(req) {
+  const origin = String(req.headers.origin || '')
+  const referer = String(req.headers.referer || '')
+  return origin === 'dsh-app://app' || origin === 'null' || referer.startsWith('dsh-app://')
+}
+
+function issueAuthCookie(req, res, payload) {
   if (typeof payload?.token === 'string' && payload.token !== '') {
     const maxAge = Number.isFinite(Number(payload.expiresIn)) ? Number(payload.expiresIn) : 7 * 24 * 60 * 60
     appendCookie(res, serializeCookie(AUTH_COOKIE, payload.token, maxAge))
   }
-  // 同时把 token 返回给客户端：桌面端 dsh-app://app 下 Cookie 可能不持久，
-  // 客户端会把它存进 localStorage 并在请求里带 Authorization: Bearer。
-  return { ...payload }
+  // 浏览器只拿 HttpOnly Cookie，响应体不回传 JWT；桌面端 dsh-app://app 下 Cookie
+  // 可能不持久，才把 token 返回给客户端存进 localStorage 并以 Authorization: Bearer 发送。
+  if (isDesktopClient(req)) return { ...payload }
+  const { token: _token, ...rest } = payload ?? {}
+  return rest
 }
 
 // ---------------------------------------------------------------------------
@@ -690,7 +698,7 @@ function makeRoute(local) {
         const body = await readJson(req)
         const result = await serverRaw('/auth/mock', { method: 'POST', body: { userId: body.userId } })
         if (!result.ok) return json(res, result.status, result.data)
-        return json(res, 200, issueAuthCookie(res, result.data))
+        return json(res, 200, issueAuthCookie(req, res, result.data))
       }
       if (req.method === 'GET' && route === '/auth/session') {
         const session = await sessionFromRequest(req, local)
@@ -749,7 +757,7 @@ function makeRoute(local) {
         if (!result.ok) {
           return htmlPage(res, result.status, '钉钉登录失败', result.data?.error || `HTTP ${result.status}`)
         }
-        issueAuthCookie(res, result.data)
+        issueAuthCookie(req, res, result.data)
         return redirect(res, `${requestOrigin(req)}${safeReturnTo(req, saved.returnTo)}`)
       }
 

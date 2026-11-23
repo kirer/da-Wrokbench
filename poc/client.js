@@ -46,7 +46,1524 @@ window.__ModuleLoader__.load({
         else window.localStorage.removeItem(TOKEN_KEY)
       } catch (_) { /* 无 localStorage 时退回 Cookie */ }
     }
-    const DS_API = '/dsh-workbench-design/api/'
+    const DS_API = '/dsh-design-studio/api/'
+
+    // 设计稿 `design/` 是唯一视觉基准：tokens + app.css + 页面内联样式，作用域收在 .dsh-wb-design 内。
+    const DESIGN_CSS = String.raw`
+.dsh-wb-design {
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, "Menlo", "Consolas",
+    "PingFang SC", monospace;
+
+
+  --fs-10: 12px;
+  --fs-11: 12px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-19: 19px;
+  --fs-22: 22px;
+  --fs-28: 28px;
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.35;
+  --lh-body: 1.55;
+  --lh-loose: 1.7;
+
+  --fw-reg: 400;
+  --fw-med: 500;
+  --fw-semi: 600;
+  --fw-bold: 700;
+
+
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 20px;
+  --sp-8: 24px;
+  --sp-9: 32px;
+  --sp-10: 40px;
+  --sp-11: 48px;
+  --sp-12: 64px;
+
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+
+
+  --rail-w: 248px;
+  --rpanel-w: 388px;
+  --win-w: 1440px;
+  --win-h: 900px;
+
+
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+
+
+  --bg: #151517;
+  --bg-elev: #191919;
+  --panel: #1b1b1e;
+  --surface: #232326;
+  --surface-2: #2a2a2e;
+  --surface-3: #333338;
+  --overlay: rgba(0,0,0,.55);
+
+  --line: #2b2b30;
+  --line-2: #36363c;
+  --line-3: #46474d;
+
+  --text: #ededef;
+  --text-2: #adb0b8;
+  --text-3: #9a9aa2;
+  --text-4: #6e6e76;
+  --text-inv: #17171a;
+
+  --primary: #6f9bf0;
+  --primary-strong: #3563cc;
+  --primary-strong-h: #3f6fd6;
+  --primary-h: #86adf4;
+  --primary-ink: #cdddfb;
+  --primary-bg: rgba(111,155,240,.13);
+  --primary-bg-2: rgba(111,155,240,.20);
+  --primary-line: rgba(111,155,240,.38);
+
+  --green: #5cc79a;
+  --green-bg: rgba(69,185,139,.14);
+  --green-line: rgba(92,199,154,.40);
+
+  --amber: #dfb56a;
+  --amber-bg: rgba(211,162,76,.14);
+  --amber-line: rgba(223,181,106,.40);
+
+  --red: #ec8a8a;
+  --red-bg: rgba(226,107,107,.14);
+  --red-line: rgba(236,138,138,.40);
+
+  --violet: #c2a8f2;
+  --violet-bg: rgba(176,146,238,.14);
+  --violet-line: rgba(194,168,242,.40);
+
+
+  --st-idle: #a6a6ae;
+  --st-idle-bg: rgba(166,166,174,.12);
+  --st-prog: #82a8f3;
+  --st-prog-bg: rgba(111,155,240,.12);
+  --st-done: #5cc79a;
+  --st-done-bg: rgba(92,199,154,.12);
+  --st-block: #ef8a8a;
+  --st-block-bg: rgba(239,138,138,.12);
+  --st-na: #9c9ca4;
+  --st-na-bg: transparent;
+  --st-draft: #c2a8f2;
+  --st-draft-bg: rgba(194,168,242,.12);
+  --st-warn: #e2b768;
+  --st-warn-bg: rgba(226,183,104,.12);
+
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-2: 0 8px 24px rgba(0,0,0,.45);
+  --shadow-pop: 0 16px 48px rgba(0,0,0,.55);
+
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--primary-line);
+}
+.dsh-wb-design[data-theme="light"] {
+  --bg: #f4f5f7;
+  --bg-elev: #fbfbfc;
+  --panel: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --surface-3: #e9ebef;
+  --overlay: rgba(20,22,28,.35);
+
+  --line: #e6e7ea;
+  --line-2: #dcdee3;
+  --line-3: #c8cad0;
+
+  --text: #1a1b1f;
+  --text-2: #55575e;
+  --text-3: #63656c;
+  --text-4: #9a9ca3;
+  --text-inv: #ffffff;
+
+  --primary: #3568e8;
+  --primary-strong: #2b57c9;
+  --primary-strong-h: #3563cc;
+  --primary-h: #2a58cf;
+  --primary-ink: #274a9e;
+  --primary-bg: rgba(53,104,232,.09);
+  --primary-bg-2: rgba(53,104,232,.16);
+  --primary-line: rgba(53,104,232,.34);
+
+  --green: #0b6b45;
+  --green-bg: rgba(31,157,107,.10);
+  --green-line: rgba(31,157,107,.30);
+
+  --amber: #8a5f10;
+  --amber-bg: rgba(169,118,26,.10);
+  --amber-line: rgba(169,118,26,.30);
+
+  --red: #b83c3c;
+  --red-bg: rgba(207,74,74,.10);
+  --red-line: rgba(207,74,74,.30);
+
+  --violet: #6244b8;
+  --violet-bg: rgba(122,92,214,.10);
+  --violet-line: rgba(122,92,214,.30);
+
+  --st-idle: #5f6168;
+  --st-idle-bg: rgba(95,97,104,.10);
+  --st-prog: #2b58c9;
+  --st-prog-bg: rgba(53,104,232,.10);
+  --st-done: #177a54;
+  --st-done-bg: rgba(31,157,107,.10);
+  --st-block: #b23a3a;
+  --st-block-bg: rgba(207,74,74,.10);
+  --st-na: #5f6168;
+  --st-na-bg: transparent;
+  --st-draft: #6244b8;
+  --st-draft-bg: rgba(122,92,214,.10);
+  --st-warn: #805609;
+  --st-warn-bg: rgba(169,118,26,.10);
+
+  --shadow-1: 0 1px 2px rgba(24,28,40,.06);
+  --shadow-2: 0 8px 24px rgba(24,28,40,.10);
+  --shadow-pop: 0 16px 48px rgba(24,28,40,.16);
+
+  --focus-ring: 0 0 0 2px #fff, 0 0 0 4px var(--primary-line);
+}
+.dsh-wb-design *, .dsh-wb-design *::before, .dsh-wb-design *::after { box-sizing: border-box; }
+.dsh-wb-design, .dsh-wb-design {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.dsh-wb-design { overflow: hidden; }
+.dsh-wb-design ::selection { background: var(--primary-bg-2); }
+.dsh-wb-design *::-webkit-scrollbar { width: 10px; height: 10px; }
+.dsh-wb-design *::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border-radius: var(--r-pill);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.dsh-wb-design *::-webkit-scrollbar-thumb:hover { background: var(--line-3); background-clip: content-box; }
+.dsh-wb-design *::-webkit-scrollbar-track { background: transparent; }
+.dsh-wb-design a { color: inherit; text-decoration: none; }
+.dsh-wb-design button { font-family: inherit; }
+.dsh-wb-design svg { display: block; }
+.dsh-wb-design .mono { font-family: var(--font-mono); font-feature-settings: "tnum" 1; letter-spacing: -.01em; }
+.dsh-wb-design .tnum { font-variant-numeric: tabular-nums; }
+.dsh-wb-design .win {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--bg);
+  overflow: hidden;
+}
+.dsh-wb-design .win.has-panel { grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--rpanel-w); }
+.dsh-wb-design .traffic {
+  position: absolute;
+  top: 15px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 30;
+}
+.dsh-wb-design .tl { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.dsh-wb-design .tl.r { background: #ff5f57; }
+.dsh-wb-design .tl.y { background: #febc2e; }
+.dsh-wb-design .tl.g { background: #28c840; }
+.dsh-wb-design .rail {
+  position: relative;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 44px 0 8px;
+}
+.dsh-wb-design .rail-top { padding: 8px 12px 10px; }
+.dsh-wb-design .logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px 10px;
+  color: var(--text);
+}
+.dsh-wb-design .logo-mark { width: 20px; height: 20px; color: var(--text); flex: none; }
+.dsh-wb-design .logo-name { font-size: var(--fs-14); font-weight: var(--fw-semi); letter-spacing: .01em; }
+.dsh-wb-design .logo-badge {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  letter-spacing: .04em;
+  padding: 1px 5px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-xs);
+  color: var(--text-2);
+  font-weight: var(--fw-med);
+}
+.dsh-wb-design .logo-collapse { margin-left: auto; color: var(--text-3); }
+.dsh-wb-design .newbtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-med);
+  cursor: pointer;
+  transition: background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
+}
+.dsh-wb-design .newbtn:hover { background: var(--surface-3); border-color: var(--line-3); }
+.dsh-wb-design .newbtn svg { width: 16px; height: 16px; color: var(--text-2); }
+.dsh-wb-design .nav { padding: 10px 8px 4px; display: flex; flex-direction: column; gap: 1px; }
+.dsh-wb-design .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.dsh-wb-design .nav-item svg { width: 16px; height: 16px; color: var(--text-3); flex: none; }
+.dsh-wb-design .nav-item:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .nav-item.active { background: var(--surface-3); color: var(--text); font-weight: var(--fw-med); }
+.dsh-wb-design .nav-item.active svg { color: var(--text); }
+.dsh-wb-design .nav-item .count {
+  margin-left: auto;
+  font-size: var(--fs-11);
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-radius: var(--r-pill);
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.dsh-wb-design .nav-item .dot-new {
+  margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--primary);
+}
+.dsh-wb-design .rail-sec { padding: 10px 8px 4px; min-height: 0; overflow: auto; flex: 1; }
+.dsh-wb-design .rail-sec-hd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 6px;
+  font-size: var(--fs-11);
+  color: var(--text-3);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.dsh-wb-design .rail-sec-hd .r { margin-left: auto; display: flex; gap: 4px; }
+.dsh-wb-design .rail-sec-hd svg { width: 13px; height: 13px; }
+.dsh-wb-design .iter-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.dsh-wb-design .iter-item:hover { background: var(--surface-2); }
+.dsh-wb-design .iter-item.active { background: var(--surface-2); border-color: var(--line-2); }
+.dsh-wb-design .iter-item .t { font-size: var(--fs-12); color: var(--text); display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .iter-item .s { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.dsh-wb-design .iter-item .t .num { font-family: var(--font-mono); color: var(--text-3); font-size: var(--fs-11); }
+.dsh-wb-design .identity {
+  margin: 6px 8px 4px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+.dsh-wb-design .identity:hover { border-color: var(--line-3); }
+.dsh-wb-design .identity .who { min-width: 0; flex: 1; }
+.dsh-wb-design .identity .who .n { font-size: var(--fs-12); color: var(--text); font-weight: var(--fw-med); }
+.dsh-wb-design .identity .who .r { font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsh-wb-design .identity .chev { color: var(--text-3); }
+.dsh-wb-design .center {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  position: relative;
+}
+.dsh-wb-design .topbar {
+  height: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(8px);
+}
+.dsh-wb-design .crumb { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: var(--fs-12); }
+.dsh-wb-design .crumb a:hover { color: var(--text); }
+.dsh-wb-design .crumb .sep { color: var(--text-3); }
+.dsh-wb-design .crumb .cur { color: var(--text-2); }
+.dsh-wb-design .topbar .spacer { flex: 1; }
+.dsh-wb-design .scroll { overflow: auto; min-height: 0; flex: 1; }
+.dsh-wb-design .page { padding: 22px 28px 40px; max-width: 1240px; }
+.dsh-wb-design .page-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+.dsh-wb-design .page-head .ttl-block { min-width: 0; }
+.dsh-wb-design .page-title {
+  font-size: var(--fs-22);
+  font-weight: var(--fw-semi);
+  letter-spacing: -.01em;
+  line-height: var(--lh-tight);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.dsh-wb-design .page-title .code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  color: var(--text-3);
+  font-weight: var(--fw-reg);
+}
+.dsh-wb-design .page-sub { margin-top: 6px; color: var(--text-2); font-size: var(--fs-12); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dsh-wb-design .page-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.dsh-wb-design .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-13);
+  font-weight: var(--fw-med);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.dsh-wb-design .btn svg { width: 15px; height: 15px; }
+.dsh-wb-design .btn:hover { background: var(--surface-3); border-color: var(--line-3); }
+.dsh-wb-design .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.dsh-wb-design .btn-primary {
+  background: var(--primary-strong);
+  border-color: var(--primary-strong);
+  color: #fff;
+  font-weight: var(--fw-semi);
+}
+.dsh-wb-design .btn-primary:hover { background: var(--primary-strong-h); border-color: var(--primary-strong-h); }
+.dsh-wb-design .btn-ghost { background: transparent; border-color: var(--line-2); color: var(--text-2); }
+.dsh-wb-design .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .btn-danger { background: var(--red-bg); border-color: var(--red-line); color: var(--st-block); }
+.dsh-wb-design .btn-danger:hover { background: var(--red-bg); border-color: var(--red); }
+.dsh-wb-design .btn-text { background: transparent; border-color: transparent; color: var(--text-2); padding: 0 6px; }
+.dsh-wb-design .btn-text:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .btn-sm { height: 27px; padding: 0 9px; font-size: var(--fs-12); border-radius: var(--r-xs); }
+.dsh-wb-design .btn-sm svg { width: 13px; height: 13px; }
+.dsh-wb-design .btn-icon { width: 32px; padding: 0; }
+.dsh-wb-design .btn-icon.btn-sm { width: 27px; }
+.dsh-wb-design .btn-disabled, .dsh-wb-design .btn:disabled { cursor: not-allowed; pointer-events: none; color: var(--text-3) !important; background: var(--surface-2); border-color: var(--line); opacity: 1; }
+.dsh-wb-design .input, .dsh-wb-design .select, .dsh-wb-design .textarea {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-13);
+  font-family: inherit;
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.dsh-wb-design .textarea { height: auto; padding: 9px 10px; line-height: var(--lh-body); resize: vertical; }
+.dsh-wb-design .input::placeholder, .dsh-wb-design .textarea::placeholder { color: var(--text-3); }
+.dsh-wb-design .input:hover, .dsh-wb-design .select:hover, .dsh-wb-design .textarea:hover { border-color: var(--line-3); }
+.dsh-wb-design .input:focus, .dsh-wb-design .select:focus, .dsh-wb-design .textarea:focus {
+  outline: none;
+  border-color: var(--primary-line);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+.dsh-wb-design .input.err { border-color: var(--red-line); }
+.dsh-wb-design .field { margin-bottom: 16px; }
+.dsh-wb-design .label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  font-weight: var(--fw-med);
+  margin-bottom: 6px;
+}
+.dsh-wb-design .label .req { color: var(--red); }
+.dsh-wb-design .label .hint { margin-left: auto; color: var(--text-3); font-weight: var(--fw-reg); }
+.dsh-wb-design .field-help { font-size: var(--fs-11); color: var(--text-3); margin-top: 5px; line-height: var(--lh-snug); }
+.dsh-wb-design .search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-3);
+}
+.dsh-wb-design .search svg { width: 14px; height: 14px; }
+.dsh-wb-design .search input { flex: 1; height: 26px; border: 0; background: transparent; color: var(--text); font-size: var(--fs-12); outline: none; }
+.dsh-wb-design .search input::placeholder { color: var(--text-3); }
+.dsh-wb-design .dropdown-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 10px;
+  background: var(--surface); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); font-size: var(--fs-12); color: var(--text);
+  cursor: pointer;
+}
+.dsh-wb-design .dropdown-trigger svg.chev { width: 13px; height: 13px; color: var(--text-3); margin-left: 2px; }
+.dsh-wb-design .seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  gap: 2px;
+}
+.dsh-wb-design .seg button {
+  height: 26px; padding: 0 11px;
+  border: 0; background: transparent; color: var(--text-2);
+  font-size: var(--fs-12); border-radius: var(--r-xs); cursor: pointer;
+  font-family: inherit;
+}
+.dsh-wb-design .seg button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); font-weight: var(--fw-med); }
+.dsh-wb-design .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.dsh-wb-design .toolbar .spacer { flex: 1; }
+.dsh-wb-design .card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.dsh-wb-design .card-hd { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .card-hd .t { font-size: var(--fs-13); font-weight: var(--fw-semi); }
+.dsh-wb-design .card-hd .r { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .card-bd { padding: 14px; }
+.dsh-wb-design .section-hd { display: flex; align-items: center; gap: 8px; margin: 26px 0 12px; }
+.dsh-wb-design .section-hd .t { font-size: var(--fs-14); font-weight: var(--fw-semi); }
+.dsh-wb-design .section-hd .n { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-3); }
+.dsh-wb-design .section-hd .r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-xs);
+  font-size: var(--fs-11);
+  font-weight: var(--fw-med);
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+}
+.dsh-wb-design .chip .ico { width: 9px; height: 9px; flex: none; }
+.dsh-wb-design .chip .gl { font-family: var(--font-mono); font-size: 12px; line-height: 1; }
+.dsh-wb-design .chip--idle { color: var(--st-idle); background: var(--st-idle-bg); }
+.dsh-wb-design .chip--prog { color: var(--st-prog); background: var(--st-prog-bg); }
+.dsh-wb-design .chip--done { color: var(--st-done); background: var(--st-done-bg); }
+.dsh-wb-design .chip--block { color: var(--st-block); background: var(--st-block-bg); }
+.dsh-wb-design .chip--na { color: var(--st-na); background: transparent; border-color: var(--line-2); }
+.dsh-wb-design .chip--draft { color: var(--st-draft); background: var(--st-draft-bg); border-style: dashed; border-color: var(--violet-line); }
+.dsh-wb-design .chip--warn { color: var(--st-warn); background: var(--st-warn-bg); }
+.dsh-wb-design .chip--plain { color: var(--text-2); background: var(--surface-2); }
+.dsh-wb-design .chip--lg { height: 23px; padding: 0 9px; font-size: var(--fs-12); }
+.dsh-wb-design .badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 18px; padding: 0 6px; border-radius: var(--r-xs);
+  font-size: var(--fs-11); font-family: var(--font-mono);
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line);
+}
+.dsh-wb-design .badge--local { color: var(--violet); background: var(--violet-bg); border-color: var(--violet-line); font-family: var(--font-sans); }
+.dsh-wb-design .badge--live { color: var(--green); background: var(--green-bg); border-color: var(--green-line); font-family: var(--font-sans); }
+.dsh-wb-design .badge--mock { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-line); font-family: var(--font-sans); }
+.dsh-wb-design .matrix { display: flex; gap: 4px; align-items: center; }
+.dsh-wb-design .mx {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  min-width: 60px;
+}
+.dsh-wb-design .mx-lab {
+  font-size: 12px; color: var(--text-3); letter-spacing: .02em;
+  display: flex; align-items: center; gap: 3px; white-space: nowrap;
+}
+.dsh-wb-design .mx-lab .na { color: var(--text-4); }
+.dsh-wb-design .mx .chip { width: 100%; justify-content: flex-start; }
+.dsh-wb-design .matrix--row { gap: 3px; }
+.dsh-wb-design .matrix--row .mx { min-width: 0; }
+.dsh-wb-design .matrix--row .mx .chip { padding: 0 5px; font-size: 12px; height: 18px; gap: 3px; }
+.dsh-wb-design .matrix--row .mx .chip .txt { display: none; }
+.dsh-wb-design .matrix--row .mx .chip .gl { font-size: 12px; }
+.dsh-wb-design .table { width: 100%; border-collapse: collapse; }
+.dsh-wb-design .table th {
+  text-align: left;
+  font-size: var(--fs-11);
+  font-weight: var(--fw-med);
+  color: var(--text-3);
+  letter-spacing: .03em;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-2);
+  white-space: nowrap;
+  background: var(--bg-elev);
+  position: sticky; top: 0; z-index: 2;
+}
+.dsh-wb-design .table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+.dsh-wb-design .table tbody tr { transition: background var(--dur-1) var(--ease); cursor: pointer; }
+.dsh-wb-design .table tbody tr:hover { background: var(--surface-2); }
+.dsh-wb-design .table tbody tr.active { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--primary); }
+.dsh-wb-design .table td .rk { color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-13); }
+.dsh-wb-design .table td a.rk { display: inline-block; padding: 5px 0; white-space: nowrap; }
+.dsh-wb-design .crumb a { display: inline-flex; align-items: center; min-height: 24px; padding: 0 2px; }
+.dsh-wb-design .meta-kv a { display: inline-flex; align-items: center; min-height: 24px; }
+.dsh-wb-design .table td .rksub { color: var(--text-3); font-size: var(--fs-11); margin-top: 2px; }
+.dsh-wb-design .td-code { font-family: var(--font-mono); color: var(--text-3); font-size: var(--fs-11); }
+.dsh-wb-design .table-wrap { border: 1px solid var(--line); border-radius: var(--r-md); overflow: auto; background: var(--surface); }
+.dsh-wb-design .table-wrap .table { min-width: 760px; }
+.dsh-wb-design .avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--fs-11); font-weight: var(--fw-semi); color: #fff;
+  flex: none; font-family: var(--font-sans); letter-spacing: .02em;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.dsh-wb-design .avatar.sm { width: 20px; height: 20px; font-size: 12px; }
+.dsh-wb-design .avatar.lg { width: 30px; height: 30px; font-size: var(--fs-12); }
+.dsh-wb-design .av-1 { background: #3d5c8f; }
+.dsh-wb-design .av-2 { background: #37704f; }
+.dsh-wb-design .av-3 { background: #67509a; }
+.dsh-wb-design .av-4 { background: #855636; }
+.dsh-wb-design .av-5 { background: #35707a; }
+.dsh-wb-design .av-6 { background: #7d4555; }
+.dsh-wb-design .assignee { display: inline-flex; align-items: center; gap: 7px; }
+.dsh-wb-design .assignee .nm { font-size: var(--fs-12); color: var(--text-2); }
+.dsh-wb-design .assignee.empty .slot {
+  width: 24px; height: 24px; border-radius: 50%;
+  border: 1px dashed var(--line-3); color: var(--text-3);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dsh-wb-design .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .tab {
+  position: relative;
+  height: 36px; padding: 0 12px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-13); color: var(--text-3); cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  white-space: nowrap;
+}
+.dsh-wb-design .tab:hover { color: var(--text-2); }
+.dsh-wb-design .tab.active { color: var(--text); border-bottom-color: var(--primary); font-weight: var(--fw-med); }
+.dsh-wb-design .tab .n { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-design .progress { height: 5px; border-radius: var(--r-pill); background: var(--surface-3); overflow: hidden; min-width: 60px; }
+.dsh-wb-design .progress span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.dsh-wb-design .progress.green span { background: var(--green); }
+.dsh-wb-design .timeline { padding: 4px 0; }
+.dsh-wb-design .tl-row { display: grid; grid-template-columns: 104px 1fr 92px; align-items: center; gap: 12px; padding: 7px 0; }
+.dsh-wb-design .tl-name { font-size: var(--fs-12); color: var(--text-2); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.dsh-wb-design .tl-track { position: relative; height: 22px; background: var(--surface-2); border-radius: var(--r-xs); overflow: hidden; }
+.dsh-wb-design .tl-bar {
+  position: absolute; top: 4px; height: 14px; border-radius: var(--r-xs);
+  background: var(--primary-bg-2); border: 1px solid var(--primary-line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--primary-ink); font-family: var(--font-mono); white-space: nowrap;
+}
+.dsh-wb-design .tl-bar.green { background: var(--green-bg); border-color: var(--green-line); color: var(--green); }
+.dsh-wb-design .tl-bar.amber { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
+.dsh-wb-design .tl-bar.idle { background: var(--surface-3); border-color: var(--line-2); color: var(--text-3); }
+.dsh-wb-design .tl-date { font-size: var(--fs-11); font-family: var(--font-mono); color: var(--text-3); text-align: right; }
+.dsh-wb-design .steps { display: flex; align-items: center; gap: 0; }
+.dsh-wb-design .step { display: flex; align-items: center; gap: 7px; font-size: var(--fs-12); color: var(--text-3); }
+.dsh-wb-design .step .knob { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-3); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.dsh-wb-design .step.done { color: var(--text-2); }
+.dsh-wb-design .step.done .knob { background: var(--green); border-color: var(--green); color: #04130c; }
+.dsh-wb-design .step.cur .knob { border-color: var(--primary); color: var(--primary); }
+.dsh-wb-design .step.cur { color: var(--text); font-weight: var(--fw-med); }
+.dsh-wb-design .step-line { width: 26px; height: 1px; background: var(--line-2); margin: 0 6px; }
+.dsh-wb-design .empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 56px 24px; color: var(--text-3);
+}
+.dsh-wb-design .empty .ico {
+  width: 44px; height: 44px; border-radius: var(--r-md);
+  border: 1px solid var(--line-2); background: var(--surface);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: var(--text-3);
+}
+.dsh-wb-design .empty .ico svg { width: 22px; height: 22px; }
+.dsh-wb-design .empty .t { font-size: var(--fs-14); color: var(--text); font-weight: var(--fw-med); margin-bottom: 5px; }
+.dsh-wb-design .empty .d { font-size: var(--fs-12); color: var(--text-3); max-width: 34ch; line-height: var(--lh-body); margin-bottom: 14px; }
+.dsh-wb-design .skeleton { background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%); background-size: 400% 100%; animation: sk 1.4s ease infinite; border-radius: var(--r-xs); }
+@keyframes dsh-wb-sk{ 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce){
+.dsh-wb-design .skeleton { animation: none; }
+}
+.dsh-wb-design .toast-wrap { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.dsh-wb-design .toast {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 14px; border-radius: var(--r-md);
+  background: var(--surface-3); border: 1px solid var(--line-3);
+  box-shadow: var(--shadow-pop); font-size: var(--fs-12); color: var(--text);
+}
+.dsh-wb-design .toast svg { width: 15px; height: 15px; }
+.dsh-wb-design .toast.ok svg { color: var(--green); }
+.dsh-wb-design .toast.err svg { color: var(--red); }
+.dsh-wb-design .banner {
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 12px; border-radius: var(--r-sm);
+  font-size: var(--fs-12); line-height: var(--lh-snug);
+  border: 1px solid transparent;
+}
+.dsh-wb-design .banner svg { width: 15px; height: 15px; flex: none; }
+.dsh-wb-design .banner--mock { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
+.dsh-wb-design .banner--info { background: var(--primary-bg); border-color: var(--primary-line); color: var(--primary-ink); }
+.dsh-wb-design .banner--warn { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
+.dsh-wb-design .banner--danger { background: var(--red-bg); border-color: var(--red-line); color: var(--red); }
+.dsh-wb-design .banner .r { margin-left: auto; }
+.dsh-wb-design .banner a { text-decoration: underline; text-underline-offset: 2px; }
+.dsh-wb-design .switch { width: 34px; height: 19px; border-radius: var(--r-pill); background: var(--surface-3); border: 1px solid var(--line-2); position: relative; cursor: pointer; flex: none; transition: background var(--dur-2) var(--ease); }
+.dsh-wb-design .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--text-3); transition: transform var(--dur-2) var(--ease), background var(--dur-2) var(--ease); }
+.dsh-wb-design .switch.on { background: var(--primary); border-color: var(--primary); }
+.dsh-wb-design .switch.on::after { transform: translateX(15px); background: #fff; }
+.dsh-wb-design .conv-head { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .conv-head .ct { font-size: var(--fs-13); font-weight: var(--fw-med); display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .conv-head .csub { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.dsh-wb-design .conv-head .spacer { flex: 1; }
+.dsh-wb-design .conv { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.dsh-wb-design .conv-body { flex: 1; overflow: auto; padding: 24px 24px 12px; display: flex; flex-direction: column; gap: 18px; }
+.dsh-wb-design .msg { display: flex; gap: 11px; max-width: 100%; }
+.dsh-wb-design .msg .av { flex: none; }
+.dsh-wb-design .msg .body { min-width: 0; flex: 1; }
+.dsh-wb-design .msg .meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.dsh-wb-design .msg .meta .who { font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--text); }
+.dsh-wb-design .msg .meta .role { font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-design .msg .meta .time { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.dsh-wb-design .msg p { margin: 0 0 8px; font-size: var(--fs-13); line-height: var(--lh-loose); color: var(--text); }
+.dsh-wb-design .msg .bubble { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 11px 13px; }
+.dsh-wb-design .msg.user .bubble { background: var(--primary-bg); border-color: var(--primary-line); }
+.dsh-wb-design .tool-call { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+.dsh-wb-design .tool-hd { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: var(--fs-12); color: var(--text-2); cursor: pointer; }
+.dsh-wb-design .tool-hd svg { width: 14px; height: 14px; color: var(--primary); }
+.dsh-wb-design .tool-hd .chev { color: var(--text-3); margin-left: auto; }
+.dsh-wb-design .tool-hd .tag { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-design .tool-bd { padding: 0 11px 10px 33px; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); line-height: var(--lh-body); }
+.dsh-wb-design .composer-wrap { flex: none; padding: 10px 18px 16px; }
+.dsh-wb-design .composer {
+  border: 1px solid var(--line-2); border-radius: var(--r-md);
+  background: var(--surface); padding: 10px 12px;
+}
+.dsh-wb-design .composer:focus-within { border-color: var(--primary-line); box-shadow: 0 0 0 3px var(--primary-bg); }
+.dsh-wb-design .composer textarea { width: 100%; border: 0; background: transparent; color: var(--text); font-size: var(--fs-13); font-family: inherit; resize: none; outline: none; line-height: var(--lh-body); }
+.dsh-wb-design .composer textarea::placeholder { color: var(--text-3); }
+.dsh-wb-design .composer-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dsh-wb-design .composer-bar .spacer { flex: 1; }
+.dsh-wb-design .composer-chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: var(--r-xs); background: var(--surface-2); border: 1px solid var(--line); font-size: var(--fs-11); color: var(--text-2); }
+.dsh-wb-design .composer-chip svg { width: 12px; height: 12px; }
+.dsh-wb-design .send-btn { width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--primary-strong); border: 0; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.dsh-wb-design .send-btn svg { width: 15px; height: 15px; }
+.dsh-wb-design .rpanel {
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.dsh-wb-design .rp-head { flex: none; padding: 12px 14px 0; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .rp-titlebar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.dsh-wb-design .rp-titlebar .t { font-size: var(--fs-13); font-weight: var(--fw-semi); }
+.dsh-wb-design .rp-titlebar .r { margin-left: auto; display: flex; gap: 4px; }
+.dsh-wb-design .rp-titlebar .r svg { width: 15px; height: 15px; color: var(--text-3); }
+.dsh-wb-design .rp-tabs { display: flex; gap: 1px; overflow: auto; }
+.dsh-wb-design .rp-tab { height: 32px; padding: 0 9px; display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-12); color: var(--text-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.dsh-wb-design .rp-tab:hover { color: var(--text-2); }
+.dsh-wb-design .rp-tab.active { color: var(--text); border-bottom-color: var(--primary); font-weight: var(--fw-med); }
+.dsh-wb-design .rp-tab .n { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .rp-body { flex: 1; overflow: auto; padding: 14px; }
+.dsh-wb-design .rp-foot { flex: none; padding: 10px 14px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; background: var(--panel); }
+.dsh-wb-design .rp-foot .spacer { flex: 1; }
+.dsh-wb-design .rp-sec { margin-bottom: 18px; }
+.dsh-wb-design .rp-sec-hd { display: flex; align-items: center; gap: 7px; font-size: var(--fs-11); color: var(--text-3); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
+.dsh-wb-design .rp-sec-hd .r { margin-left: auto; }
+.dsh-wb-design .rp-sec-hd svg { width: 13px; height: 13px; }
+.dsh-wb-design .kv { display: grid; grid-template-columns: 70px 1fr; gap: 7px 10px; font-size: var(--fs-12); }
+.dsh-wb-design .kv dt { color: var(--text-3); }
+.dsh-wb-design .kv dd { margin: 0; color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dsh-wb-design .req-sum { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; margin-bottom: 14px; }
+.dsh-wb-design .req-sum .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.dsh-wb-design .req-sum .code { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-design .req-sum .h { font-size: var(--fs-13); font-weight: var(--fw-semi); color: var(--text); }
+.dsh-wb-design .req-sum .txt { font-size: var(--fs-12); color: var(--text-2); line-height: var(--lh-body); }
+.dsh-wb-design .canvas-preview { border: 1px solid var(--line-2); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
+.dsh-wb-design .canvas-preview .bar { display: flex; align-items: center; gap: 6px; padding: 6px 9px; background: var(--surface-3); border-bottom: 1px solid var(--line); font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.dsh-wb-design .canvas-preview .bar .dots { display: flex; gap: 3px; }
+.dsh-wb-design .canvas-preview .bar .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-3); }
+.dsh-wb-design .canvas-preview .stage { height: 132px; display: flex; align-items: center; justify-content: center; position: relative; background:
+  linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 22px,
+  linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 22px 100%,
+  var(--surface); }
+.dsh-wb-design .canvas-preview .stage .wire { width: 150px; height: 96px; border: 1px solid var(--line-3); border-radius: var(--r-sm); background: var(--surface-2); display: flex; flex-direction: column; gap: 5px; padding: 8px; }
+.dsh-wb-design .canvas-preview .stage .wire i { display: block; height: 6px; border-radius: 2px; background: var(--line-3); }
+.dsh-wb-design .canvas-preview .stage .wire i:nth-child(1) { width: 40%; height: 10px; background: var(--primary-line); }
+.dsh-wb-design .canvas-preview .stage .wire i:nth-child(3) { width: 70%; }
+.dsh-wb-design .canvas-preview .stage .wire i:nth-child(4) { width: 55%; }
+.dsh-wb-design .diff { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; font-family: var(--font-mono); font-size: var(--fs-11); }
+.dsh-wb-design .diff-hd { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--bg-elev); border-bottom: 1px solid var(--line); font-family: var(--font-sans); font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-design .diff-line { display: flex; gap: 10px; padding: 3px 10px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.dsh-wb-design .diff-line .ln { color: var(--text-2); flex: none; width: 24px; text-align: right; }
+.dsh-wb-design .diff-line.add { background: var(--green-bg); }
+.dsh-wb-design .diff-line.add .tx { color: var(--st-done); }
+.dsh-wb-design .diff-line.del { background: var(--red-bg); }
+.dsh-wb-design .diff-line.del .tx { color: var(--st-block); }
+.dsh-wb-design .diff-line .tx { flex: 1; }
+.dsh-wb-design .drawer-scrim { position: absolute; inset: 0; background: var(--overlay); }
+.dsh-wb-design .drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 380px;
+  background: var(--panel); border-left: 1px solid var(--line-2);
+  box-shadow: var(--shadow-pop); display: flex; flex-direction: column; z-index: 40;
+}
+.dsh-wb-design .drawer-hd { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .drawer-hd .t { font-size: var(--fs-14); font-weight: var(--fw-semi); }
+.dsh-wb-design .drawer-hd .r { margin-left: auto; }
+.dsh-wb-design .drawer-bd { flex: 1; overflow: auto; padding: 6px 0; }
+.dsh-wb-design .log-item { display: flex; gap: 11px; padding: 10px 16px; position: relative; }
+.dsh-wb-design .log-item::before { content: ""; position: absolute; left: 26px; top: 30px; bottom: -6px; width: 1px; background: var(--line); }
+.dsh-wb-design .log-item:last-child::before { display: none; }
+.dsh-wb-design .log-item .av { flex: none; z-index: 1; }
+.dsh-wb-design .log-item .c { min-width: 0; }
+.dsh-wb-design .log-item .c .l1 { font-size: var(--fs-12); color: var(--text); line-height: var(--lh-snug); }
+.dsh-wb-design .log-item .c .l1 b { font-weight: var(--fw-semi); }
+.dsh-wb-design .log-item .c .l2 { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); margin-top: 2px; }
+.dsh-wb-design .modal-scrim { position: absolute; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.dsh-wb-design .modal { width: 380px; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); overflow: hidden; }
+.dsh-wb-design .modal-hd { padding: 16px 18px 8px; font-size: var(--fs-14); font-weight: var(--fw-semi); }
+.dsh-wb-design .modal-bd { padding: 0 18px 16px; font-size: var(--fs-12); color: var(--text-2); line-height: var(--lh-body); }
+.dsh-wb-design .modal-ft { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); background: var(--bg-elev); }
+.dsh-wb-design .ic { width: 16px; height: 16px; flex: none; }
+.dsh-wb-design .muted { color: var(--text-3); }
+.dsh-wb-design .muted2 { color: var(--text-2); }
+.dsh-wb-design .mono-label { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); letter-spacing: .02em; }
+.dsh-wb-design .hr { height: 1px; background: var(--line); border: 0; margin: 16px 0; }
+.dsh-wb-design .row { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .col { display: flex; flex-direction: column; }
+.dsh-wb-design .gap-2 { gap: 4px; }
+.dsh-wb-design .gap-3 { gap: 6px; }
+.dsh-wb-design .gap-4 { gap: 8px; }
+.dsh-wb-design .gap-6 { gap: 12px; }
+.dsh-wb-design .wrap { flex-wrap: wrap; }
+.dsh-wb-design .grow { flex: 1; }
+.dsh-wb-design .nowrap { white-space: nowrap; }
+.dsh-wb-design .tiny { font-size: var(--fs-11); }
+.dsh-wb-design .sm { font-size: var(--fs-12); }
+.dsh-wb-design .strong { font-weight: var(--fw-semi); color: var(--text); }
+.dsh-wb-design .hide { display: none !important; }
+.dsh-wb-design .skill-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.dsh-wb-design .skill-card:hover { border-color: var(--line-3); background: var(--surface-2); }
+.dsh-wb-design .skill-card .hd { display: flex; align-items: flex-start; gap: 10px; }
+.dsh-wb-design .skill-card .ic-badge { width: 32px; height: 32px; border-radius: var(--r-sm); background: var(--primary-bg); border: 1px solid var(--primary-line); color: var(--primary); display: flex; align-items: center; justify-content: center; flex: none; }
+.dsh-wb-design .skill-card .ic-badge svg { width: 17px; height: 17px; }
+.dsh-wb-design .skill-card .nm { font-size: var(--fs-13); font-weight: var(--fw-semi); color: var(--text); }
+.dsh-wb-design .skill-card .desc { font-size: var(--fs-11); color: var(--text-3); margin-top: 3px; line-height: var(--lh-snug); }
+.dsh-wb-design .skill-card .ft { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dsh-wb-design .setting-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .setting-row:last-child { border-bottom: 0; }
+.dsh-wb-design .setting-row .info { flex: 1; min-width: 0; }
+.dsh-wb-design .setting-row .info .t { font-size: var(--fs-13); color: var(--text); }
+.dsh-wb-design .setting-row .info .d { font-size: var(--fs-11); color: var(--text-3); margin-top: 3px; line-height: var(--lh-snug); }
+.dsh-wb-design .theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); color: var(--text-2); cursor: pointer; }
+.dsh-wb-design .theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .theme-toggle svg { width: 15px; height: 15px; }
+.dsh-wb-design[data-theme="dark"] .theme-toggle .sun, .dsh-wb-design[data-theme="light"] .theme-toggle .moon { display: none; }
+.dsh-wb-design .state-band { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); }
+.dsh-wb-design .state-band .cap { display: flex; align-items: center; gap: 8px; font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+.dsh-wb-design .state-band .cap::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.dsh-wb-design .state-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.dsh-wb-design .state-prev { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-elev); padding: 12px; min-height: 108px; display: flex; flex-direction: column; }
+.dsh-wb-design .state-prev .h { font-size: var(--fs-11); color: var(--text-3); margin-bottom: 8px; display: flex; align-items: center; gap: 5px; }
+.dsh-wb-design .state-prev .h svg { width: 12px; height: 12px; }
+.dsh-wb-design .state-prev .bd { flex: 1; display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.dsh-wb-design .state-prev .bd .ln { height: 7px; border-radius: 3px; background: var(--surface-3); }
+.dsh-wb-design .state-prev .bd .ln.w60 { width: 60%; }
+.dsh-wb-design .state-prev .bd .ln.w80 { width: 80%; }
+.dsh-wb-design .state-prev .bd .ln.w40 { width: 40%; }
+.dsh-wb-design .state-prev .msg { font-size: var(--fs-12); color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .state-prev .msg svg { width: 13px; height: 13px; }
+.dsh-wb-design .state-prev .msg.err { color: var(--red); }
+.dsh-wb-design .state-prev .msg.warn { color: var(--amber); }
+.dsh-wb-design .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.dsh-wb-design .kpi { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px 14px; }
+.dsh-wb-design .kpi .lab { font-size: var(--fs-11); color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .kpi .v { font-size: var(--fs-22); font-weight: var(--fw-semi); color: var(--text); font-family: var(--font-mono); margin-top: 4px; letter-spacing: -.02em; }
+.dsh-wb-design .kpi .v small { font-size: var(--fs-12); color: var(--text-3); font-family: var(--font-sans); font-weight: 400; margin-left: 4px; }
+.dsh-wb-design .kpi .d { font-size: var(--fs-11); color: var(--text-3); margin-top: 2px; }
+.dsh-wb-design .plugnac { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.dsh-wb-design .plugnac-title { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--text); padding-right: 2px; white-space: nowrap; }
+.dsh-wb-design .plugnac-title svg { width: 15px; height: 15px; color: var(--primary); }
+.dsh-wb-design .plugnac-sep { width: 1px; height: 18px; background: var(--line-2); margin: 0 8px; flex: none; }
+.dsh-wb-design .plugnac a { height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--r-sm); color: var(--text-2); font-size: 13px; white-space: nowrap; }
+.dsh-wb-design .plugnac a:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .plugnac a.active { background: var(--surface-3); color: var(--text); font-weight: 600; }
+.dsh-wb-design .mindmap { position: relative; padding-left: 26px; }
+.dsh-wb-design .mindmap::before { content: ""; position: absolute; left: 9px; top: 8px; bottom: 12px; width: 1px; background: var(--line-2); }
+.dsh-wb-design .branch { position: relative; margin-bottom: 16px; }
+.dsh-wb-design .branch:last-child { margin-bottom: 0; }
+.dsh-wb-design .branch::before { content: ""; position: absolute; left: -17px; top: 28px; width: 17px; height: 1px; background: var(--line-2); }
+.dsh-wb-design .branch::after { content: ""; position: absolute; left: -20px; top: 25px; width: 7px; height: 7px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line-3); }
+.dsh-wb-design .req-card { border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); padding: 13px 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color .12s var(--ease); }
+.dsh-wb-design .req-card:hover { border-color: var(--line-3); }
+.dsh-wb-design .req-card .rc-hd { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .req-card .rc-code { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .req-card .rc-title { font-size: 14px; font-weight: 600; color: var(--text); display: inline-block; padding: 2px 0; }
+.dsh-wb-design .req-card .rc-title:hover { color: var(--primary); }
+.dsh-wb-design .req-card .rc-matrix { flex-wrap: wrap; gap: 4px; }
+.dsh-wb-design .req-card .rc-ft { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--line); }
+.dsh-wb-design .req-links { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.dsh-wb-design .req-link { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: var(--r-xs); background: var(--surface-2); border: 1px solid var(--line); font-size: 12px; color: var(--text-2); }
+.dsh-wb-design .req-link:hover { border-color: var(--primary-line); color: var(--text); }
+.dsh-wb-design .req-link svg { width: 11px; height: 11px; color: var(--text-3); }
+.dsh-wb-design .with-aside { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 22px; align-items: start; }
+.dsh-wb-design .aside-col { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; }
+.dsh-wb-design .cardwall { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dsh-wb-design .dcard2 { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.dsh-wb-design .dcard2.span2 { grid-column: span 2; }
+.dsh-wb-design .dcard2 .ch { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .dcard2 .ch .t { font-size: 13px; font-weight: 600; }
+.dsh-wb-design .dcard2 .ch .r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .dcard2 .ch svg.ic { width: 14px; height: 14px; color: var(--text-3); }
+.dsh-wb-design .rail .nav-item.plugin-entry { color: var(--text); }
+.dsh-wb-design .rail .nav-item.plugin-entry.active { background: var(--surface-3); }
+.dsh-wb-design .modal-host { display: none; }
+.dsh-wb-design .modal-host:target { display: flex; position: absolute; inset: 0; background: var(--overlay); align-items: center; justify-content: center; z-index: 60; }
+.dsh-wb-design .modal-host .modal { width: 440px; max-width: calc(100% - 40px); }
+.dsh-wb-design .modal-close { color: var(--text-3); display: inline-flex; }
+.dsh-wb-design .modal-close:hover { color: var(--text); }
+.dsh-wb-design .wizard-step { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.dsh-wb-design .wizard-step:last-child { border-bottom: 0; }
+.dsh-wb-design .wizard-step .no { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line-3); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-2); flex: none; }
+.dsh-wb-design .wizard-step.done .no { background: #0f6b46; border-color: #0f6b46; color: #fff; }
+.dsh-wb-design .wizard-step .c { flex: 1; min-width: 0; }
+.dsh-wb-design .wizard-step .c .t { font-size: 13px; font-weight: 500; color: var(--text); }
+.dsh-wb-design .wizard-step .c .d { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.dsh-wb-design .platgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.dsh-wb-design .platcard { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px 13px; display: flex; flex-direction: column; gap: 9px; }
+.dsh-wb-design .platcard .ph { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .platcard .ph .pn { font-size: 13px; font-weight: 600; color: var(--text); }
+.dsh-wb-design .platcard .ph .dot { width: 8px; height: 8px; border-radius: 2px; background: var(--line-3); }
+.dsh-wb-design .platcard .pf { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .platcard .pf .assignee .nm { font-size: 12px; }
+.dsh-wb-design .platcard .extra { border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .platcard .extra svg { width: 12px; height: 12px; color: var(--text-3); }
+.dsh-wb-design .platcard.na { opacity: 1; }
+.dsh-wb-design .statbar { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); margin-bottom: 16px; overflow: hidden; }
+.dsh-wb-design .statbar .st { flex: 1; padding: 12px 16px; border-right: 1px solid var(--line); min-width: 0; }
+.dsh-wb-design .statbar .st:last-child { border-right: 0; }
+.dsh-wb-design .statbar .st .lab { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .statbar .st .lab svg { width: 12px; height: 12px; }
+.dsh-wb-design .statbar .st .v { font-family: var(--font-mono); font-size: 24px; font-weight: 600; color: var(--text); letter-spacing: -.02em; margin-top: 4px; }
+.dsh-wb-design .statbar .st .v small { font-size: 12px; color: var(--text-3); font-family: var(--font-sans); font-weight: 400; margin-left: 5px; }
+.dsh-wb-design .statbar .st .d { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+.dsh-wb-design .statbar .st .d .up { color: var(--green); }
+.dsh-wb-design .rail-ph { flex: 1; min-height: 0; margin: 10px 10px 8px; padding: 12px; border: 1px dashed var(--line-2); border-radius: var(--r-md); background: var(--surface); display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.dsh-wb-design .rail-ph .h { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); font-weight: 500; }
+.dsh-wb-design .rail-ph .h svg { width: 13px; height: 13px; }
+.dsh-wb-design .rail-ph p { margin: 0; font-size: 12px; color: var(--text-3); line-height: var(--lh-body); }
+.dsh-wb-design .rail-ph .lines { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.dsh-wb-design .rail-ph .lines i { height: 9px; border-radius: 3px; background: var(--surface-3); display: block; }
+.dsh-wb-design .rail-ph .lines i:nth-child(1) { width: 78%; }
+.dsh-wb-design .rail-ph .lines i:nth-child(2) { width: 60%; }
+.dsh-wb-design .rail-ph .lines i:nth-child(3) { width: 68%; }
+.dsh-wb-design .rail-ph .lines i:nth-child(4) { width: 52%; }
+.dsh-wb-design .identity.ph-id { border-style: dashed; background: transparent; }
+.dsh-wb-design .identity.ph-id .avatar { background: var(--surface-3); color: var(--text-3); border-color: var(--line-2); }
+.dsh-wb-design .conv-ph { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+.dsh-wb-design .conv-ph .ico { width: 44px; height: 44px; border-radius: var(--r-md); border: 1px dashed var(--line-2); background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--text-3); margin-bottom: 14px; }
+.dsh-wb-design .conv-ph .ico svg { width: 22px; height: 22px; }
+.dsh-wb-design .conv-ph .t { font-size: 14px; color: var(--text); font-weight: 500; margin-bottom: 5px; }
+.dsh-wb-design .conv-ph .d { font-size: 12px; color: var(--text-3); max-width: 34ch; line-height: var(--lh-body); }
+.dsh-wb-design .dsr { display: flex; flex-direction: column; height: 100%; }
+.dsh-wb-design .dsr-head { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .dsr-head .t { font-size: 13px; font-weight: 600; color: var(--text); }
+.dsh-wb-design .dsr-head .r { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .dsr-body { flex: 1; min-height: 0; overflow: auto; padding: 14px; display: flex; flex-direction: column; }
+.dsh-wb-design .dsr-note { border: 1px dashed var(--line-2); border-radius: var(--r-sm); padding: 9px 11px; font-size: 12px; color: var(--text-3); line-height: var(--lh-body); margin-bottom: 14px; }
+.dsh-wb-design .dsr-tools { display: flex; flex-direction: column; gap: 8px; }
+.dsh-wb-design .dsr-tool { display: flex; align-items: center; gap: 11px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); font-size: 13px; color: var(--text-2); }
+.dsh-wb-design .dsr-tool .ic { width: 18px; height: 18px; color: var(--text-3); flex: none; }
+.dsh-wb-design .dsr-tool .k { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .dsr-tool.ph { border-style: dashed; color: var(--text-3); }
+@media (max-width: 1180px){
+.dsh-wb-design { --rail-w: 208px; --rpanel-w: 336px; }
+}
+@media (max-width: 980px){
+.dsh-wb-design .win, .dsh-wb-design .win.has-panel { grid-template-columns: minmax(0, 1fr); }
+.dsh-wb-design .rail, .dsh-wb-design .rpanel { display: none; }
+.dsh-wb-design .traffic { display: none; }
+.dsh-wb-design .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 16px; }
+.dsh-wb-design .plugnac { flex-wrap: wrap; row-gap: 4px; }
+.dsh-wb-design .page { padding: 16px 16px 32px; max-width: 100% !important; }
+.dsh-wb-design .page-head { flex-wrap: wrap; }
+.dsh-wb-design .page-title { font-size: 20px; }
+.dsh-wb-design .kpis, .dsh-wb-design .state-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dsh-wb-design .cardwall { grid-template-columns: 1fr; }
+.dsh-wb-design .dcard2.span2 { grid-column: auto; }
+.dsh-wb-design .platgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dsh-wb-design .two-col, .dsh-wb-design .with-aside, .dsh-wb-design .skill-layout, .dsh-wb-design .settings-layout, .dsh-wb-design .form-grid { grid-template-columns: 1fr; }
+.dsh-wb-design .aside-col, .dsh-wb-design .set-nav { position: static; }
+.dsh-wb-design .set-nav { flex-direction: row; flex-wrap: wrap; }
+.dsh-wb-design .witem { flex-wrap: wrap; }
+.dsh-wb-design .statbar { flex-wrap: wrap; }
+.dsh-wb-design .statbar .st { flex: 1 1 45%; border-right: 0; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .statbar .st:nth-child(odd) { border-right: 1px solid var(--line); }
+.dsh-wb-design .modal-host .modal { width: calc(100% - 32px); }
+}
+.dsh-wb-design .mxg { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line-2); border-radius: var(--r-xs); padding: 1px 4px 1px 6px; background: var(--surface-2); }
+.dsh-wb-design .mxg .gl2 { font-size: 12px; color: var(--text-3); margin-right: 2px; }
+.dsh-wb-design .mxg .chip { height: 18px; padding: 0 5px; }
+.dsh-wb-design .mna2 { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: var(--r-xs); border: 1px dashed var(--line-2); color: var(--text-3); font-size: 12px; }
+.dsh-wb-design .ds-ctx { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--primary-line); border-radius: var(--r-sm); background: var(--primary-bg); }
+.dsh-wb-design .ds-ctx .l1 { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .ds-ctx .l1 .code { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .ds-ctx .l1 .nm { font-size: 13px; font-weight: 600; color: var(--text); }
+.dsh-wb-design .ds-ctx .l2 { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+.dsh-wb-design .endsec { margin-bottom: 20px; }
+.dsh-wb-design .endsec-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.dsh-wb-design .endsec-h .t { font-size: 13px; font-weight: 600; }
+.dsh-wb-design .endsec-h .n { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .egrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; }
+.dsh-wb-design .endcard2 { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 13px; display: flex; flex-direction: column; gap: 9px; }
+.dsh-wb-design .endcard2 .eh { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .endcard2 .eh .nm { font-size: 13px; font-weight: 600; color: var(--text); }
+.dsh-wb-design .endcard2 .eh .st { margin-left: auto; }
+.dsh-wb-design .endcard2 .kv2 { display: grid; grid-template-columns: 62px 1fr; gap: 5px 8px; font-size: 12px; }
+.dsh-wb-design .endcard2 .kv2 dt { color: var(--text-3); }
+.dsh-wb-design .endcard2 .kv2 dd { margin: 0; color: var(--text-2); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.dsh-wb-design .endcard2 .risk { font-size: 12px; color: var(--amber); display: flex; align-items: center; gap: 5px; }
+.dsh-wb-design .endcard2 .foot { display: flex; align-items: center; gap: 8px; border-top: 1px dashed var(--line); padding-top: 9px; margin-top: 1px; }
+.dsh-wb-design .endcard2 .foot .upd { font-size: 12px; color: var(--text-3); margin-left: auto; }
+.dsh-wb-design .narep { border: 1px dashed var(--line-2); border-radius: var(--r-md); padding: 11px 13px; font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .narep svg { width: 14px; height: 14px; }
+.dsh-wb-design .ob { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 40px 24px; overflow: auto; }
+.dsh-wb-design .ob-card { width: 100%; max-width: 620px; }
+.dsh-wb-design .ob-brand { display: flex; align-items: center; gap: 9px; justify-content: center; margin-bottom: 18px; }
+.dsh-wb-design .ob-brand .logo-name { font-size: 14px; font-weight: 600; }
+.dsh-wb-design .ob-steps { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 18px; }
+.dsh-wb-design .ob-steps .s { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .ob-steps .s .dot { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-3); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; }
+.dsh-wb-design .ob-steps .s.active { color: var(--text); }
+.dsh-wb-design .ob-steps .s.active .dot { background: var(--primary-strong); border-color: var(--primary-strong); color: #fff; }
+.dsh-wb-design .ob-steps .s.done .dot { background: #0f6b46; border-color: #0f6b46; color: #fff; }
+.dsh-wb-design .ob-steps .line { width: 24px; height: 1px; background: var(--line-2); }
+.dsh-wb-design .ob-panel { border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--surface); padding: 22px 24px; }
+.dsh-wb-design .ob-panel h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+.dsh-wb-design .ob-panel .sub { font-size: 12px; color: var(--text-3); margin-bottom: 18px; }
+.dsh-wb-design .ob-foot { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.dsh-wb-design .ob-foot .spacer { flex: 1; }
+.dsh-wb-design .ob-summary { display: grid; grid-template-columns: 96px 1fr; gap: 9px 12px; font-size: 13px; }
+.dsh-wb-design .ob-summary dt { color: var(--text-3); }
+.dsh-wb-design .ob-summary dd { margin: 0; color: var(--text); }
+@media (max-width: 980px){
+.dsh-wb-design .egrid { grid-template-columns: 1fr; }
+}
+.dsh-wb-design .ptog { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); font-size: var(--fs-12); color: var(--text-2); cursor: pointer; }
+.dsh-wb-design .ptog .box { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--line-3); display: flex; align-items: center; justify-content: center; }
+.dsh-wb-design .ptog.on { border-color: var(--primary-line); background: var(--primary-bg); color: var(--text); }
+.dsh-wb-design .ptog.on .box { background: var(--primary); border-color: var(--primary); }
+.dsh-wb-design .ptog.on .box::after { content: ""; width: 5px; height: 8px; border: solid #0e1424; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-top: -2px; }
+.dsh-wb-design[data-theme="light"] .ptog.on .box::after { border-color: #fff; }
+.dsh-wb-design .radio-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.dsh-wb-design .radio-card { flex: 1; min-width: 190px; border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 11px 12px; cursor: pointer; }
+.dsh-wb-design .radio-card.sel { border-color: var(--primary-line); background: var(--primary-bg); box-shadow: 0 0 0 1px var(--primary-line); }
+.dsh-wb-design .radio-card .rt { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); font-weight: var(--fw-med); color: var(--text); }
+.dsh-wb-design .radio-card .rd { font-size: var(--fs-12); color: var(--text-3); margin-top: 5px; line-height: var(--lh-snug); }
+.dsh-wb-design .radio-card .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-3); flex: none; display: flex; align-items: center; justify-content: center; }
+.dsh-wb-design .radio-card.sel .r { border-color: var(--primary); }
+.dsh-wb-design .radio-card.sel .r::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+.dsh-wb-design .path-box { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); }
+.dsh-wb-design .path-box .p { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text); flex: 1; }
+/* page: iteration-detail */
+.dsh-wb-design .head-card { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.dsh-wb-design .head-card .lft { min-width: 0; flex: 1; }
+.dsh-wb-design .head-card .code-line { display: flex; align-items: center; gap: 10px; }
+.dsh-wb-design .head-card .code-line .code { font-family: var(--font-mono); font-size: 14px; color: var(--text-3); display: inline-flex; align-items: center; min-height: 24px; }
+.dsh-wb-design .head-card h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 3px 0 8px; }
+.dsh-wb-design .head-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .head-meta .it { display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .head-meta b { color: var(--text-2); font-weight: 500; }
+.dsh-wb-design .tl-head { display: grid; grid-template-columns: 104px 1fr 92px; gap: 12px; font-size: 12px; color: var(--text-3); font-family: var(--font-mono); margin-bottom: 4px; }
+.dsh-wb-design .tl-head .axis { display: flex; justify-content: space-between; }
+.dsh-wb-design .tl-wrap { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 14px 16px; margin-bottom: 22px; }
+.dsh-wb-design .summary-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+/* page: requirement-full */
+.dsh-wb-design .rf-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.dsh-wb-design .rf-head .lft { flex: 1; min-width: 0; }
+.dsh-wb-design .rf-head .l1 { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.dsh-wb-design .rf-head .l1 .code { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .rf-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -.01em; margin: 2px 0 10px; }
+.dsh-wb-design .rf-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-3); }
+.dsh-wb-design .rf-meta .it { display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .rf-meta b { color: var(--text-2); font-weight: 500; }
+.dsh-wb-design .spec-line { font-size: 13px; color: var(--text-2); line-height: var(--lh-loose); }
+.dsh-wb-design .spec-line b { color: var(--text); font-weight: 500; }
+.dsh-wb-design .shot3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dsh-wb-design .shot { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
+.dsh-wb-design .shot .img { height: 60px; background: linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 16px, linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%, var(--surface-2); display: flex; align-items: center; justify-content: center; }
+.dsh-wb-design .shot .img .wf { width: 48px; height: 36px; border: 1px solid var(--line-3); border-radius: 4px; background: var(--surface); display: flex; flex-direction: column; gap: 3px; padding: 5px; }
+.dsh-wb-design .shot .img .wf i { height: 4px; background: var(--line-3); border-radius: 2px; display: block; }
+.dsh-wb-design .shot .img .wf i:first-child { width: 50%; height: 6px; background: var(--primary-line); }
+.dsh-wb-design .shot .cap { padding: 5px 7px; font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 5px; border-top: 1px solid var(--line); }
+.dsh-wb-design .vline { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+.dsh-wb-design .vline:last-child { border-bottom: 0; }
+.dsh-wb-design .vline .v { font-family: var(--font-mono); color: var(--text-2); width: 26px; }
+.dsh-wb-design .vline .d { color: var(--text-3); }
+.dsh-wb-design .sub-label { font-size: 12px; color: var(--text-3); margin: 12px 0 8px; display: flex; align-items: center; gap: 6px; }
+/* page: my-workbench */
+.dsh-wb-design .worklist { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); overflow: hidden; }
+.dsh-wb-design .witem { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .witem:last-child { border-bottom: 0; }
+.dsh-wb-design .witem:hover { background: var(--surface-2); }
+.dsh-wb-design .witem .wcode { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); width: 72px; flex: none; }
+.dsh-wb-design .witem .wmain { flex: 1; min-width: 0; }
+.dsh-wb-design .witem .wname { font-size: 13px; font-weight: 600; color: var(--text); display: inline-block; padding: 2px 0; }
+.dsh-wb-design .witem .wname:hover { color: var(--primary); }
+.dsh-wb-design .witem .wsub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.dsh-wb-design .witem .wroles { display: flex; gap: 4px; flex: none; }
+.dsh-wb-design .witem .wstat { flex: none; }
+.dsh-wb-design .witem .wtodo { flex: none; }
+.dsh-wb-design .witem .wgo { flex: none; }
+.dsh-wb-design .filter-note { font-size: 12px; color: var(--text-3); margin: -2px 0 14px; }
+/* page: notifications */
+.dsh-wb-design .notif { display: flex; align-items: flex-start; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); position: relative; }
+.dsh-wb-design .notif:last-child { border-bottom: 0; }
+.dsh-wb-design .notif.unread { background: var(--primary-bg); }
+.dsh-wb-design .notif.unread::before { content: ""; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--primary); }
+.dsh-wb-design .notif .ico { width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--text-2); flex: none; }
+.dsh-wb-design .notif .ico svg { width: 15px; height: 15px; }
+.dsh-wb-design .notif .c { flex: 1; min-width: 0; }
+.dsh-wb-design .notif .c .t { font-size: var(--fs-13); color: var(--text); line-height: var(--lh-snug); }
+.dsh-wb-design .notif .c .t b { font-weight: var(--fw-semi); }
+.dsh-wb-design .notif .c .s { font-size: var(--fs-11); color: var(--text-3); margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .notif .rt { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex: none; }
+.dsh-wb-design .notif .rt .time { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.dsh-wb-design .sim { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 13px 14px; margin-bottom: 18px; }
+.dsh-wb-design .sim .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.dsh-wb-design .sim .hd .t { font-size: var(--fs-12); font-weight: var(--fw-semi); color: var(--text); }
+.dsh-wb-design .sim .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+/* page: settings */
+.dsh-wb-design .settings-layout { display: grid; grid-template-columns: 190px minmax(0,1fr); gap: 26px; align-items: start; }
+.dsh-wb-design .set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 1px; }
+.dsh-wb-design .set-nav a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--r-sm); font-size: var(--fs-12); color: var(--text-2); }
+.dsh-wb-design .set-nav a:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .set-nav a svg { width: 15px; height: 15px; color: var(--text-3); }
+.dsh-wb-design .set-sec { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); margin-bottom: 16px; }
+.dsh-wb-design .set-sec-hd { padding: 13px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .set-sec-hd .t { font-size: var(--fs-13); font-weight: var(--fw-semi); }
+.dsh-wb-design .set-sec-hd .d { font-size: var(--fs-11); color: var(--text-3); margin-left: 8px; }
+.dsh-wb-design .set-sec-bd { padding: 14px 16px; }
+.dsh-wb-design .ptog { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); font-size: var(--fs-12); color: var(--text-2); cursor: pointer; }
+.dsh-wb-design .ptog .box { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--line-3); display: flex; align-items: center; justify-content: center; }
+.dsh-wb-design .ptog.on { border-color: var(--primary-line); background: var(--primary-bg); color: var(--text); }
+.dsh-wb-design .ptog.on .box { background: var(--primary); border-color: var(--primary); }
+.dsh-wb-design .ptog.on .box::after { content: ""; width: 5px; height: 8px; border: solid #0e1424; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-top: -2px; }
+.dsh-wb-design[data-theme="light"] .ptog.on .box::after { border-color: #fff; }
+.dsh-wb-design .radio-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.dsh-wb-design .radio-card { flex: 1; min-width: 190px; border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 11px 12px; cursor: pointer; }
+.dsh-wb-design .radio-card.sel { border-color: var(--primary-line); background: var(--primary-bg); box-shadow: 0 0 0 1px var(--primary-line); }
+.dsh-wb-design .radio-card .rt { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); font-weight: var(--fw-med); color: var(--text); }
+.dsh-wb-design .radio-card .rd { font-size: var(--fs-11); color: var(--text-3); margin-top: 5px; line-height: var(--lh-snug); }
+.dsh-wb-design .radio-card .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-3); flex: none; display: flex; align-items: center; justify-content: center; }
+.dsh-wb-design .radio-card.sel .r { border-color: var(--primary); }
+.dsh-wb-design .radio-card.sel .r::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+.dsh-wb-design .path-box { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); }
+.dsh-wb-design .path-box .p { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text); flex: 1; }
+/* page: skill-library */
+.dsh-wb-design .skill-layout { display: grid; grid-template-columns: 372px minmax(0,1fr); gap: 20px; align-items: start; }
+.dsh-wb-design .skill-list { display: flex; flex-direction: column; gap: 8px; }
+.dsh-wb-design .srow { display: flex; align-items: flex-start; gap: 11px; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); cursor: pointer; transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.dsh-wb-design .srow:hover { border-color: var(--line-3); background: var(--surface-2); }
+.dsh-wb-design .srow.sel { border-color: var(--primary-line); background: var(--primary-bg); box-shadow: 0 0 0 1px var(--primary-line); }
+.dsh-wb-design .srow .ic-badge { width: 30px; height: 30px; border-radius: var(--r-sm); background: var(--primary-bg); border: 1px solid var(--primary-line); color: var(--primary); display: flex; align-items: center; justify-content: center; flex: none; }
+.dsh-wb-design .srow .ic-badge svg { width: 16px; height: 16px; }
+.dsh-wb-design .srow .mid { flex: 1; min-width: 0; }
+.dsh-wb-design .srow .mid .nm { font-size: var(--fs-13); font-weight: var(--fw-med); color: var(--text); display: flex; align-items: center; gap: 6px; }
+.dsh-wb-design .srow .mid .sub { font-size: var(--fs-11); color: var(--text-3); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.dsh-wb-design .srow .mid .sub .sep { color: var(--text-3); }
+.dsh-wb-design .detail { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.dsh-wb-design .detail-hd { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; gap: 12px; }
+.dsh-wb-design .detail-hd .ic-badge { width: 40px; height: 40px; border-radius: var(--r-md); background: var(--primary-bg); border: 1px solid var(--primary-line); color: var(--primary); display: flex; align-items: center; justify-content: center; flex: none; }
+.dsh-wb-design .detail-hd .ic-badge svg { width: 21px; height: 21px; }
+.dsh-wb-design .detail-hd h2 { font-size: var(--fs-16); font-weight: var(--fw-semi); margin: 0; display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .detail-hd .sub { font-size: var(--fs-12); color: var(--text-3); margin-top: 4px; }
+.dsh-wb-design .detail-bd { padding: 16px; }
+.dsh-wb-design .detail-sec { margin-bottom: 20px; }
+.dsh-wb-design .detail-sec .h { font-size: var(--fs-11); color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; font-family: var(--font-mono); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .detail-sec .h .r { margin-left: auto; }
+.dsh-wb-design .code-block { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); overflow: hidden; }
+.dsh-wb-design .code-block .cb-h { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 12px; color: var(--text-3); background: var(--bg-elev); }
+.dsh-wb-design .code-block pre { margin: 0; padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; line-height: 1.65; color: var(--text-2); overflow: auto; white-space: pre; }
+.dsh-wb-design .code-block pre .k { color: var(--primary); }
+.dsh-wb-design .code-block pre .c { color: var(--text-3); }
+.dsh-wb-design .chg-item { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 12px; }
+.dsh-wb-design .chg-item:last-child { border-bottom: 0; }
+.dsh-wb-design .chg-item .v { font-family: var(--font-mono); color: var(--text-2); flex: none; width: 36px; }
+.dsh-wb-design .chg-item .t { color: var(--text-3); }
+.dsh-wb-design .chg-item .d { color: var(--text-2); }
+
+/* ---- workbench plugin shell ---- */
+.dsh-wb-design{position:relative;flex:1 1 auto;min-height:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:13px;line-height:var(--lh-body)}
+.dsh-wb-design .shell{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--bg)}
+.dsh-wb-design .shell > .topbar{flex:none}
+.dsh-wb-design .shell > .scroll{flex:1;min-height:0;overflow:auto}
+.dsh-wb-design .page{margin:0 auto;width:100%}
+.dsh-wb-design .topbar .plugnac{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
+.dsh-wb-design .plugnac-title{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-13);font-weight:var(--fw-semi);color:var(--text);white-space:nowrap}
+.dsh-wb-design .plugnac-title svg{width:16px;height:16px;color:var(--text-2)}
+.dsh-wb-design .plugnac-sep{width:1px;height:16px;background:var(--line-2);margin:0 4px;flex:none}
+.dsh-wb-design .plugnac a{height:30px;display:inline-flex;align-items:center;padding:0 9px;border-radius:var(--r-sm);font-size:var(--fs-12);color:var(--text-2);white-space:nowrap;cursor:pointer}
+.dsh-wb-design .plugnac a:hover{background:var(--surface-2);color:var(--text)}
+.dsh-wb-design .plugnac a.active{background:var(--surface-2);color:var(--text);font-weight:var(--fw-med)}
+.dsh-wb-design .topbar .avatar{margin-right:2px}
+.dsh-wb-design .topbar .identity{cursor:pointer;border:1px solid transparent;padding:3px 7px;border-radius:var(--r-sm);background:transparent}
+.dsh-wb-design .topbar .identity:hover{background:var(--surface-2);border-color:var(--line)}
+.dsh-wb-design .nav-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;margin-left:6px;border-radius:999px;background:var(--primary-strong);color:#fff;font-size:10px;line-height:1;text-align:center;font-weight:var(--fw-semi);vertical-align:1px}
+.dsh-wb-design .nav-link{position:relative}
+.dsh-wb-design .toast-region{position:fixed;right:20px;bottom:20px;z-index:80;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.dsh-wb-design .wb-toast{display:flex;align-items:center;gap:10px;min-height:38px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);box-shadow:var(--shadow-2);color:var(--text);font-size:12px;pointer-events:auto}
+.dsh-wb-design .wb-toast.error{border-color:var(--red-line);background:var(--red-bg);color:var(--st-block)}
+.dsh-wb-design .wb-toast button{border:0;background:transparent;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:2px;opacity:.7}
+.dsh-wb-design .wb-toast button:hover{opacity:1}
+.dsh-wb-design .empty-page{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:64px 20px;border:1px dashed var(--line-2);border-radius:var(--r-md);background:var(--surface);color:var(--text-3);font-size:12px;text-align:center}
+.dsh-wb-design .empty-page svg{width:28px;height:28px;color:var(--text-3);opacity:.8}
+.dsh-wb-design .empty-page b{font-size:14px;color:var(--text-2);font-weight:var(--fw-med)}
+.dsh-wb-design .table tbody tr{cursor:pointer}
+.dsh-wb-design .table tbody tr:hover{background:var(--surface-2)}
+.dsh-wb-design .kpi.clickable,.dsh-wb-design .st.clickable{cursor:pointer}
+.dsh-wb-design .kpi.clickable:hover,.dsh-wb-design .st.clickable:hover{border-color:var(--line-3);background:var(--surface-2)}
+.dsh-wb-design .progress span{transition:width .3s var(--ease)}
+.dsh-wb-design .mono{font-family:var(--font-mono)}
+.dsh-wb-design .muted{color:var(--text-3)}
+.dsh-wb-design .tiny{font-size:var(--fs-11)}
+.dsh-wb-design .row{display:flex;align-items:center}
+.dsh-wb-design .col{display:flex;flex-direction:column}
+.dsh-wb-design .wrap{flex-wrap:wrap}
+.dsh-wb-design .gap-2{gap:var(--sp-2)}
+.dsh-wb-design .gap-3{gap:var(--sp-3)}
+.dsh-wb-design .gap-4{gap:var(--sp-4)}
+.dsh-wb-design .spacer{flex:1}
+.dsh-wb-design .chip .gl{font-size:10px;line-height:1}
+.dsh-wb-design .assignee{display:inline-flex;align-items:center;gap:5px;min-width:0}
+.dsh-wb-design .assignee .nm{color:var(--text-2);font-size:var(--fs-12);white-space:nowrap}
+.dsh-wb-design .avatar.sm{width:18px;height:18px;font-size:10px}
+.dsh-wb-design .avatar{width:22px;height:22px;font-size:11px}
+.dsh-wb-design .tl-bar{min-width:2px}
+.dsh-wb-design .tl-row .tl-name{white-space:nowrap}
+.dsh-wb-design .mindmap .req-card{margin-bottom:10px}
+.dsh-wb-design .req-card .rc-title{display:block}
+.dsh-wb-design .mxg{display:inline-flex;align-items:center;gap:3px;padding:1px 3px 1px 0;border-radius:4px;background:var(--surface-2);border:1px solid var(--line)}
+.dsh-wb-design .mxg .gl2{font-size:10px;color:var(--text-3);padding:0 4px;white-space:nowrap}
+.dsh-wb-design .mna2{font-size:10px;color:var(--text-4);white-space:nowrap}
+.dsh-wb-design .req-link{display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 7px;border-radius:var(--r-xs);font-size:var(--fs-11);color:var(--text-2);border:1px solid var(--line);background:var(--surface)}
+.dsh-wb-design .req-link:hover{color:var(--text);border-color:var(--line-3);background:var(--surface-2)}
+.dsh-wb-design .req-link svg{width:11px;height:11px}
+.dsh-wb-design .req-links{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.dsh-wb-design .rc-ft{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;padding-top:0;border-top:0}
+.dsh-wb-design .rc-ft .req-links{margin-left:auto}
+.dsh-wb-design .log-item{display:flex;gap:9px;padding:8px 14px;align-items:flex-start}
+.dsh-wb-design .log-item .c{min-width:0;flex:1}
+.dsh-wb-design .log-item .l1{font-size:12px;color:var(--text-2);line-height:var(--lh-snug)}
+.dsh-wb-design .log-item .l1 b{color:var(--text);font-weight:var(--fw-med)}
+.dsh-wb-design .log-item .l2{font-size:11px;color:var(--text-3);margin-top:2px}
+.dsh-wb-design .card-hd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.dsh-wb-design .card-hd .t{font-size:13px;font-weight:var(--fw-semi)}
+.dsh-wb-design .card-hd .r{margin-left:auto}
+.dsh-wb-design .card-bd{padding:14px}
+.dsh-wb-design .aside-col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.dsh-wb-design .aside-col .card{padding:0}
+.dsh-wb-design .head-meta b{color:var(--text-2);font-weight:var(--fw-med)}
+.dsh-wb-design .head-card h1{margin:3px 0 8px}
+.dsh-wb-design .head-card .code-line .chip{height:20px}
+.dsh-wb-design .tl-head{margin-bottom:2px}
+.dsh-wb-design .summary-line{margin-top:12px}
+.dsh-wb-design .section-hd{display:flex;align-items:center;gap:8px;margin:18px 0 10px}
+.dsh-wb-design .section-hd .t{font-size:14px;font-weight:var(--fw-semi);color:var(--text)}
+.dsh-wb-design .section-hd .n{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-size:11px;color:var(--text-3);font-family:var(--font-mono)}
+.dsh-wb-design .section-hd .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.dsh-wb-design .btn.btn-primary{background:var(--primary-strong);border-color:var(--primary-strong);color:#fff}
+.dsh-wb-design .btn.btn-primary:hover{background:var(--primary-strong-h);border-color:var(--primary-strong-h)}
+.dsh-wb-design .btn.btn-ghost{background:transparent;border-color:var(--line-2);color:var(--text-2)}
+.dsh-wb-design .btn.btn-text{border-color:transparent;background:transparent;color:var(--text-2)}
+.dsh-wb-design .badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:4px;background:var(--surface-2);border:1px solid var(--line);font-size:10px;color:var(--text-3);white-space:nowrap}
+.dsh-wb-design .badge--live{background:var(--green-bg);border-color:var(--green-line);color:var(--st-done)}
+.dsh-wb-design .badge--mock{background:var(--amber-bg);border-color:var(--amber-line);color:var(--st-warn)}
+.dsh-wb-design .banner{display:flex;align-items:flex-start;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);font-size:12px;color:var(--text-2);line-height:var(--lh-snug)}
+.dsh-wb-design .banner b{color:var(--text);font-weight:var(--fw-med)}
+.dsh-wb-design .banner--info{border-color:var(--primary-line);background:var(--primary-bg)}
+.dsh-wb-design .banner--mock{border-color:var(--amber-line);background:var(--amber-bg);color:var(--text-2)}
+.dsh-wb-design .banner--info svg{color:var(--primary)}
+.dsh-wb-design .banner--mock svg{color:var(--amber)}
+.dsh-wb-design .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.dsh-wb-design .tabs button{height:34px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--text-3);font-size:12px;cursor:pointer}
+.dsh-wb-design .tabs button.active{color:var(--text);border-bottom-color:var(--primary)}
+.dsh-wb-design .kv2{display:grid;grid-template-columns:66px 1fr;gap:6px 10px;font-size:12px;color:var(--text-2);margin:0}
+.dsh-wb-design .kv2 dt{color:var(--text-3)}
+.dsh-wb-design .kv2 dd{margin:0;min-width:0;color:var(--text-2)}
+.dsh-wb-design .kv{display:grid;grid-template-columns:66px 1fr;gap:5px 10px;font-size:12px;margin:0}
+.dsh-wb-design .kv dt{color:var(--text-3)}
+.dsh-wb-design .kv dd{margin:0;color:var(--text-2);display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.dsh-wb-design .rf-meta .chip,.dsh-wb-design .head-meta .chip{height:20px}
+.dsh-wb-design .rf-meta .assignee b{color:var(--text-2)}
+.dsh-wb-design .dcard2{padding:14px 16px}
+.dsh-wb-design .dcard2 .ch{min-height:24px;margin-bottom:10px}
+.dsh-wb-design .endsec{margin-top:18px}
+.dsh-wb-design .egrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px}
+.dsh-wb-design .ob{min-height:100%}
+.dsh-wb-design .endcard2{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:9px}
+.dsh-wb-design .endcard2 .eh{display:flex;align-items:center;gap:8px}
+.dsh-wb-design .endcard2 .eh .nm{font-size:13px;font-weight:var(--fw-semi)}
+.dsh-wb-design .endcard2 .eh .st{margin-left:auto}
+.dsh-wb-design .endcard2 .foot{display:flex;align-items:center;gap:8px;border-top:1px dashed var(--line);padding-top:9px;margin-top:2px}
+.dsh-wb-design .endcard2 .upd{font-size:11px;color:var(--text-3);margin-left:auto}
+.dsh-wb-design .endcard2 .risk{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:var(--r-xs);padding:5px 7px}
+.dsh-wb-design .narep{display:flex;align-items:center;gap:7px;padding:9px 12px;border:1px dashed var(--line-2);border-radius:var(--r-sm);font-size:12px;color:var(--text-3);margin-top:14px}
+.dsh-wb-design .narep svg{width:13px;height:13px}
+.dsh-wb-design .spec-line p{margin:0 0 5px}
+.dsh-wb-design .spec-line p:last-child{margin-bottom:0}
+.dsh-wb-design .req-detail-raw{font-size:12px;color:var(--text-2);line-height:var(--lh-body)}
+.dsh-wb-design .req-detail-raw h3,.dsh-wb-design .req-detail-raw h4{color:var(--text);margin:14px 0 6px;font-size:13px}
+.dsh-wb-design .req-detail-raw p{margin:0 0 7px}
+.dsh-wb-design .req-detail-raw ul,.dsh-wb-design .req-detail-raw ol{margin:0 0 8px;padding-left:20px}
+.dsh-wb-design .req-detail-raw code{font-family:var(--font-mono);background:var(--surface-2);border:1px solid var(--line);padding:0 4px;border-radius:3px;font-size:11px}
+.dsh-wb-design .req-detail-raw pre{background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;overflow:auto;font-family:var(--font-mono);font-size:11px}
+.dsh-wb-design .table-wrap{border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--surface)}
+.dsh-wb-design .table{width:100%;border-collapse:collapse}
+.dsh-wb-design .table th{height:34px;padding:0 12px;text-align:left;font-size:11px;font-weight:var(--fw-med);color:var(--text-3);background:var(--bg-elev);border-bottom:1px solid var(--line);white-space:nowrap}
+.dsh-wb-design .table td{height:48px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:12px;color:var(--text-2);vertical-align:middle}
+.dsh-wb-design .table tbody tr:last-child td{border-bottom:0}
+.dsh-wb-design .table tr.active{background:var(--primary-bg)}
+.dsh-wb-design .td-code{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}
+.dsh-wb-design .rk{font-size:13px;font-weight:var(--fw-med);color:var(--text)}
+.dsh-wb-design .rk:hover{color:var(--primary)}
+.dsh-wb-design .rksub{font-size:11px;color:var(--text-3);margin-top:2px}
+.dsh-wb-design .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+
+`
+    const DESIGN_LOGIN_CSS = String.raw`
+.dsh-wb-login .login { min-height: 100vh; display: grid; grid-template-columns: minmax(0,1fr) 600px; }
+.dsh-wb-login .brand { position: relative; background: var(--bg-elev); border-right: 1px solid var(--line); padding: 56px 60px; display: flex; flex-direction: column; overflow: hidden; }
+.dsh-wb-login .brand .grid-bg { position: absolute; inset: 0; background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 44px,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 44px 100%;
+      opacity: .35; mask-image: radial-gradient(circle at 30% 30%, #000 0%, transparent 75%); pointer-events: none; }
+.dsh-wb-login .brand > * { position: relative; }
+.dsh-wb-login .brand .logo { padding: 0 0 0 2px; }
+.dsh-wb-login .brand .tag { margin-top: auto; }
+.dsh-wb-login .brand h1 { font-size: 34px; font-weight: var(--fw-semi); letter-spacing: -.02em; line-height: 1.2; margin: 0 0 14px; max-width: 14ch; }
+.dsh-wb-login .brand .sub { color: var(--text-2); font-size: var(--fs-14); line-height: var(--lh-body); max-width: 40ch; }
+.dsh-wb-login .flow { margin-top: 44px; max-width: 420px; }
+.dsh-wb-login .flow .fi { display: grid; grid-template-columns: 26px 1fr; gap: 14px; padding-bottom: 20px; position: relative; }
+.dsh-wb-login .flow .fi:not(:last-child)::before { content: ""; position: absolute; left: 12px; top: 26px; bottom: 0; width: 1px; background: var(--line-2); }
+.dsh-wb-login .flow .fi .no { width: 25px; height: 25px; border-radius: 50%; border: 1px solid var(--line-3); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-2); background: var(--bg-elev); z-index: 1; }
+.dsh-wb-login .flow .fi .tt { font-size: var(--fs-13); color: var(--text); font-weight: var(--fw-med); }
+.dsh-wb-login .flow .fi .dd { font-size: var(--fs-12); color: var(--text-3); margin-top: 3px; line-height: var(--lh-snug); }
+.dsh-wb-login .brand .foot { margin-top: 40px; display: flex; align-items: center; gap: 10px; font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); }
+.dsh-wb-login .auth { padding: 40px 56px; display: flex; flex-direction: column; justify-content: center; background: var(--bg); position: relative; }
+.dsh-wb-login .auth .theme-slot { position: absolute; top: 22px; right: 24px; display: flex; align-items: center; gap: 10px; }
+.dsh-wb-login .auth-card { width: 100%; max-width: 400px; margin: 0 auto; }
+.dsh-wb-login .auth-card .h { font-size: var(--fs-22); font-weight: var(--fw-semi); letter-spacing: -.01em; margin: 0 0 6px; }
+.dsh-wb-login .auth-card .s { color: var(--text-2); font-size: var(--fs-13); margin-bottom: 18px; }
+.dsh-wb-login .mock-banner { margin-bottom: 18px; }
+.dsh-wb-login .user-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.dsh-wb-login .user-row { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.dsh-wb-login .user-row:hover { border-color: var(--line-3); }
+.dsh-wb-login .user-row.sel { border-color: var(--primary-line); background: var(--primary-bg); box-shadow: 0 0 0 1px var(--primary-line); }
+.dsh-wb-login .user-row .who { min-width: 0; flex: 1; }
+.dsh-wb-login .user-row .who .n { font-size: var(--fs-13); color: var(--text); font-weight: var(--fw-med); }
+.dsh-wb-login .user-row .who .r { font-size: var(--fs-11); color: var(--text-3); margin-top: 1px; }
+.dsh-wb-login .user-row .radio { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-3); flex: none; display: flex; align-items: center; justify-content: center; }
+.dsh-wb-login .user-row.sel .radio { border-color: var(--primary); }
+.dsh-wb-login .user-row.sel .radio::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.dsh-wb-login .divider-lbl { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: var(--fs-11); margin: 16px 0; }
+.dsh-wb-login .divider-lbl::before, .dsh-wb-login .divider-lbl::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+.dsh-wb-login .auth-foot { margin-top: 16px; font-size: var(--fs-11); color: var(--text-3); line-height: var(--lh-body); text-align: center; }
+.dsh-wb-login .auth-foot a { color: var(--primary); }
+.dsh-wb-login .next-hint { margin-top: 14px; display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: var(--r-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-login .next-hint b { color: var(--text-2); font-weight: var(--fw-med); }
+.dsh-wb-login .states { max-width: 400px; margin: 26px auto 0; }
+.dsh-wb-login .states .cap { font-size: var(--fs-11); color: var(--text-3); font-family: var(--font-mono); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
+.dsh-wb-login .state-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dsh-wb-login .state-mini { border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); padding: 9px 10px; }
+.dsh-wb-login .state-mini .t { font-size: var(--fs-11); color: var(--text-3); margin-bottom: 6px; }
+.dsh-wb-login .state-mini .body { font-size: var(--fs-12); color: var(--text-2); display: flex; align-items: center; gap: 6px; line-height: var(--lh-snug); }
+.dsh-wb-login .state-mini.err .body { color: var(--red); }
+.dsh-wb-login .state-mini.warn .body { color: var(--amber); }
+.dsh-wb-login .spin { width: 12px; height: 12px; border: 1.8px solid var(--line-3); border-top-color: var(--primary); border-radius: 50%; animation: dsh-wb-spin 0.8s linear infinite; flex: none; }
+@keyframes dsh-wb-spin{ to { transform: rotate(360deg); } }
+@media (max-width: 980px){
+.dsh-wb-login .login { grid-template-columns: 1fr; }
+.dsh-wb-login .brand { display: none; }
+.dsh-wb-login .auth { padding: 40px 24px; }
+}
+.dsh-wb-login{height:100%;min-height:0;overflow:auto;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:13px;line-height:var(--lh-body)}
+.dsh-wb-login .login{min-height:100%;grid-template-columns:minmax(0,1fr) 560px}
+.dsh-wb-login .brand .logo{display:flex;align-items:center;gap:9px}
+.dsh-wb-login .brand .logo .logo-mark{width:24px;height:24px;color:var(--text)}
+.dsh-wb-login .logo-name{font-size:15px;font-weight:var(--fw-semi);color:var(--text)}
+.dsh-wb-login .logo-badge{font-size:9px;font-weight:var(--fw-semi);letter-spacing:.06em;padding:2px 5px;border-radius:3px;background:var(--surface-2);border:1px solid var(--line-2);color:var(--text-3)}
+.dsh-wb-login .auth-card .banner{display:flex;align-items:flex-start;gap:8px;padding:9px 11px;border:1px solid var(--amber-line);border-radius:var(--r-sm);background:var(--amber-bg);color:var(--text-2);font-size:12px;line-height:var(--lh-snug)}
+.dsh-wb-login .auth-card .banner svg{width:15px;height:15px;color:var(--amber);flex:none}
+.dsh-wb-login .auth-card .banner b{color:var(--text)}
+.dsh-wb-login .user-row .avatar{width:28px;height:28px;font-size:12px}
+.dsh-wb-login .auth-card .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:var(--r-sm);border:1px solid var(--line-2);background:var(--surface-2);color:var(--text);font-size:13px;font-weight:var(--fw-med);cursor:pointer}
+.dsh-wb-login .auth-card .btn-primary{background:var(--primary-strong);border-color:var(--primary-strong);color:#fff}
+.dsh-wb-login .auth-card .btn-primary:hover{background:var(--primary-strong-h)}
+.dsh-wb-login .auth-card .btn-ghost{background:transparent;color:var(--text-2)}
+.dsh-wb-login .auth-card .btn:disabled{opacity:.6;cursor:not-allowed}
+.dsh-wb-login .auth-card .btn svg{width:15px;height:15px}
+.dsh-wb-login .auth-error{margin-bottom:12px;padding:8px 10px;border:1px solid var(--red-line);border-radius:var(--r-sm);background:var(--red-bg);color:var(--st-block);font-size:12px}
+.dsh-wb-login .avatar{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:var(--fw-semi);flex:none}
+
+`
+
+    const DESIGN_ICONS = String.raw`
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <defs>
+    <g id="_s" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></g>
+  </defs>
+
+  <symbol id="i-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 14.5c2.2-4.6 6-7 9.6-6.6 3.4.4 5.8 2.6 7.4 5.9"/>
+    <path d="M4 16.2c2.6 3 6.1 3.6 9.2 2.1 1.9-.9 3.3-2.4 4.6-4.3"/>
+    <circle cx="15.6" cy="9.4" r="1" fill="currentColor" stroke="none"/>
+  </symbol>
+
+  <symbol id="i-iter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 12.5 12 17.5l9-5"/><path d="M3 17 12 22l9-5"/>
+  </symbol>
+  <symbol id="i-workbench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/>
+  </symbol>
+  <symbol id="i-skills" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>
+    <circle cx="12" cy="12" r="3.2"/>
+  </symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"/>
+  </symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></symbol>
+  <symbol id="i-more-v" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17.5v.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-4 3V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2v10Z"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M21 3l-9 9"/><path d="M18 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-5.5 6.5-5.5s6.5 1.9 6.5 5.5"/><path d="M16 4.2a3.5 3.5 0 0 1 0 6.6M17.5 14.6c2.4.5 4 2.2 4 5.4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 4v5h-5"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 21h16"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.2"/><circle cx="6" cy="19" r="2.2"/><circle cx="18" cy="7" r="2.2"/><path d="M6 7.2v9.6M18 9.2c0 4-5 3.4-8.2 4.6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 12h14"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="7"/></symbol>
+  <symbol id="i-command" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6Z"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6l-7-3Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9Z"/><circle cx="7.5" cy="7.5" r="1.4"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h5l1.5 2.5h5L16 13h5"/><path d="M4.5 5h15l1.5 8v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4l1.5-8Z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
+</svg>
+
+`
+
+    function DesignIcon({ name, size = 16, className = 'ic', ...rest }) {
+      return h('svg', { className, width: size, height: size, 'aria-hidden': 'true', focusable: 'false', ...rest },
+        h('use', { href: `#i-${name}` }))
+    }
+
+    function ensureDesignIcons() {
+      if (typeof document === 'undefined') return
+      if (document.querySelector('div[data-dsh-workbench-icons]') !== null) return
+      const host = document.createElement('div')
+      host.dataset.dshWorkbenchIcons = '1'
+      host.setAttribute('aria-hidden', 'true')
+      host.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none'
+      host.innerHTML = DESIGN_ICONS
+      document.body.appendChild(host)
+    }
     // 内嵌的 Design Studio 画布按 package-local chunk 懒加载；加载完再渲染右栏 tab。
     let designStudioState = { runtime: null, error: null }
     const designStudioListeners = new Set()
@@ -763,8 +2280,9 @@ window.__ModuleLoader__.load({
       if (document.querySelector('style[data-dsh-workbench]') !== null) return
       const style = document.createElement('style')
       style.dataset.dshWorkbench = '1'
-      style.textContent = CSS
+      style.textContent = CSS + '\n' + DESIGN_CSS + '\n' + DESIGN_LOGIN_CSS
       document.head.appendChild(style)
+      ensureDesignIcons()
     }
 
     // ---------------------------------------------------------------------
@@ -1133,13 +2651,41 @@ window.__ModuleLoader__.load({
         .filter(entry => entry.items.length > 0)
     }
 
+    function designTone(tone) {
+      if (tone === 'success') return 'done'
+      if (tone === 'business') return 'prog'
+      if (tone === 'warn') return 'warn'
+      if (tone === 'error') return 'block'
+      return 'idle'
+    }
+
+    function statusChipTone(kind, value, meta) {
+      if (kind === 'design' && value === 'not_needed') return 'na'
+      if (kind === 'req' && ['draft', 'creating', 'backlog'].includes(value)) return 'plain'
+      return designTone(meta.tone)
+    }
+
     function StatusChip({ kind, value }) {
       const map = kind === 'design' ? DESIGN_STATUS : REQ_STATUS
       const meta = map[value] || { label: value || '未知', tone: 'idle', glyph: '·' }
-      return h('span', { className: `dsh-wb-chip dsh-wb-chip--${meta.tone}` },
-        h('span', { className: 'g' }, meta.glyph),
+      return h('span', { className: `chip chip--${statusChipTone(kind, value, meta)} dsh-wb-chip dsh-wb-chip--${meta.tone}` },
+        h('span', { className: 'gl g' }, meta.glyph),
         meta.label,
       )
+    }
+
+    function DesignChip({ tone = 'idle', glyph, children, title, className = '', style }) {
+      return h('span', { className: `chip chip--${tone}${className === '' ? '' : ' ' + className}`, title, style },
+        glyph === undefined ? null : h('span', { className: 'gl' }, glyph),
+        children,
+      )
+    }
+
+    function phaseChipTone(label) {
+      if (label === '已封板') return 'done'
+      if (label === '规划中') return 'idle'
+      if (label === '评审') return 'warn'
+      return 'prog'
     }
 
     const SESSION_TYPE_LABELS = { requirement: '需求', design: '设计', review: '评审', dev: '开发', test: '测试' }
@@ -2362,45 +3908,127 @@ window.__ModuleLoader__.load({
 
     function LoginPage({ auth }) {
       const mockUsers = auth.mockUsers ?? []
+      const [selectedId, setSelectedId] = useState('')
+      useEffect(() => {
+        if (mockUsers.length === 0) return
+        if (!mockUsers.some(user => user.id === selectedId)) setSelectedId(mockUsers[0].id)
+      }, [mockUsers.map(user => user.id).join('|')])
+      const selected = mockUsers.find(user => user.id === selectedId) ?? null
       const href = `${API}auth/dingtalk/start?returnTo=${encodeURIComponent(typeof window === 'undefined' ? '/' : window.location.href)}`
-      return h('div', { className: 'dsh-wb-auth' },
-        h('div', { className: 'dsh-wb-auth-card' },
-          h('div', { className: 'dsh-wb-auth-eyebrow' }, 'DSH · 部门研发工作台'),
-          h('h1', { className: 'dsh-wb-auth-title' }, '登录工作台'),
-          h('p', { className: 'dsh-wb-auth-sub' }, '使用团队身份进入需求与设计协作。'),
-          auth.error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, auth.error) : null,
-          auth.provider === 'mock'
-            ? h('div', null,
-                h('div', { className: 'dsh-wb-auth-note' }, h('span', { className: 'dsh-wb-mock' }, 'MOCK'), ' POC 测试登录，生产环境切换钉钉 OAuth'),
-                h('div', { className: 'dsh-wb-auth-users' },
-                  mockUsers.length === 0
-                    ? h('div', { className: 'dsh-wb-note' }, '没有可用的 Mock 用户，请检查服务端状态。')
-                    : mockUsers.map(user => h('button', {
-                        className: 'dsh-wb-auth-user',
-                        type: 'button',
-                        key: user.id,
-                        disabled: auth.busy,
-                        onClick: () => { void auth.loginMock(user.id) },
-                      },
-                        h('span', { className: 'dsh-wb-auth-user-main' },
-                          h('b', null, user.name),
-                          h('span', null, roleText(user)),
-                        ),
-                        h('span', { className: 'dsh-wb-auth-user-go' }, '进入 →'),
-                      )),
-                ),
-              )
-            : h('div', { className: 'dsh-wb-auth-dingtalk' },
-                h('p', null, '使用钉钉扫码 / 授权登录。账号需要管理员提前开通工作台权限。'),
-                h('a', { className: 'dsh-wb-btn dsh-wb-btn--primary', href }, '使用钉钉登录'),
+      const enter = () => {
+        if (selected === null || auth.busy) return
+        void auth.loginMock(selected.id)
+      }
+      return h('div', { className: 'dsh-wb-design dsh-wb-login' },
+        h('div', { className: 'login' },
+          h('section', { className: 'brand' },
+            h('div', { className: 'grid-bg' }),
+            h('div', { className: 'logo' },
+              h('svg', { className: 'logo-mark', width: 24, height: 24, 'aria-hidden': 'true' }, h('use', { href: '#i-logo' })),
+              h('span', { className: 'logo-name' }, 'deepseek'),
+              h('span', { className: 'logo-badge' }, 'HARNESS'),
+            ),
+            h('div', { style: { marginTop: '56px' } },
+              h('h1', null, '需求与设计，', h('br'), '在一个会话里闭环。'),
+              h('p', { className: 'sub' }, 'DSH 部门研发工作台 · 第一版聚焦「迭代 → 需求 → 评审排期 → 设计」，沉淀结果进服务端，草稿留在本地。'),
+            ),
+            h('div', { className: 'flow' },
+              [
+                ['1', '迭代', '建迭代、定阶段时间、圈需求范围'],
+                ['2', '需求', '产品在会话里梳理需求，存草稿、提交评审'],
+                ['3', '评审 · 排期', '不依赖设计，评审与设计可并行'],
+                ['4', '设计 · 交付', '设计工作台出稿、比对版本、提交交付'],
+              ].map(([no, title, desc]) => h('div', { className: 'fi', key: no },
+                h('span', { className: 'no' }, no),
+                h('div', null, h('div', { className: 'tt' }, title), h('div', { className: 'dd' }, desc)),
+              )),
+            ),
+            h('div', { className: 'foot' },
+              h(DesignIcon, { name: 'shield', size: 13, style: { color: 'var(--text-3)' } }),
+              'DSH 研发部 · 内网部署 · v1.0.0',
+            ),
+          ),
+          h('section', { className: 'auth' },
+            h('div', { className: 'theme-slot' },
+              h('span', { className: 'badge badge--mock' }, auth.provider === 'mock' ? 'Mock 登录' : '钉钉登录'),
+            ),
+            h('div', { className: 'auth-card' },
+              h('h2', { className: 'h' }, '登录到研发工作台'),
+              h('p', { className: 's' }, auth.provider === 'mock' ? '使用钉钉身份进入；第一版为 Mock，可直接选测试用户。' : '使用钉钉授权进入；需要管理员提前开通工作台权限。'),
+              auth.provider === 'mock'
+                ? h('div', { className: 'banner banner--mock mock-banner' },
+                    h(DesignIcon, { name: 'shield' }),
+                    h('span', null, '当前为 ', h('b', null, 'Mock 测试登录'), '，不会连接钉钉，也不会写入真实数据。'),
+                  )
+                : null,
+              auth.error !== '' ? h('div', { className: 'auth-error' }, auth.error) : null,
+              auth.provider === 'mock'
+                ? (mockUsers.length === 0
+                    ? h('div', { className: 'empty-page', style: { padding: '28px 16px' } },
+                        h(DesignIcon, { name: 'users', size: 24 }),
+                        h('b', null, '没有可用的 Mock 用户'),
+                        h('span', null, '请检查服务端用户配置。'),
+                      )
+                    : h('div', { className: 'user-list' },
+                        mockUsers.map(user => h('div', {
+                          className: `user-row${user.id === selectedId ? ' sel' : ''}`,
+                          key: user.id,
+                          role: 'button',
+                          tabIndex: 0,
+                          onClick: () => setSelectedId(user.id),
+                          onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(user.id) } },
+                        },
+                          h(Avatar, { name: user.name, size: 28 }),
+                          h('div', { className: 'who' },
+                            h('div', { className: 'n' }, user.name),
+                            h('div', { className: 'r' }, roleText(user)),
+                          ),
+                          h('span', { className: 'radio' }),
+                        )),
+                      ))
+                : null,
+              auth.provider === 'mock'
+                ? h('button', {
+                    className: 'btn btn-primary',
+                    type: 'button',
+                    disabled: auth.busy || selected === null,
+                    style: { width: '100%', height: '36px' },
+                    onClick: enter,
+                  }, auth.busy ? '正在进入…' : selected ? `以「${selected.name}」身份进入` : '请选择测试用户')
+                : h('a', { className: 'btn btn-primary', href, style: { width: '100%', height: '36px' } }, '使用钉钉登录'),
+              auth.provider === 'mock'
+                ? h('div', { className: 'tiny muted', style: { textAlign: 'center', marginTop: '8px' } }, '首次使用会先做「身份 / 平台 + 顶级文件夹」设置')
+                : null,
+              auth.provider === 'mock'
+                ? h('div', null,
+                    h('div', { className: 'divider-lbl' }, '或'),
+                    h('button', {
+                      className: 'btn btn-ghost',
+                      type: 'button',
+                      disabled: true,
+                      title: '生产环境启用钉钉扫码登录',
+                      style: { width: '100%', height: '36px' },
+                    }, h(DesignIcon, { name: 'command' }), '钉钉扫码登录 · 生产环境'),
+                  )
+                : null,
+              h('div', { className: 'next-hint' },
+                h(DesignIcon, { name: 'arrow-right', style: { color: 'var(--text-3)' } }),
+                h('span', null, '首次使用接下来：', h('b', null, '选择职能与平台'), ' → ', h('b', null, '选择个人顶级文件夹')),
               ),
-          h('div', { className: 'dsh-wb-auth-foot' }, `登录方式：${auth.provider === 'mock' ? 'Mock Provider' : '钉钉 OAuth'} · 会话保存在 HttpOnly Cookie`),
+              h('p', { className: 'auth-foot' },
+                auth.provider === 'mock' ? '正式环境将使用钉钉授权登录，界面与此一致。' : '登录状态保存在 HttpOnly Cookie / 桌面端 Token。',
+                h('br'),
+                '需要企业管理员开通通讯录权限',
+              ),
+            ),
+          ),
         ),
       )
     }
 
     function ProfileForm({ mode, user, platformGroups, platforms, defaultBaseDir, onSubmit, onCancel }) {
       const groups = useMemo(() => activePlatformGroups(platformGroups ?? [], platforms ?? []), [platformGroups, platforms])
+      const [step, setStep] = useState(0)
       const [role, setRole] = useState(user.activeRole || user.roles[0] || '')
       const [selected, setSelected] = useState(() => defaultProfilePlatformIds(user, groups))
       const [folder, setFolder] = useState(user.onboarding?.topLevelFolder || defaultBaseDir || '~/DSH-Workbench')
@@ -2423,74 +4051,133 @@ window.__ModuleLoader__.load({
         }
       }
 
-      return h('div', { className: 'dsh-wb-auth-form' },
-        h('section', { className: 'dsh-wb-auth-section' },
-          h('div', { className: 'dsh-wb-auth-step' }, '1'),
-          h('h3', null, '当前身份'),
-          h('p', null, '权限按账号的全部角色合并；这里选择你在工作台里默认使用的身份。'),
-          user.roles.length === 0
-            ? h('div', { className: 'dsh-wb-dialog-err' }, '账号还没有分配身份，请联系管理员。')
-            : h('div', { className: 'dsh-wb-auth-chips' },
-                user.roles.map(item => h('button', {
-                  className: `dsh-wb-auth-chip${role === item ? ' is-on' : ''}`,
-                  type: 'button',
-                  key: item,
-                  onClick: () => setRole(item),
-                }, roleLabel(item))),
-              ),
-        ),
-        h('section', { className: 'dsh-wb-auth-section' },
-          h('div', { className: 'dsh-wb-auth-step' }, '2'),
-          h('h3', null, '负责的平台 / 团队'),
-          h('p', null, '新建需求默认带上这些平台；可多选，后续可在平台配置里调整。'),
-          groups.length === 0
-            ? h('div', { className: 'dsh-wb-note' }, '当前没有启用的平台组，请联系管理员在平台配置里添加。')
-            : h('div', { className: 'dsh-wb-auth-groups' },
-                groups.map(entry => h('div', { className: 'dsh-wb-auth-group', key: entry.group.id },
-                  h('div', { className: 'dsh-wb-auth-group-head' },
-                    h('b', null, entry.group.name),
-                    entry.group.supportsApiDoc ? h('span', { className: 'dsh-wb-auth-tag' }, 'API 文档') : null,
+      const roleLabelOf = item => roleLabel(item)
+      const steps = ['选择身份', '顶级文件夹', '确认']
+      const stepsBar = h('div', { className: 'ob-steps' },
+        steps.flatMap((label, index) => {
+          const node = h('span', {
+            key: label,
+            className: `s${index === step ? ' active' : index < step ? ' done' : ''}`,
+          }, h('span', { className: 'dot' }, index < step ? '✓' : String(index + 1)), label)
+          return index === steps.length - 1 ? [node] : [node, h('span', { className: 'line', key: `line-${index}` })]
+        }),
+      )
+      const panel = step === 0
+        ? h('div', null,
+            h('h1', null, '先确认你的身份'),
+            h('div', { className: 'sub' }, '职能由管理员分配，权限取并集；再选一个「当前身份」决定默认打开哪个工作台。平台可多选，新建需求默认带上这些平台。'),
+            h('div', { className: 'field' },
+              h('div', { className: 'label' }, '当前身份', h('span', { className: 'hint' }, '单选')),
+              user.roles.length === 0
+                ? h('div', { className: 'banner banner--mock' }, h(DesignIcon, { name: 'alert' }), h('span', null, '账号还没有分配身份，请联系管理员。'))
+                : h('div', { className: 'radio-row' },
+                    user.roles.map(item => h('div', {
+                      className: `radio-card${role === item ? ' sel' : ''}`,
+                      key: item,
+                      role: 'button',
+                      tabIndex: 0,
+                      onClick: () => setRole(item),
+                      onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setRole(item) } },
+                    },
+                      h('div', { className: 'rt' }, h('span', { className: 'r' }), roleLabelOf(item)),
+                      h('div', { className: 'rd' }, item === 'lead' ? '默认打开「我的工作台」，可创建迭代' : item === 'product' ? '默认打开需求相关视图' : item === 'design' ? '默认打开设计相关视图' : `以「${roleLabelOf(item)}」身份进入工作台`),
+                    )),
                   ),
-                  h('div', { className: 'dsh-wb-auth-platforms' },
-                    entry.items.length === 0
-                      ? h('span', { className: 'dsh-wb-note' }, '暂无平台')
-                      : entry.items.map(platform => h('label', { className: 'dsh-wb-auth-check', key: platform.id },
-                          h('input', {
-                            type: 'checkbox',
-                            checked: selected.includes(platform.id),
-                            onChange: () => togglePlatform(platform.id),
-                          }),
-                          platform.name,
-                        )),
-                  ),
-                )),
+            ),
+            h('div', { className: 'field', style: { marginBottom: 0 } },
+              h('div', { className: 'label' }, '开发平台', h('span', { className: 'hint' }, '按组展示 · 可多选')),
+              groups.length === 0
+                ? h('div', { className: 'tiny muted' }, '当前没有启用的平台组，请联系管理员。')
+                : groups.map(entry => h('div', { key: entry.group.id, style: { marginBottom: '10px' } },
+                    h('div', { className: 'tiny muted', style: { marginBottom: '6px' } }, entry.group.name),
+                    h('div', { className: 'row gap-2 wrap' },
+                      entry.items.map(platform => h('div', {
+                        className: `ptog${selected.includes(platform.id) ? ' on' : ''}`,
+                        key: platform.id,
+                        role: 'button',
+                        tabIndex: 0,
+                        onClick: () => togglePlatform(platform.id),
+                        onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); togglePlatform(platform.id) } },
+                      }, h('span', { className: 'box' }), platform.name)),
+                    ),
+                  )),
+            ),
+          )
+        : step === 1
+          ? h('div', null,
+              h('h1', null, '选择个人顶级文件夹'),
+              h('div', { className: 'sub' }, '需求文件夹、草稿和 DSH 会话都建在这里；只保存在本机，不上传团队服务端。'),
+              h('div', { className: 'field' },
+                h('div', { className: 'label' }, '文件夹路径'),
+                h('div', { className: 'path-box' },
+                  h(DesignIcon, { name: 'folder', style: { color: 'var(--text-3)' } }),
+                  h('span', { className: 'p' }, folder.trim() || '未填写'),
+                  h(DesignChip, { tone: 'done', glyph: '✓' }, '本地'),
+                ),
+                h('div', { className: 'field-help' }, '修改文件夹不会移动已有需求目录；已有会话仍指向原路径。'),
               ),
-        ),
-        h('section', { className: 'dsh-wb-auth-section' },
-          h('div', { className: 'dsh-wb-auth-step' }, '3'),
-          h('h3', null, '本地顶级文件夹'),
-          h('p', null, '需求文件夹和 DSH 会话都建在这里；只保存在本机 DSH，不上传团队服务端。'),
-          h('input', {
-            className: 'dsh-wb-input',
-            value: folder,
-            placeholder: '例如：~/DSH-Workbench',
-            onChange: (event) => setFolder(event.target.value),
-            disabled: busy,
-            'aria-label': '本地顶级文件夹',
-          }),
-          mode === 'settings'
-            ? h('p', { className: 'dsh-wb-note' }, '修改文件夹不会移动已有需求目录；已有会话仍指向原路径。')
-            : null,
-        ),
-        error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
-        h('div', { className: 'dsh-wb-dialog-actions' },
-          onCancel ? h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: onCancel }, '取消') : null,
-          h('button', {
-            className: 'dsh-wb-btn dsh-wb-btn--primary',
-            type: 'button',
-            disabled: busy || folder.trim() === '' || user.roles.length === 0,
-            onClick: () => { void submit() },
-          }, busy ? '保存中…' : (mode === 'settings' ? '保存设置' : '进入工作台')),
+              h('div', { className: 'field', style: { marginBottom: 0 } },
+                h('div', { className: 'label' }, '路径', h('span', { className: 'req' }, '*')),
+                h('input', {
+                  className: 'input mono',
+                  value: folder,
+                  placeholder: '例如：~/DSH-Workbench',
+                  onChange: (event) => setFolder(event.target.value),
+                  disabled: busy,
+                  'aria-label': '本地顶级文件夹',
+                }),
+                h('div', { className: 'field-help' }, '服务端只记录「已配置」，不保存真实路径。'),
+              ),
+            )
+          : h('div', null,
+              h('h1', null, '确认设置'),
+              h('div', { className: 'sub' }, '确认后进入工作台；以后可在「设置」里调整当前身份、平台与文件夹。'),
+              h('dl', { className: 'ob-summary' },
+                h('dt', null, '当前身份'), h('dd', null, h('span', { className: 'assignee' }, h(Avatar, { name: user.name }), `${user.name} · ${roleLabelOf(role)}`)),
+                h('dt', null, '职能'), h('dd', null, user.roles.map(item => h(DesignChip, { key: item, tone: 'plain' }, roleLabelOf(item)))),
+                h('dt', null, '平台'), h('dd', null, selected.length === 0 ? h('span', { className: 'muted' }, '未选择') : selected.map(id => h(DesignChip, { key: id, tone: 'plain' }, (platforms ?? []).find(item => item.id === id)?.name ?? id))),
+                h('dt', null, '顶级文件夹'), h('dd', { className: 'mono', style: { fontSize: '12px' } }, folder.trim() || '未填写'),
+                h('dt', null, '认证模式'), h('dd', null, h('span', { className: 'badge badge--mock' }, 'Mock 测试登录')),
+              ),
+              h('div', { className: 'banner banner--mock', style: { marginTop: '16px' } },
+                h(DesignIcon, { name: 'shield' }),
+                h('span', null, '当前为 Mock 模式，不连接钉钉；正式环境界面一致，仅换 Provider。'),
+              ),
+            )
+      return h('div', { className: 'ob' },
+        h('div', { className: 'ob-card' },
+          h('div', { className: 'ob-brand' },
+            h('svg', { className: 'logo-mark', width: 22, height: 22, 'aria-hidden': 'true' }, h('use', { href: '#i-logo' })),
+            h('span', { className: 'logo-name' }, 'deepseek'),
+            h('span', { className: 'logo-badge' }, 'HARNESS'),
+            h('span', { className: 'badge badge--mock', style: { marginLeft: '8px' } }, mode === 'settings' ? '设置' : '首次使用'),
+          ),
+          stepsBar,
+          h('div', { className: 'ob-panel' },
+            panel,
+            error !== '' ? h('div', { className: 'banner banner--mock', style: { marginTop: '12px' } }, h(DesignIcon, { name: 'alert' }), h('span', null, error)) : null,
+            h('div', { className: 'ob-foot' },
+              step > 0
+                ? h('button', { className: 'btn', type: 'button', disabled: busy, onClick: () => setStep(step - 1) }, '上一步')
+                : onCancel
+                  ? h('button', { className: 'btn', type: 'button', disabled: busy, onClick: onCancel }, '取消')
+                  : null,
+              h('div', { className: 'spacer' }),
+              step < 2
+                ? h('button', {
+                    className: 'btn btn-primary',
+                    type: 'button',
+                    disabled: busy || (step === 1 && folder.trim() === '') || (step === 0 && user.roles.length === 0),
+                    onClick: () => setStep(step + 1),
+                  }, '下一步', h(DesignIcon, { name: 'arrow-right' }))
+                : h('button', {
+                    className: 'btn btn-primary',
+                    type: 'button',
+                    disabled: busy || folder.trim() === '' || user.roles.length === 0,
+                    onClick: () => { void submit() },
+                  }, busy ? '保存中…' : mode === 'settings' ? '保存设置' : '进入工作台', h(DesignIcon, { name: 'arrow-right' })),
+            ),
+          ),
         ),
       )
     }
@@ -2500,20 +4187,185 @@ window.__ModuleLoader__.load({
         await api('onboarding/complete', { method: 'POST', body: JSON.stringify(payload) })
         await auth.refresh()
       }, [auth])
-      return h('div', { className: 'dsh-wb-auth' },
-        h('div', { className: 'dsh-wb-auth-card dsh-wb-auth-card--wide' },
-          h('div', { className: 'dsh-wb-auth-eyebrow' }, '首次使用 · 只需设置一次'),
-          h('h1', { className: 'dsh-wb-auth-title' }, `欢迎，${auth.user.name}`),
-          h('p', { className: 'dsh-wb-auth-sub' }, '确认身份、平台和本地文件夹后，就可以开始建需求了。'),
-          h(ProfileForm, {
-            mode: 'onboarding',
-            user: auth.user,
-            platformGroups: auth.platformGroups,
-            platforms: auth.platforms,
-            defaultBaseDir: auth.defaultBaseDir,
-            onSubmit: submit,
-          }),
-          h('div', { className: 'dsh-wb-auth-foot' }, '顶级文件夹路径只保存本机；团队服务端只记录“已配置”。'),
+      return h('div', { className: 'dsh-wb-design' },
+        h(ProfileForm, {
+          mode: 'onboarding',
+          user: auth.user,
+          platformGroups: auth.platformGroups,
+          platforms: auth.platforms,
+          defaultBaseDir: auth.defaultBaseDir,
+          onSubmit: submit,
+        }),
+      )
+    }
+
+    function SettingsPage({ auth, state, onReload, onToast, onOpenPlatform, onOpenAdmin }) {
+      const user = state.currentUser ?? auth.user
+      const groups = useMemo(() => activePlatformGroups(state.platformGroups ?? [], state.platforms ?? []), [state.platformGroups, state.platforms])
+      const [role, setRole] = useState(user.activeRole || user.roles[0] || '')
+      const [selected, setSelected] = useState(() => defaultProfilePlatformIds(user, groups))
+      const [folder, setFolder] = useState(user.onboarding?.topLevelFolder || state.baseDir || '~/DSH-Workbench')
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const [saved, setSaved] = useState(false)
+      const isAdmin = (user.roles ?? []).includes('admin')
+      const canConfig = (user.roles ?? []).includes('lead') || isAdmin
+      const toggle = id => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+      const save = async () => {
+        if (busy || folder.trim() === '' || (user.roles ?? []).length === 0) return
+        setBusy(true)
+        setError('')
+        setSaved(false)
+        try {
+          await api('onboarding/complete', { method: 'POST', body: JSON.stringify({ activeRole: role || null, platformIds: selected, topLevelFolder: folder.trim() }) })
+          await auth.refresh()
+          await onReload()
+          setSaved(true)
+          onToast('设置已保存', false)
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+          onToast(reason instanceof Error ? reason.message : String(reason), true)
+        } finally {
+          setBusy(false)
+        }
+      }
+      const jump = id => {
+        const node = typeof document === 'undefined' ? null : document.getElementById(`wb-set-${id}`)
+        if (node !== null) node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      const switchLine = (title, desc, on, disabled = true) => h('div', { className: 'setting-row' },
+        h('div', { className: 'info' }, h('div', { className: 't' }, title), h('div', { className: 'd' }, desc)),
+        h('span', { className: `switch${on ? ' on' : ''}`, style: disabled ? { opacity: .6, pointerEvents: 'none' } : undefined, title: disabled ? '当前版本由服务端统一配置' : undefined }),
+      )
+      return h('div', { className: 'page', style: { maxWidth: '1000px' } },
+        h('div', { className: 'page-head' },
+          h('div', { className: 'ttl-block' },
+            h('h1', { className: 'page-title' }, '设置'),
+            h('div', { className: 'page-sub' }, '身份与平台、文件夹、认证、通知、技能更新'),
+          ),
+          h('div', { className: 'page-actions' },
+            h('button', { className: 'btn btn-sm', type: 'button', disabled: auth.busy, onClick: () => { void auth.logout() } }, '退出登录'),
+            h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy || folder.trim() === '', onClick: () => { void save() } }, busy ? '保存中…' : '保存更改'),
+          ),
+        ),
+        error !== '' ? h('div', { className: 'banner banner--mock', style: { marginBottom: '14px' } }, h(DesignIcon, { name: 'alert' }), h('span', null, error)) : null,
+        saved ? h('div', { className: 'banner banner--info', style: { marginBottom: '14px' } }, h(DesignIcon, { name: 'check-circle' }), h('span', null, '设置已保存，立即生效。')) : null,
+        h('div', { className: 'settings-layout' },
+          h('nav', { className: 'set-nav' },
+            [['identity', 'user', '身份与平台'], ['platform', 'package', '平台配置'], ['folder', 'folder', '顶级文件夹'], ['auth', 'shield', '认证模式'], ['notify', 'bell', '通知偏好'], ['skill', 'skills', '技能更新策略']].map(([id, icon, label]) =>
+              h('a', { key: id, href: `#wb-set-${id}`, onClick: event => { event.preventDefault(); jump(id) } }, h(DesignIcon, { name: icon }), label)),
+          ),
+          h('div', null,
+            h('section', { className: 'set-sec', id: 'wb-set-identity' },
+              h('div', { className: 'set-sec-hd' }, h(DesignIcon, { name: 'user' }), h('span', { className: 't' }, '身份与平台'), h('span', { className: 'd' }, '职能由管理员分配，权限取并集')),
+              h('div', { className: 'set-sec-bd' },
+                h('div', { className: 'field' },
+                  h('div', { className: 'label' }, '当前身份', h('span', { className: 'hint' }, '单选')),
+                  h('div', { className: 'radio-row' },
+                    (user.roles ?? []).map(item => h('div', {
+                      className: `radio-card${role === item ? ' sel' : ''}`,
+                      key: item,
+                      role: 'button',
+                      tabIndex: 0,
+                      onClick: () => setRole(item),
+                      onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setRole(item) } },
+                    },
+                      h('div', { className: 'rt' }, h('span', { className: 'r' }), roleLabel(item)),
+                      h('div', { className: 'rd' }, item === 'lead' ? '默认打开「我的工作台」，可创建迭代' : item === 'product' ? '默认打开需求相关视图' : item === 'design' ? '默认打开设计相关视图' : `以「${roleLabel(item)}」身份进入工作台`),
+                    )),
+                  ),
+                ),
+                h('div', { className: 'field', style: { marginBottom: 0 } },
+                  h('div', { className: 'label' }, '开发平台', h('span', { className: 'hint' }, '按组展示 · 可多选')),
+                  groups.length === 0
+                    ? h('div', { className: 'tiny muted' }, '当前没有启用的平台组。')
+                    : groups.map(entry => h('div', { key: entry.group.id, style: { marginBottom: '10px' } },
+                        h('div', { className: 'tiny muted', style: { marginBottom: '6px' } }, entry.group.name),
+                        h('div', { className: 'row gap-2 wrap' }, entry.items.map(platform => h('div', {
+                          className: `ptog${selected.includes(platform.id) ? ' on' : ''}`,
+                          key: platform.id,
+                          role: 'button',
+                          tabIndex: 0,
+                          onClick: () => toggle(platform.id),
+                          onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(platform.id) } },
+                        }, h('span', { className: 'box' }), platform.name))),
+                      )),
+                ),
+              ),
+            ),
+            h('section', { className: 'set-sec', id: 'wb-set-platform' },
+              h('div', { className: 'set-sec-hd' }, h(DesignIcon, { name: 'package' }), h('span', { className: 't' }, '平台配置'), h('span', { className: 'd' }, canConfig ? '负责人 / 管理员 · 组 + 平台/团队' : '只读 · 管理员可配置')),
+              h('div', { className: 'set-sec-bd' },
+                (state.platformGroups ?? []).filter(group => group.active !== false).map(group => h('div', { className: 'row', key: group.id, style: { alignItems: 'flex-start', gap: '10px', padding: '8px 0', borderBottom: '1px solid var(--line)' } },
+                  h(DesignChip, { tone: 'plain', className: '' }, group.name),
+                  h('div', { className: 'row gap-2 wrap', style: { flex: 1 } },
+                    (state.platforms ?? []).filter(platform => platform.groupId === group.id && platform.active !== false).map(platform => h(DesignChip, { key: platform.id, tone: 'idle' }, platform.name)),
+                  ),
+                )),
+                h('div', { className: 'row gap-2 wrap', style: { marginTop: '10px' } },
+                  canConfig ? h('button', { className: 'btn btn-sm', type: 'button', onClick: onOpenPlatform }, '管理平台配置') : null,
+                  isAdmin ? h('button', { className: 'btn btn-sm', type: 'button', onClick: onOpenAdmin }, '用户与权限') : null,
+                ),
+                h('div', { className: 'banner banner--info', style: { marginTop: '10px' } },
+                  h(DesignIcon, { name: 'dot' }),
+                  h('span', null, '需求只选具体平台；矩阵与各端卡片按需求实际涉及的平台、按组动态渲染，不涉及的折叠成一行。'),
+                ),
+              ),
+            ),
+            h('section', { className: 'set-sec', id: 'wb-set-folder' },
+              h('div', { className: 'set-sec-hd' }, h(DesignIcon, { name: 'folder' }), h('span', { className: 't' }, '个人顶级文件夹'), h('span', { className: 'd' }, '只存本地，不上传真实路径')),
+              h('div', { className: 'set-sec-bd' },
+                h('div', { className: 'path-box' },
+                  h(DesignIcon, { name: 'folder', style: { color: 'var(--text-3)' } }),
+                  h('span', { className: 'p' }, folder.trim() || '未填写'),
+                  h(DesignChip, { tone: 'done', glyph: '✓' }, '本地'),
+                ),
+                h('div', { className: 'field', style: { marginTop: '11px', marginBottom: 0 } },
+                  h('div', { className: 'label' }, '路径', h('span', { className: 'hint' }, '修改后保存')),
+                  h('input', { className: 'input mono', value: folder, disabled: busy, onChange: event => setFolder(event.target.value), 'aria-label': '本地顶级文件夹' }),
+                  h('div', { className: 'field-help' }, '会话全文、需求草稿、原型/设计草稿都放这里；服务端只存已提交/已交付结果。修改文件夹不会移动已有目录。'),
+                ),
+              ),
+            ),
+            h('section', { className: 'set-sec', id: 'wb-set-auth' },
+              h('div', { className: 'set-sec-hd' }, h(DesignIcon, { name: 'shield' }), h('span', { className: 't' }, '认证模式')),
+              h('div', { className: 'set-sec-bd' },
+                h('div', { className: 'banner banner--mock', style: { marginBottom: '12px' } },
+                  h(DesignIcon, { name: 'shield' }),
+                  h('span', null, '当前为 ', h('b', null, auth.provider === 'mock' ? 'Mock 模式' : '钉钉授权'), '，用于测试登录，不连接钉钉。切到正式需企业管理员开通通讯录权限。'),
+                ),
+                h('div', { className: 'radio-row' },
+                  h('div', { className: `radio-card${auth.provider === 'mock' ? ' sel' : ''}` },
+                    h('div', { className: 'rt' }, h('span', { className: 'r' }), 'Mock 测试登录', auth.provider === 'mock' ? h('span', { className: 'badge badge--mock', style: { marginLeft: 'auto' } }, '当前') : null),
+                    h('div', { className: 'rd' }, '从测试用户列表选人进入，界面与正式一致。'),
+                  ),
+                  h('div', { className: `radio-card${auth.provider === 'mock' ? '' : ' sel'}` },
+                    h('div', { className: 'rt' }, h('span', { className: 'r' }), '钉钉授权登录'),
+                    h('div', { className: 'rd' }, '需管理员开通通讯录权限；切换后需重新登录。'),
+                  ),
+                ),
+              ),
+            ),
+            h('section', { className: 'set-sec', id: 'wb-set-notify' },
+              h('div', { className: 'set-sec-hd' }, h(DesignIcon, { name: 'bell' }), h('span', { className: 't' }, '通知偏好'), h('span', { className: 'd' }, '第一版由服务端统一配置')),
+              h('div', { className: 'set-sec-bd', style: { paddingTop: '4px', paddingBottom: '4px' } },
+                switchLine('设计指派 / 需求变更', '被指派设计、需求变更待同步时通知', true),
+                switchLine('设计交付', '设计交付或「设计已更新」时通知相关开发', true),
+                switchLine('系统消息', '迭代封板、范围锁定等系统事件', true),
+                switchLine('每日摘要', '每天 09:00 汇总我的待办', false),
+              ),
+            ),
+            h('section', { className: 'set-sec', id: 'wb-set-skill', style: { marginBottom: 0 } },
+              h('div', { className: 'set-sec-hd' }, h(DesignIcon, { name: 'skills' }), h('span', { className: 't' }, '技能更新策略'), h('span', { className: 'd' }, '第一版固定由负责人发布')),
+              h('div', { className: 'set-sec-bd' },
+                h('div', { className: 'field', style: { marginBottom: 0 } },
+                  h('div', { className: 'label' }, '默认策略'),
+                  h('div', { className: 'select', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', pointerEvents: 'none', opacity: .75 } }, '自动更新到已发布的最新版', h(DesignIcon, { name: 'chev-down', style: { color: 'var(--text-3)' } })),
+                  h('div', { className: 'field-help' }, '会话会固定所用技能版本；升级前做 DSH 兼容校验，避免升级后失效。可对单个技能「固定版本」。'),
+                ),
+              ),
+            ),
+          ),
         ),
       )
     }
@@ -2977,6 +4829,359 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function DesignRolePacks({ value, onChange, disabled }) {
+      return h('div', { className: 'row gap-2 wrap' },
+        ['lead', 'product', 'design', 'dev', 'qa', 'admin'].map(role => h('div', {
+          className: `ptog${value.includes(role) ? ' on' : ''}`,
+          key: role,
+          role: 'button',
+          tabIndex: disabled ? -1 : 0,
+          style: disabled ? { opacity: .6, pointerEvents: 'none' } : undefined,
+          onClick: () => onChange(value.includes(role) ? value.filter(item => item !== role) : [...value, role]),
+        }, h('span', { className: 'box' }), roleLabel(role))),
+      )
+    }
+
+    function SkillLibraryPage({ state, onReload, onToast }) {
+      const roles = state.currentUser.roles ?? []
+      const canPlan = roles.includes('lead') || roles.includes('admin')
+      const [skills, setSkills] = useState([])
+      const [loading, setLoading] = useState(true)
+      const [filter, setFilter] = useState('all')
+      const [query, setQuery] = useState('')
+      const [selectedId, setSelectedId] = useState(null)
+      const [mode, setMode] = useState('view')
+      const [busy, setBusy] = useState('')
+      const [error, setError] = useState('')
+      const [form, setForm] = useState({ name: '', description: '', summary: '', content: '', rolePacks: ['product'], scope: canPlan ? 'global' : 'personal' })
+      const [edit, setEdit] = useState({ description: '', rolePacks: [] })
+      const [reviewForm, setReviewForm] = useState(null)
+
+      const load = useCallback(async () => {
+        try {
+          const body = await api('skills')
+          const list = body.skills ?? []
+          setSkills(list)
+          setSelectedId(current => (current !== null && list.some(skill => skill.id === current) ? current : (list[0]?.id ?? null)))
+          setError('')
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+        } finally {
+          setLoading(false)
+        }
+      }, [])
+
+      useEffect(() => { void load() }, [load])
+
+      const selected = skills.find(skill => skill.id === selectedId) ?? null
+      useEffect(() => {
+        setReviewForm(null)
+        if (selected === null) return
+        setEdit({ description: selected.description, rolePacks: [...(selected.rolePacks ?? [])] })
+      }, [selected?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+      const visible = useMemo(() => {
+        const normalized = query.trim().toLowerCase()
+        return skills.filter(skill => {
+          if (normalized !== '' && !`${skill.name} ${skill.description}`.toLowerCase().includes(normalized)) return false
+          if (filter === 'all') return true
+          if (filter === 'pending') return skill.status === 'pending_review'
+          if (filter === 'archived') return skill.status === 'archived'
+          return (skill.rolePacks ?? []).includes(filter)
+        })
+      }, [skills, filter, query])
+
+      const act = useCallback(async (label, path, body, success) => {
+        setBusy(label)
+        setError('')
+        try {
+          await api(path, { method: 'POST', body: JSON.stringify(body ?? {}) })
+          await load()
+          onToast(success, false)
+          return true
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+          return false
+        } finally {
+          setBusy('')
+        }
+      }, [load, onToast])
+
+      const startCreate = () => {
+        setMode('create')
+        setForm({ name: '', description: '', summary: '', content: '', rolePacks: ['product'], scope: canPlan ? 'global' : 'personal' })
+      }
+
+      const submitCreate = async () => {
+        if (busy !== '' || form.name.trim() === '' || form.content.trim() === '') return
+        const ok = await act('create', 'skills', {
+          name: form.name.trim(),
+          description: form.description.trim(),
+          rolePacks: form.rolePacks,
+          content: form.content,
+          summary: form.summary.trim(),
+          scope: form.scope,
+        }, form.scope === 'global' ? '团队技能已创建并启用' : '个人技能已上传，等待负责人审核')
+        if (ok) {
+          setMode('view')
+          await onReload()
+        }
+      }
+
+      const submitVersion = async () => {
+        if (selected === null || busy !== '' || form.content.trim() === '') return
+        const ok = await act('version', `skills/${encodeURIComponent(selected.id)}/versions`, {
+          content: form.content,
+          summary: form.summary.trim(),
+        }, canPlan && selected.scope === 'global' ? '新版本已发布' : '新版本已上传，等待负责人审核')
+        if (ok) {
+          setMode('view')
+          await onReload()
+        }
+      }
+
+      const submitEdit = async () => {
+        if (selected === null || busy !== '') return
+        const ok = await act('edit', `skills/${encodeURIComponent(selected.id)}`, {
+          description: edit.description.trim(),
+          rolePacks: edit.rolePacks,
+        }, '技能信息已保存')
+        if (ok) await onReload()
+      }
+
+      const submitReview = async (decision) => {
+        if (selected === null || busy !== '') return
+        const trimmed = (reviewForm?.comment ?? '').trim()
+        if (decision === 'reject' && trimmed === '') return
+        const ok = await act('review', `skills/${encodeURIComponent(selected.id)}/review`, { decision, comment: trimmed }, decision === 'approve' ? '技能已通过审核' : '技能已退回')
+        if (ok) setReviewForm(null)
+        await onReload()
+      }
+
+      const toggleArchive = async () => {
+        if (selected === null || busy !== '') return
+        const archived = selected.status === 'archived'
+        const nextStatus = archived ? (selected.scope === 'global' || canPlan ? 'active' : 'pending_review') : 'archived'
+        const ok = await act('archive', `skills/${encodeURIComponent(selected.id)}`, { status: nextStatus }, archived ? '技能已恢复' : '技能已归档')
+        if (ok) await onReload()
+      }
+
+      const latest = selected?.versions?.[selected.versions.length - 1] ?? null
+      const canEditSelected = selected !== null && (canPlan || selected.ownerId === state.currentUser.id)
+      const statusTone = status => status === 'active' ? 'done' : status === 'pending_review' ? 'warn' : status === 'changes_requested' ? 'block' : status === 'archived' ? 'na' : 'idle'
+      const statusGlyph = status => status === 'active' ? '✓' : status === 'pending_review' ? '◷' : status === 'changes_requested' ? '!' : status === 'archived' ? '—' : '○'
+      const roleIcon = skill => (skill.rolePacks ?? []).includes('design') ? 'target' : (skill.rolePacks ?? []).includes('dev') ? 'code' : (skill.rolePacks ?? []).includes('qa') ? 'check-circle' : 'file'
+      const filteredCounts = {
+        all: skills.length,
+        product: skills.filter(skill => (skill.rolePacks ?? []).includes('product')).length,
+        design: skills.filter(skill => (skill.rolePacks ?? []).includes('design')).length,
+        dev: skills.filter(skill => (skill.rolePacks ?? []).includes('dev')).length,
+        qa: skills.filter(skill => (skill.rolePacks ?? []).includes('qa')).length,
+      }
+      const detail = mode === 'create'
+        ? h('div', { className: 'detail' },
+            h('div', { className: 'detail-hd' },
+              h('div', { className: 'ic-badge' }, h(DesignIcon, { name: 'plus' })),
+              h('div', { style: { flex: 1, minWidth: 0 } },
+                h('h2', null, '新建技能'),
+                h('div', { className: 'sub' }, '团队技能由负责人审核发布；个人技能上传后进入审核。'),
+              ),
+              h('button', { className: 'btn btn-sm btn-text', type: 'button', onClick: () => setMode('view') }, '取消'),
+            ),
+            h('div', { className: 'detail-bd' },
+              h('div', { className: 'field' }, h('div', { className: 'label' }, '技能名', h('span', { className: 'req' }, '*')), h('input', { className: 'input', value: form.name, placeholder: '例如 req-acceptance（字母/数字/-/_）', onChange: event => setForm(current => ({ ...current, name: event.target.value })) })),
+              h('div', { className: 'field' }, h('div', { className: 'label' }, '一句话说明'), h('input', { className: 'input', value: form.description, placeholder: '这个技能做什么', onChange: event => setForm(current => ({ ...current, description: event.target.value })) })),
+              h('div', { className: 'field' }, h('div', { className: 'label' }, '适用角色'), h(DesignRolePacks, { value: form.rolePacks, onChange: rolePacks => setForm(current => ({ ...current, rolePacks })) })),
+              canPlan ? h('div', { className: 'field' },
+                h('div', { className: 'label' }, '发布范围'),
+                h('div', { className: 'row gap-2 wrap' },
+                  h('div', { className: `ptog${form.scope === 'global' ? ' on' : ''}`, role: 'button', tabIndex: 0, onClick: () => setForm(current => ({ ...current, scope: 'global' })) }, h('span', { className: 'box' }), '团队技能 · 直接发布'),
+                  h('div', { className: `ptog${form.scope === 'personal' ? ' on' : ''}`, role: 'button', tabIndex: 0, onClick: () => setForm(current => ({ ...current, scope: 'personal' })) }, h('span', { className: 'box' }), '个人技能 · 待审核'),
+                ),
+              ) : null,
+              h('div', { className: 'field' }, h('div', { className: 'label' }, '技能正文', h('span', { className: 'req' }, '*')), h('textarea', { className: 'textarea', style: { minHeight: '220px' }, value: form.content, placeholder: '支持 Markdown', onChange: event => setForm(current => ({ ...current, content: event.target.value })) })),
+              h('div', { className: 'field' }, h('div', { className: 'label' }, '版本说明'), h('input', { className: 'input', value: form.summary, placeholder: '可选', onChange: event => setForm(current => ({ ...current, summary: event.target.value })) })),
+            ),
+            h('div', { className: 'rp-foot', style: { borderTop: '1px solid var(--line)' } },
+              h('div', { className: 'spacer' }),
+              h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => setMode('view') }, '取消'),
+              h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy !== '' || form.name.trim() === '' || form.content.trim() === '', onClick: () => { void submitCreate() } }, busy === 'create' ? '创建中…' : '创建技能'),
+            ),
+          )
+        : mode === 'version' && selected !== null
+          ? h('div', { className: 'detail' },
+              h('div', { className: 'detail-hd' },
+                h('div', { className: 'ic-badge' }, h(DesignIcon, { name: 'upload' })),
+                h('div', { style: { flex: 1, minWidth: 0 } },
+                  h('h2', null, `上传新版本 · ${selected.name}`),
+                  h('div', { className: 'sub' }, `当前 v${latest?.version ?? 0}。${canPlan && selected.scope === 'global' ? '负责人上传团队技能版本会直接发布。' : '上传后等待负责人审核。'}`),
+                ),
+                h('button', { className: 'btn btn-sm btn-text', type: 'button', onClick: () => setMode('view') }, '取消'),
+              ),
+              h('div', { className: 'detail-bd' },
+                h('div', { className: 'field' }, h('div', { className: 'label' }, '新版本正文', h('span', { className: 'req' }, '*')), h('textarea', { className: 'textarea', style: { minHeight: '260px' }, value: form.content, onChange: event => setForm(current => ({ ...current, content: event.target.value })) })),
+                h('div', { className: 'field', style: { marginBottom: 0 } }, h('div', { className: 'label' }, '版本说明'), h('input', { className: 'input', value: form.summary, placeholder: '这次改了什么', onChange: event => setForm(current => ({ ...current, summary: event.target.value })) })),
+              ),
+              h('div', { className: 'rp-foot', style: { borderTop: '1px solid var(--line)' } },
+                h('div', { className: 'spacer' }),
+                h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => setMode('view') }, '取消'),
+                h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy !== '' || form.content.trim() === '', onClick: () => { void submitVersion() } }, busy === 'version' ? '上传中…' : '上传版本'),
+              ),
+            )
+          : selected === null
+            ? h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'skills', size: 28 }), h('b', null, '选择一个技能'), h('span', null, '左侧点一个技能查看内容、版本和审核状态。'))
+            : h('div', { className: 'detail' },
+                h('div', { className: 'detail-hd' },
+                  h('div', { className: 'ic-badge' }, h(DesignIcon, { name: roleIcon(selected) })),
+                  h('div', { style: { flex: 1, minWidth: 0 } },
+                    h('h2', null, selected.name, h('span', { className: 'badge' }, `v${latest?.version ?? 0}`)),
+                    h('div', { className: 'sub' }, `${SKILL_SCOPE_LABELS[selected.scope] ?? selected.scope} · ${(selected.rolePacks ?? []).map(roleLabel).join(' / ') || '通用'} · owner ${state.users.find(user => user.id === selected.ownerId)?.name ?? selected.ownerId}`),
+                  ),
+                  h('div', { className: 'col gap-2', style: { alignItems: 'flex-end' } },
+                    h(DesignChip, { tone: statusTone(selected.status), glyph: statusGlyph(selected.status) }, SKILL_STATUS_LABELS[selected.status] ?? selected.status),
+                    canEditSelected ? h('div', { className: 'row gap-3', title: selected.status === 'archived' ? '恢复技能' : '归档技能' },
+                      h('span', { className: 'tiny muted' }, selected.status === 'archived' ? '已归档' : '启用'),
+                      h('span', { className: `switch${selected.status === 'archived' ? '' : ' on'}`, role: 'button', tabIndex: 0, onClick: () => { void toggleArchive() }, onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void toggleArchive() } } }),
+                    ) : null,
+                  ),
+                ),
+                h('div', { className: 'detail-bd' },
+                  h('div', { className: 'detail-sec' },
+                    h('div', { className: 'h' }, '描述'),
+                    h('p', { className: 'spec-line', style: { fontSize: '12px', margin: '0 0 10px' } }, selected.description || '未填写说明'),
+                    h('dl', { className: 'kv' },
+                      h('dt', null, '适用角色'), h('dd', null, (selected.rolePacks ?? []).length === 0 ? '通用' : (selected.rolePacks ?? []).map(role => h(DesignChip, { key: role, tone: 'plain' }, roleLabel(role)))),
+                      h('dt', null, '适用平台'), h('dd', null, '通用'),
+                      h('dt', null, '兼容 DSH'), h('dd', { className: 'mono', style: { fontSize: '12px' } }, '≥ 0.2.0'),
+                      h('dt', null, '命令名'), h('dd', { className: 'mono', style: { fontSize: '12px' } }, `/${selected.name}`),
+                    ),
+                  ),
+                  h('div', { className: 'detail-sec' },
+                    h('div', { className: 'h' }, 'Changelog'),
+                    (selected.versions ?? []).length === 0
+                      ? h('div', { className: 'tiny muted' }, '还没有版本。')
+                      : [...selected.versions].reverse().slice(0, 4).map(version => h('div', { className: 'chg-item', key: version.version },
+                          h('span', { className: 'v' }, `v${version.version}`),
+                          h('span', { className: 'd' }, version.summary || '无说明'),
+                          h('span', { className: 't', style: { marginLeft: 'auto' } }, relativeTime(version.at)),
+                        )),
+                  ),
+                  h('div', { className: 'detail-sec' },
+                    h('div', { className: 'h' }, '内容预览', h('span', { className: 'r tiny muted' }, 'SKILL.md')),
+                    h('div', { className: 'code-block' },
+                      h('div', { className: 'cb-h' }, h(DesignIcon, { name: 'file', size: 12 }), `SKILL.md · v${latest?.version ?? 0}`),
+                      h('pre', null, (latest?.content ?? '—').slice(0, 4000)),
+                    ),
+                  ),
+                  h('div', { className: 'detail-sec' },
+                    h('div', { className: 'h' }, '版本历史'),
+                    (selected.versions ?? []).length === 0
+                      ? h('div', { className: 'tiny muted' }, '还没有版本。')
+                      : [...selected.versions].reverse().map((version, index) => h('div', { className: 'vline', key: version.version },
+                          h('span', { className: 'v' }, `v${version.version}`),
+                          h('span', { className: 'd' }, version.summary || '无说明'),
+                          index === 0 ? h('span', { className: 'badge', style: { marginLeft: 'auto' } }, '当前') : h('span', { className: 'tiny muted', style: { marginLeft: 'auto' } }, relativeTime(version.at)),
+                        )),
+                  ),
+                  canEditSelected
+                    ? h('div', { className: 'detail-sec' },
+                        h('div', { className: 'h' }, '编辑信息'),
+                        h('div', { className: 'field' }, h('input', { className: 'input', value: edit.description, placeholder: '技能说明', onChange: event => setEdit(current => ({ ...current, description: event.target.value })) })),
+                        h('div', { className: 'field' }, h('div', { className: 'label' }, '适用角色'), h(DesignRolePacks, { value: edit.rolePacks, onChange: rolePacks => setEdit(current => ({ ...current, rolePacks })) })),
+                        h('button', { className: 'btn btn-sm', type: 'button', disabled: busy !== '', onClick: () => { void submitEdit() } }, busy === 'edit' ? '保存中…' : '保存说明与角色'),
+                      )
+                    : null,
+                  reviewForm !== null
+                    ? h('div', { className: 'detail-sec' },
+                        h('div', { className: 'h' }, reviewForm.decision === 'approve' ? '审核意见（可留空）' : '退回原因'),
+                        h('textarea', {
+                          className: 'textarea',
+                          style: { minHeight: '70px' },
+                          value: reviewForm.comment,
+                          maxLength: 500,
+                          onChange: event => setReviewForm(current => ({ ...current, comment: event.target.value })),
+                        }),
+                        h('div', { className: 'row gap-2', style: { marginTop: '8px' } },
+                          h('button', { className: 'btn btn-sm btn-ghost', type: 'button', disabled: busy !== '', onClick: () => setReviewForm(null) }, '取消'),
+                          h('button', {
+                            className: 'btn btn-sm btn-primary',
+                            type: 'button',
+                            disabled: busy !== '' || (reviewForm.decision === 'reject' && reviewForm.comment.trim() === ''),
+                            onClick: () => { void submitReview(reviewForm.decision) },
+                          }, busy === 'review' ? '提交中…' : reviewForm.decision === 'approve' ? '确认通过' : '确认退回'),
+                        ),
+                      )
+                    : null,
+                ),
+                h('div', { className: 'rp-foot', style: { borderTop: '1px solid var(--line)' } },
+                  canEditSelected ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', disabled: busy !== '', onClick: () => { void toggleArchive() } }, selected.status === 'archived' ? '恢复技能' : '停用') : null,
+                  h('div', { className: 'spacer' }),
+                  selected.status === 'pending_review' && canPlan
+                    ? h('span', { className: 'row gap-2' },
+                        h('button', { className: 'btn btn-sm', type: 'button', disabled: busy !== '', onClick: () => setReviewForm({ decision: 'reject', comment: '' }) }, '退回'),
+                        h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy !== '', onClick: () => setReviewForm({ decision: 'approve', comment: '' }) }, '通过'),
+                      )
+                    : null,
+                  canEditSelected ? h('button', { className: 'btn btn-sm', type: 'button', disabled: busy !== '', onClick: () => { setMode('version'); setForm(current => ({ ...current, content: latest?.content ?? '', summary: '' })) } }, '上传新版本') : null,
+                ),
+              )
+      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+        h('div', { className: 'page-head' },
+          h('div', { className: 'ttl-block' },
+            h('h1', { className: 'page-title' }, '技能库'),
+            h('div', { className: 'page-sub' }, `${skills.length} 个技能 · 已发布 ${skills.filter(skill => skill.status === 'active').length} · 审核中 ${skills.filter(skill => skill.status === 'pending_review').length} · 已归档 ${skills.filter(skill => skill.status === 'archived').length}`),
+          ),
+          h('div', { className: 'page-actions' },
+            h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: startCreate }, h(DesignIcon, { name: 'plus' }), '新建技能'),
+          ),
+        ),
+        error !== '' ? h('div', { className: 'banner banner--mock', style: { marginBottom: '14px' } }, h(DesignIcon, { name: 'alert' }), h('span', null, error)) : null,
+        h('div', { className: 'toolbar' },
+          h('div', { className: 'seg' },
+            [['all', `全部 ${filteredCounts.all}`], ['product', `产品 ${filteredCounts.product}`], ['design', `设计 ${filteredCounts.design}`], ['dev', `开发 ${filteredCounts.dev}`], ['qa', `测试 ${filteredCounts.qa}`]].map(([key, label]) =>
+              h('button', { key, type: 'button', className: filter === key ? 'active' : '', onClick: () => setFilter(key) }, label)),
+          ),
+          h('div', { className: 'spacer' }),
+          h('div', { className: 'search', style: { width: '200px' } },
+            h(DesignIcon, { name: 'search' }),
+            h('input', { value: query, placeholder: '搜索技能', 'aria-label': '搜索技能', onChange: event => setQuery(event.target.value) }),
+          ),
+        ),
+        h('div', { className: 'skill-layout' },
+          h('div', { className: 'skill-list' },
+            loading
+              ? h('div', { className: 'empty-page', style: { padding: '30px 16px' } }, h(DesignIcon, { name: 'refresh', size: 22 }), h('b', null, '正在读取技能'))
+              : visible.length === 0
+                ? h('div', { className: 'empty-page', style: { padding: '30px 16px' } }, h(DesignIcon, { name: 'skills', size: 22 }), h('b', null, '没有匹配技能'), h('span', null, '换个筛选或搜索词。'))
+                : visible.map(skill => {
+                    const latestVersion = skill.versions?.[skill.versions.length - 1]
+                    return h('div', {
+                      className: `srow${skill.id === selectedId && mode === 'view' ? ' sel' : ''}`,
+                      key: skill.id,
+                      role: 'button',
+                      tabIndex: 0,
+                      onClick: () => { setSelectedId(skill.id); setMode('view') },
+                      onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(skill.id); setMode('view') } },
+                    },
+                      h('div', { className: 'ic-badge' }, h(DesignIcon, { name: roleIcon(skill) })),
+                      h('div', { className: 'mid' },
+                        h('div', { className: 'nm' }, skill.name, h('span', { className: 'badge' }, `v${latestVersion?.version ?? 0}`)),
+                        h('div', { className: 'sub' },
+                          h('span', null, (skill.rolePacks ?? []).length === 0 ? '通用' : (skill.rolePacks ?? []).map(roleLabel).join(' / ')),
+                          h('span', { className: 'sep' }, '·'),
+                          h('span', null, SKILL_SCOPE_LABELS[skill.scope] ?? skill.scope),
+                          h('span', { className: 'sep' }, '·'),
+                          h(DesignChip, { tone: statusTone(skill.status), glyph: statusGlyph(skill.status), style: { height: '16px', padding: '0 5px' } }, SKILL_STATUS_LABELS[skill.status] ?? skill.status),
+                        ),
+                      ),
+                    )
+                  }),
+          ),
+          detail,
+        ),
+      )
+    }
+
     function SkillManager({ state, onClose, onReload, onToast }) {
       const roles = state.currentUser.roles ?? []
       const canPlan = roles.includes('lead') || roles.includes('admin')
@@ -3273,10 +5478,12 @@ window.__ModuleLoader__.load({
     function WorkbenchGate({ ctx }) {
       const auth = useAuth()
       if (auth.loading) {
-        return h('div', { className: 'dsh-wb-page' },
-          h('div', { className: 'dsh-wb-skeleton', style: { width: '180px', height: '22px' } }),
-          h('div', { className: 'dsh-wb-skeleton', style: { width: '60%' } }),
-          h('div', { className: 'dsh-wb-skeleton', style: { width: '80%' } }),
+        return h('div', { className: 'dsh-wb-design' },
+          h('div', { className: 'empty-page', style: { margin: '40px auto', maxWidth: '520px' } },
+            h(DesignIcon, { name: 'refresh', size: 28 }),
+            h('b', null, '正在检查登录状态'),
+            h('span', null, '正在读取当前身份与工作台配置。'),
+          ),
         )
       }
       if (!auth.authenticated || auth.user === null) return h(LoginPage, { auth })
@@ -3561,27 +5768,54 @@ window.__ModuleLoader__.load({
 
     function Avatar({ name, size = 18 }) {
       const text = String(name ?? '?').trim().slice(0, 1) || '?'
+      let hash = 0
+      for (const ch of String(name ?? '')) hash = (hash * 31 + ch.codePointAt(0)) % 997
+      const variant = (hash % 6) + 1
+      const style = size === 18 ? undefined : { width: `${size}px`, height: `${size}px`, fontSize: `${Math.max(9, size - 9)}px` }
       return h('span', {
-        className: 'dsh-wb-avatar',
-        style: { width: `${size}px`, height: `${size}px`, fontSize: `${Math.max(9, size - 9)}px` },
+        className: `avatar sm av-${variant} dsh-wb-avatar`,
+        style,
         title: name || '',
         'aria-hidden': 'true',
       }, text)
     }
 
     function IterationKpis({ state, entries }) {
-      const active = entries.filter(entry => entry.iteration.status === 'in_progress').length
+      const activeEntries = entries.filter(entry => entry.iteration.status === 'in_progress')
+      const active = activeEntries.length
       const total = entries.reduce((sum, entry) => sum + entry.requirements.length, 0)
       const month = new Date().toISOString().slice(0, 7)
-      const closed = entries.filter(entry =>
+      const closedEntries = entries.filter(entry =>
         entry.iteration.status === 'done' &&
-        String(entry.iteration.endDate ?? '').startsWith(month)).length
+        String(entry.iteration.endDate ?? '').startsWith(month))
       const risk = entries.reduce((sum, entry) => sum + iterationRisk(entry.requirements).count, 0)
-      return h('div', { className: 'dsh-wb-iter-kpis' },
-        h(StatCard, { label: '进行中迭代', value: active, detail: entries.filter(entry => entry.iteration.status === 'in_progress').map(entry => entry.iteration.shortCode ?? entry.iteration.code).join(' · ') || undefined }),
-        h(StatCard, { label: '需求总数', value: total, detail: `覆盖 ${entries.length} 个迭代` }),
-        h(StatCard, { label: '本月封板', value: closed, detail: closed > 0 ? month : '还没有封板迭代' }),
-        h(StatCard, { label: '风险项', value: risk, detail: risk > 0 ? '设计、测试与变更需关注' : '暂无风险' }),
+      const undelivered = entries.reduce((sum, entry) => sum + entry.requirements.filter(item =>
+        item.inScope !== false && !['delivered', 'not_needed'].includes(item.designStatus)).length, 0)
+      const failed = entries.reduce((sum, entry) => sum + entry.requirements.filter(item => item.status === 'test_failed').length, 0)
+      const weight = { scheduled: 0, backlog: 1, in_progress: 2 }
+      const scheduled = entries.reduce((sum, entry) => sum + entry.requirements.filter(item => item.status === 'scheduled').length, 0)
+      const doing = entries.reduce((sum, entry) => sum + entry.requirements.filter(item => ['in_progress', 'dev_done', 'testing'].includes(item.status)).length, 0)
+      return h('div', { className: 'kpis' },
+        h('div', { className: 'kpi' },
+          h('div', { className: 'lab' }, h(DesignIcon, { name: 'dot', size: 12, className: 'ic', style: { color: 'var(--primary)' } }), '进行中迭代'),
+          h('div', { className: 'v' }, String(active)),
+          h('div', { className: 'd' }, activeEntries.map(entry => entry.iteration.shortCode ?? entry.iteration.code).join(' · ') || '暂无进行中迭代'),
+        ),
+        h('div', { className: 'kpi' },
+          h('div', { className: 'lab' }, h(DesignIcon, { name: 'iter', size: 12, className: 'ic', style: { color: 'var(--text-3)' } }), '需求总数'),
+          h('div', { className: 'v' }, String(total)),
+          h('div', { className: 'd' }, `已排期 ${scheduled} · 进行中 ${doing}`),
+        ),
+        h('div', { className: 'kpi' },
+          h('div', { className: 'lab' }, h(DesignIcon, { name: 'check-circle', size: 12, className: 'ic', style: { color: 'var(--green)' } }), '本月封板'),
+          h('div', { className: 'v' }, String(closedEntries.length)),
+          h('div', { className: 'd' }, closedEntries.length > 0 ? closedEntries.map(entry => entry.iteration.name).join(' · ') : '还没有封板迭代'),
+        ),
+        h('div', { className: 'kpi' },
+          h('div', { className: 'lab' }, h(DesignIcon, { name: 'alert', size: 12, className: 'ic', style: { color: 'var(--amber)' } }), '风险项'),
+          h('div', { className: 'v' }, String(risk)),
+          h('div', { className: 'd' }, risk > 0 ? `设计未交付 ${undelivered} · 测试阻塞 ${failed}` : '暂无风险'),
+        ),
       )
     }
 
@@ -3604,7 +5838,7 @@ window.__ModuleLoader__.load({
         if (filter === 'done') return iteration.status === 'done'
         return true
       })
-      const phaseOrder = { '规划中': 0, '需求': 1, '设计': 2, '开发': 3, '测试': 4, '已封板': 5 }
+      const phaseOrder = { '规划中': 0, '需求': 1, '评审': 2, '设计': 3, '开发': 4, '测试': 5, '已封板': 6 }
       const ordered = sort === ''
         ? visible
         : [...visible].sort((left, right) => {
@@ -3627,111 +5861,102 @@ window.__ModuleLoader__.load({
       const closed = entries.filter(entry =>
         entry.iteration.status === 'done' && String(entry.iteration.endDate ?? '').startsWith(month)).length
 
-      return h('div', null,
-        h('div', { className: 'dsh-wb-page-head' },
-          h('div', { className: 'dsh-wb-page-title-block' },
-            h('h1', { className: 'dsh-wb-page-title' }, '迭代'),
-            h('p', { className: 'dsh-wb-page-sub' },
-              `共 ${entries.length} 个迭代 · 我参与 ${mine} 个 · 进行中 ${active} 个 · 本月封板 ${closed} 个`),
+      return h('div', { className: 'page' },
+        h('div', { className: 'page-head' },
+          h('div', { className: 'ttl-block' },
+            h('h1', { className: 'page-title' }, '迭代'),
+            h('div', { className: 'page-sub' }, `共 ${entries.length} 个迭代 · 我参与 ${mine} 个 · 进行中 ${active} 个 · 本月封板 ${closed} 个`),
           ),
-          canCreate ? h('button', {
-            className: 'dsh-wb-btn dsh-wb-btn--primary',
-            type: 'button',
-            onClick: onCreate,
-          }, '+ 新建迭代') : null,
+          canCreate ? h('div', { className: 'page-actions' },
+            h('button', { className: 'btn btn-primary', type: 'button', onClick: onCreate },
+              h(DesignIcon, { name: 'plus' }), '新建迭代'),
+          ) : null,
         ),
         h(IterationKpis, { state, entries }),
-        h('div', { className: 'dsh-wb-iter-toolbar' },
-          h('div', { className: 'dsh-wb-seg' },
+        h('div', { className: 'toolbar' },
+          h('div', { className: 'seg' },
             [['all', '全部'], ['mine', '我参与的'], ['active', '进行中'], ['done', '已封板']].map(([key, label]) =>
               h('button', {
                 key,
                 type: 'button',
-                className: filter === key ? 'is-on' : '',
+                className: filter === key ? 'active' : '',
                 onClick: () => onFilter(key),
               }, label)),
           ),
-          h('div', { className: 'dsh-wb-iter-tools' },
-            h('div', { className: 'dsh-wb-iter-sort' },
-              h('button', {
-                type: 'button',
-                className: sort === 'phase' ? 'is-on' : '',
-                onClick: () => onSort(sort === 'phase' ? '' : 'phase'),
-              }, '按阶段'),
-              h('button', {
-                type: 'button',
-                className: sort === 'owner' ? 'is-on' : '',
-                onClick: () => onSort(sort === 'owner' ? '' : 'owner'),
-              }, '按负责人'),
-            ),
-            h('div', { className: 'dsh-wb-iter-search' },
-              h('input', {
-                className: 'dsh-wb-input',
-                type: 'search',
-                value: query,
-                placeholder: '搜索迭代编号或名称',
-                'aria-label': '搜索迭代',
-                onChange: event => onQuery(event.target.value),
-              }),
-            ),
-          ),
+          h('div', { className: 'spacer' }),
+          h('button', {
+            className: 'dropdown-trigger',
+            type: 'button',
+            'aria-pressed': sort === 'phase',
+            style: sort === 'phase' ? { borderColor: 'var(--primary-line)', color: 'var(--primary)' } : undefined,
+            onClick: () => onSort(sort === 'phase' ? '' : 'phase'),
+          }, '按阶段', h(DesignIcon, { name: 'chev-down', className: 'chev' })),
+          h('button', {
+            className: 'dropdown-trigger',
+            type: 'button',
+            'aria-pressed': sort === 'owner',
+            style: sort === 'owner' ? { borderColor: 'var(--primary-line)', color: 'var(--primary)' } : undefined,
+            onClick: () => onSort(sort === 'owner' ? '' : 'owner'),
+          }, '按负责人', h(DesignIcon, { name: 'chev-down', className: 'chev' })),
         ),
         ordered.length === 0
-          ? h('div', { className: 'dsh-wb-empty dsh-wb-empty--page' },
+          ? h('div', { className: 'empty-page' },
+              h(DesignIcon, { name: normalized !== '' ? 'search' : 'iter', size: 28 }),
               h('b', null, normalized !== '' ? '没有匹配的迭代' : '还没有迭代'),
-              normalized !== '' ? '换一个关键词或筛选条件。' : canCreate ? '点右上角「新建迭代」开始。' : '等负责人创建迭代后再来。',
+              h('span', null, normalized !== '' ? '换一个关键词或筛选条件。' : canCreate ? '点右上「新建迭代」开始。' : '等负责人创建迭代后再来。'),
             )
-          : h('div', { className: 'dsh-wb-iter-table', role: 'table', 'aria-label': '迭代列表' },
-              h('div', { className: 'dsh-wb-iter-tr is-head', role: 'row' },
-                h('span', { role: 'columnheader' }, '编号'),
-                h('span', { role: 'columnheader' }, '迭代名称'),
-                h('span', { role: 'columnheader' }, '当前阶段'),
-                h('span', { role: 'columnheader' }, '起止'),
-                h('span', { role: 'columnheader' }, '负责人'),
-                h('span', { role: 'columnheader' }, '需求'),
-                h('span', { role: 'columnheader' }, '进度'),
-                h('span', { role: 'columnheader' }, '风险'),
+          : h('div', { className: 'table-wrap' },
+              h('table', { className: 'table', style: { minWidth: '920px' } },
+                h('thead', null, h('tr', null,
+                  h('th', { style: { width: '92px' } }, '编号'),
+                  h('th', null, '迭代名称'),
+                  h('th', { style: { width: '130px' } }, '当前阶段'),
+                  h('th', { style: { width: '150px' } }, '起止'),
+                  h('th', { style: { width: '92px' } }, '负责人'),
+                  h('th', { style: { width: '66px' } }, '需求'),
+                  h('th', { style: { width: '130px' } }, '进度'),
+                  h('th', { style: { width: '120px' } }, '风险'),
+                )),
+                h('tbody', null,
+                  ordered.map(({ iteration, requirements }, index) => {
+                    const owner = state.users.find(user => user.id === iteration.ownerId)
+                    const phase = iterationPhaseLabel(iteration, requirements)
+                    const progress = requirementsProgress(requirements)
+                    const risk = iterationRisk(requirements)
+                    const inScope = requirements.filter(item => item.inScope !== false).length
+                    return h('tr', {
+                      key: iteration.id,
+                      className: index === 0 ? 'active' : '',
+                      onClick: () => onOpen(iteration.id),
+                    },
+                      h('td', { className: 'td-code' }, iteration.code),
+                      h('td', null,
+                        h('a', {
+                          className: 'rk',
+                          href: '#',
+                          onClick: event => { event.preventDefault(); onOpen(iteration.id) },
+                        }, iteration.name),
+                        h('div', { className: 'rksub' }, `范围 ${inScope} 需求 · ${iteration.status === 'planning' ? '规划中' : iteration.status === 'done' ? '已封板' : phase}`),
+                      ),
+                      h('td', null, h(DesignChip, { tone: phaseChipTone(phase), glyph: phase === '已封板' ? '✓' : phase === '规划中' ? '○' : '◐' }, phase)),
+                      h('td', { className: 'mono', style: { fontSize: '12px', color: 'var(--text-3)' } }, `${shortDay(iteration.startDate)} → ${shortDay(iteration.endDate)}`),
+                      h('td', null, h('span', { className: 'assignee' },
+                        h(Avatar, { name: owner?.name ?? iteration.ownerId }),
+                        h('span', { className: 'nm' }, owner?.name ?? iteration.ownerId),
+                      )),
+                      h('td', null, h('span', { className: 'mono', style: { color: inScope > 0 ? 'var(--text)' : 'var(--text-3)' } }, String(inScope))),
+                      h('td', null, h('div', { className: 'row gap-3' },
+                        h('div', { className: `progress${progress >= 100 ? ' green' : ''}`, style: { flex: 1 } },
+                          h('span', { style: { width: `${Math.min(100, progress)}%` } })),
+                        h('span', { className: 'tiny mono muted' }, `${progress}%`),
+                      )),
+                      h('td', null, risk.count > 0
+                        ? h(DesignChip, { tone: 'warn', glyph: '◷', title: risk.text }, risk.text)
+                        : h('span', { className: 'muted tiny' }, '—')),
+                    )
+                  }),
+                ),
               ),
-              ordered.map(({ iteration, requirements }) => {
-                const owner = state.users.find(user => user.id === iteration.ownerId)
-                const phase = iterationPhaseLabel(iteration, requirements)
-                const progress = requirementsProgress(requirements)
-                const risk = iterationRisk(requirements)
-                return h('button', {
-                  className: 'dsh-wb-iter-tr is-row',
-                  type: 'button',
-                  key: iteration.id,
-                  role: 'row',
-                  onClick: () => onOpen(iteration.id),
-                },
-                  h('span', { className: 'dsh-wb-iter-code', role: 'cell' }, iteration.code),
-                  h('span', { className: 'dsh-wb-iter-name', role: 'cell' },
-                    h('b', null, iteration.name),
-                    h('em', null, `${requirements.filter(item => item.inScope !== false).length} 个本期需求 · ${iteration.status === 'planning' ? '范围待定' : '范围已排期'}`),
-                  ),
-                  h('span', { role: 'cell' }, h('span', { className: `dsh-wb-chip dsh-wb-chip--${iterationPhaseTone(phase)}` },
-                    h('span', { className: 'g' }, phase === '已封板' ? '✓' : phase === '规划中' ? '○' : '◐'),
-                    phase,
-                  )),
-                  h('span', { className: 'dsh-wb-iter-dates', role: 'cell' }, `${iteration.startDate || '待定'} → ${iteration.endDate || '待定'}`),
-                  h('span', { className: 'dsh-wb-iter-owner', role: 'cell' },
-                    h(Avatar, { name: owner?.name ?? iteration.ownerId }),
-                    owner?.name ?? iteration.ownerId,
-                  ),
-                  h('span', { className: 'dsh-wb-iter-num', role: 'cell' }, String(requirements.length)),
-                  h('span', { className: 'dsh-wb-iter-progress', role: 'cell' },
-                    h('span', { className: 'dsh-wb-progress' },
-                      h('span', { className: progress >= 100 ? 'is-done' : '', style: { width: `${Math.min(100, progress)}%` } }),
-                    ),
-                    h('em', null, `${progress}%`),
-                  ),
-                  h('span', { role: 'cell' },
-                    risk.count > 0
-                      ? h('span', { className: 'dsh-wb-chip dsh-wb-chip--warn', title: risk.text }, h('span', { className: 'g' }, '◷'), risk.text)
-                      : h('span', { className: 'dsh-wb-muted' }, '—'),
-                  ),
-                )
-              }),
             ),
       )
     }
@@ -3760,55 +5985,100 @@ window.__ModuleLoader__.load({
       ]
     }
 
+    function devTaskChipMeta(task) {
+      if (!task) return { tone: 'idle', glyph: '○', label: '未开始' }
+      if (task.status === 'done') return { tone: 'done', glyph: '✓', label: '已完成' }
+      if (task.status === 'in_progress') return { tone: 'prog', glyph: '◐', label: '开发中' }
+      if (task.status === 'assigned') return { tone: 'warn', glyph: '◷', label: '已指派' }
+      return { tone: 'idle', glyph: '○', label: '未开始' }
+    }
+
+    function testChipMeta(run) {
+      if (!run) return { tone: 'idle', glyph: '○', label: '测试未开始' }
+      if (run.status === 'passed') return { tone: 'done', glyph: '✓', label: '测试通过' }
+      if (run.status === 'failed') return { tone: 'block', glyph: '!', label: '测试不通过' }
+      return { tone: 'prog', glyph: '◐', label: '测试中' }
+    }
+
+    function shortDay(value) {
+      const time = Date.parse(value)
+      if (Number.isNaN(time)) return '待定'
+      const date = new Date(time)
+      return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    }
+
+    function phaseDateText(start, end, left, width) {
+      const startTime = Date.parse(start)
+      const endTime = Date.parse(end)
+      if (Number.isNaN(startTime) || Number.isNaN(endTime) || endTime < startTime) return '待定'
+      const at = fraction => shortDay(new Date(startTime + (endTime - startTime) * fraction).toISOString())
+      const from = at(left / 100)
+      const to = at(Math.min(100, (left + width) / 100))
+      return from === to ? from : `${from}→${to}`
+    }
+
     function RequirementCard({ requirement, state, onOpen, onOpenSession, onOpenDesign }) {
       const owner = state.users.find(user => user.id === requirement.ownerId)
       const designer = requirement.designerId ? state.users.find(user => user.id === requirement.designerId) : null
       const grouped = groupedPlatforms(state.platforms ?? [], state.platformGroups ?? [], requirement.platformIds)
-      const dev = requirementDevLabel(requirement)
-      const test = requirementTestLabel(requirement)
+      const allPlatforms = (state.platforms ?? []).filter(item => item.active !== false)
+      const included = new Set(requirement.platformIds ?? [])
+      const excluded = allPlatforms.filter(item => !included.has(item.id))
+      const testRun = (requirement.testRuns ?? [])[(requirement.testRuns ?? []).length - 1]
+      const test = testChipMeta(testRun)
       const designCount = Math.max(
         requirement.designFiles?.length ?? 0,
         (requirement.designScreens?.length ?? 0) + (requirement.designImages?.length ?? 0),
       )
-      return h('article', { className: 'dsh-wb-reqcard' },
-        h('div', { className: 'dsh-wb-reqcard-head' },
-          h('span', { className: 'dsh-wb-reqcard-code' }, requirement.code),
+      const reqMeta = REQ_STATUS[requirement.status] ?? { label: requirement.status || '未知', tone: 'idle', glyph: '·' }
+      return h('article', { className: 'req-card' },
+        h('div', { className: 'rc-hd' },
+          h('span', { className: 'rc-code' }, requirement.code),
           h(StatusChip, { kind: 'req', value: requirement.status }),
-          requirement.designUpdatedAt ? h(DesignUpdatedChip) : null,
+          requirement.designUpdatedAt ? h(DesignChip, { tone: 'warn', glyph: '◷', className: 'design-updated' }, '设计已更新') : null,
         ),
-        h('button', { className: 'dsh-wb-reqcard-title', type: 'button', onClick: () => onOpen(requirement.id) }, requirement.title),
-        h('div', { className: 'dsh-wb-reqcard-chips' },
+        h('a', { className: 'rc-title', href: '#', onClick: event => { event.preventDefault(); onOpen(requirement.id) } }, requirement.title),
+        h('div', { className: 'row wrap', style: { gap: '4px', margin: '8px 0' } },
+          h(DesignChip, { tone: statusChipTone('req', requirement.status, reqMeta), glyph: reqMeta.glyph, title: `需求 ${reqMeta.label}` }, '需求'),
           h(StatusChip, { kind: 'design', value: requirement.designStatus }),
-          grouped.length > 0
-            ? grouped.map(entry => h('span', { className: 'dsh-wb-chip dsh-wb-chip--idle', key: entry.group.id, title: entry.items.map(item => item.name).join(' / ') },
-                entry.items.slice(0, 2).map(item => item.shortName ?? item.name).join(' / '),
-                entry.items.length > 2 ? ` +${entry.items.length - 2}` : '',
-              ))
-            : h('span', { className: 'dsh-wb-chip dsh-wb-chip--idle' }, '未设置平台'),
-          dev !== '' ? h('span', { className: 'dsh-wb-chip dsh-wb-chip--idle' }, dev) : null,
-          test !== '' ? h('span', { className: 'dsh-wb-chip dsh-wb-chip--idle' }, test) : null,
-          requirement.release ? h('span', { className: 'dsh-wb-chip dsh-wb-chip--success' }, requirement.release.version) : null,
+          grouped.length === 0
+            ? h(DesignChip, { tone: 'idle', glyph: '○' }, '未设置平台')
+            : grouped.map(entry => h('span', { className: 'mxg', key: entry.group.id },
+                h('span', { className: 'gl2' }, `${entry.group.name} ${entry.items.length}`),
+                entry.items.map(item => {
+                  const task = (requirement.devTasks ?? []).find(candidate => candidate.platformId === item.id)
+                  const meta = devTaskChipMeta(task)
+                  return h(DesignChip, {
+                    key: item.id,
+                    tone: meta.tone,
+                    glyph: meta.glyph,
+                    title: `${item.name} ${meta.label}`,
+                  }, item.shortName ?? item.name)
+                }),
+              )),
+          h(DesignChip, { tone: test.tone, glyph: test.glyph, title: test.label }, '测试'),
+          requirement.release ? h(DesignChip, { tone: 'done', glyph: '▲' }, requirement.release.version) : null,
+          excluded.length > 0 ? h('span', { className: 'mna2', title: '不涉及' }, `不涉及 ${excluded.slice(0, 5).map(item => item.shortName ?? item.name).join('·')}`) : null,
         ),
-        h('div', { className: 'dsh-wb-reqcard-foot' },
-          h('span', { className: 'dsh-wb-reqcard-who' },
+        h('div', { className: 'rc-ft' },
+          h('span', { className: 'assignee' },
             h(Avatar, { name: owner?.name ?? requirement.ownerId }),
-            h('span', null, owner?.name ?? '—'),
-            designer !== null ? h('span', { className: 'dsh-wb-muted' }, ` · 设计 ${designer.name}`) : null,
+            designer !== null ? h(Avatar, { name: designer.name }) : null,
           ),
-          h('span', { className: 'dsh-wb-reqcard-time' }, relativeTime(requirement.updatedAt)),
-          h('span', { className: 'dsh-wb-reqcard-actions' },
-            h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--ghost', type: 'button', onClick: () => onOpen(requirement.id) }, '打开'),
-            requirement.sessionId && onOpenDesign && designCount > 0 ? h('button', {
-              className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--ghost',
-              type: 'button',
+          h('span', { className: 'tiny muted' }, `${owner?.name ?? '—'} ${relativeTime(requirement.updatedAt)}更新`),
+          h('div', { className: 'req-links' },
+            h('a', { className: 'req-link', href: '#', onClick: event => { event.preventDefault(); onOpen(requirement.id) } }, '总述'),
+            requirement.sessionId && designCount > 0 ? h('a', {
+              className: 'req-link',
+              href: '#',
               title: `打开设计画布（${designCount} 个页面）`,
-              onClick: () => onOpenDesign(requirement),
-            }, '设计') : null,
-            requirement.sessionId ? h('button', {
-              className: 'dsh-wb-btn dsh-wb-btn--sm',
-              type: 'button',
-              onClick: () => onOpenSession(requirement.sessionId),
-            }, '会话') : null,
+              onClick: event => { event.preventDefault(); onOpenDesign(requirement) },
+            }, '设计稿') : null,
+            requirement.sessionId ? h('a', {
+              className: 'req-link',
+              href: '#',
+              onClick: event => { event.preventDefault(); onOpenSession(requirement.sessionId) },
+            }, h(DesignIcon, { name: 'workbench' }), '会话') : null,
           ),
         ),
       )
@@ -3845,124 +6115,157 @@ window.__ModuleLoader__.load({
     }
 
     function IterationDetailView({ state, requirements, onBack, onCreateRequirement, onOpenSettings, canCreate, canConfig, onOpenRequirement, onOpenSession, onOpenDesign }) {
+      const [reqFilter, setReqFilter] = useState('all')
       const iteration = state.iteration
       const owner = state.users.find(user => user.id === iteration.ownerId)
-      const grouped = state.platformGroups ?? []
       const phase = iterationPhaseLabel(iteration, requirements)
       const progress = requirementsProgress(requirements)
       const risk = iterationRisk(requirements)
       const rows = phaseRows(requirements)
       const activity = recentRequirementActivity(state, requirements)
       const designReady = requirements.filter(item => ['delivered', 'not_needed'].includes(item.designStatus)).length
-      const onlineSessions = requirements.reduce((sum, item) => sum + (item.sessions ?? []).filter(session => session.sessionId).length, 0)
-      return h('div', null,
-        h('div', { className: 'dsh-wb-detail-head' },
-          h('div', { className: 'dsh-wb-detail-head-main' },
-            h('button', { className: 'dsh-wb-back', type: 'button', onClick: onBack }, '← 迭代列表'),
-            h('div', { className: 'dsh-wb-detail-code-line' },
-              h('span', { className: 'dsh-wb-detail-code' }, iteration.code),
-              h('span', { className: `dsh-wb-chip dsh-wb-chip--${iterationPhaseTone(phase)}` },
-                h('span', { className: 'g' }, phase === '已封板' ? '✓' : '◐'), phase),
-              risk.count > 0 ? h('span', { className: 'dsh-wb-chip dsh-wb-chip--warn' }, h('span', { className: 'g' }, '◷'), risk.text) : null,
+      const inScope = requirements.filter(item => item.inScope !== false)
+      const pendingReview = requirements.filter(item => ['pending_review', 'draft', 'changes_requested'].includes(item.status))
+      const doing = requirements.filter(item => ['in_progress', 'dev_done', 'testing'].includes(item.status))
+      const visible = reqFilter === 'review' ? pendingReview : reqFilter === 'active' ? doing : requirements
+      const windows = {
+        '需求与评审': { left: 0, width: 12 },
+        '设计': { left: 12, width: 21 },
+        '开发': { left: 27, width: 45 },
+        '测试': { left: 73, width: 21 },
+        '封板': { left: 96, width: 4 },
+      }
+      const axis = [0, 33, 66, 100].map(fraction => {
+        const startTime = Date.parse(iteration.startDate)
+        const endTime = Date.parse(iteration.endDate)
+        if (Number.isNaN(startTime) || Number.isNaN(endTime)) return '待定'
+        return shortDay(new Date(startTime + (endTime - startTime) * (fraction / 100)).toISOString())
+      })
+      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+        h('div', { className: 'head-card' },
+          h('div', { className: 'lft' },
+            h('div', { className: 'code-line' },
+              h('a', { className: 'code', href: '#', onClick: event => { event.preventDefault(); onBack() } }, iteration.code),
+              h(DesignChip, { tone: phaseChipTone(phase), glyph: phase === '已封板' ? '✓' : phase === '规划中' ? '○' : '◐' }, phase),
+              risk.count > 0 ? h(DesignChip, { tone: 'warn', glyph: '◷' }, risk.text) : null,
             ),
-            h('h1', { className: 'dsh-wb-page-title' }, iteration.name),
-            h('div', { className: 'dsh-wb-detail-meta' },
-              h('span', null, h(Avatar, { name: owner?.name ?? iteration.ownerId }), `负责人 ${owner?.name ?? iteration.ownerId}`),
-              h('span', null, `${requirements.length} 个需求 · ${requirements.filter(item => item.inScope !== false).length} 个本期`),
-              h('span', null, `${iteration.startDate || '待定'} → ${iteration.endDate || '待定'}`),
-              h('span', null, `${onlineSessions} 个会话`),
+            h('h1', null, iteration.name),
+            h('div', { className: 'head-meta' },
+              h('span', { className: 'it' }, '负责人 ', h('span', { className: 'assignee' },
+                h(Avatar, { name: owner?.name ?? iteration.ownerId }), h('b', null, owner?.name ?? iteration.ownerId))),
+              h('span', { className: 'it' }, h(DesignIcon, { name: 'lock', size: 13 }), `范围锁定 · ${inScope.length} 需求`),
+              h('span', { className: 'it' }, h(DesignIcon, { name: 'calendar', size: 13 }), `${iteration.startDate || '待定'} → ${iteration.endDate || '待定'}`),
             ),
           ),
-          h('div', { className: 'dsh-wb-detail-actions' },
-            canConfig ? h('button', { className: 'dsh-wb-btn', type: 'button', onClick: onOpenSettings }, '迭代设置') : null,
-            canCreate ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--primary', type: 'button', onClick: onCreateRequirement }, '+ 新建需求') : null,
+          h('div', { className: 'page-actions', style: { marginLeft: 'auto' } },
+            canConfig ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: onOpenSettings }, '迭代设置') : null,
           ),
         ),
-        h('div', { className: 'dsh-wb-detail-layout' },
-          h('div', { className: 'dsh-wb-detail-main' },
-            h('section', { className: 'dsh-wb-panel dsh-wb-timeline-panel' },
-              h('div', { className: 'dsh-wb-panel-head' }, '阶段时间轴', h('span', { className: 'dsh-wb-count' }, `整体 ${progress}%`)),
-              h('div', { className: 'dsh-wb-timeline' },
-                rows.map(row => h('div', { className: 'dsh-wb-tl-row', key: row.label },
-                  h('span', { className: 'dsh-wb-tl-name' }, row.label),
-                  h('div', { className: 'dsh-wb-tl-track' },
-                    h('span', { className: `dsh-wb-tl-bar is-${row.tone}`, style: { width: `${Math.max(row.pct, row.pct > 0 ? 4 : 0)}%` } }),
-                  ),
-                  h('span', { className: 'dsh-wb-tl-meta' }, row.meta),
-                )),
+        h('div', { className: 'with-aside' },
+          h('div', null,
+            h('div', { className: 'tl-wrap' },
+              h('div', { className: 'tl-head' },
+                h('span'),
+                h('div', { className: 'axis' }, axis.map((label, index) => h('span', { key: index }, label))),
+                h('span', null, '计划'),
               ),
-              h('div', { className: 'dsh-wb-timeline-summary' },
-                h('span', { className: 'dsh-wb-chip dsh-wb-chip--business' }, `设计 ${designReady}/${requirements.length} 已交付/无需`),
-                h('span', { className: 'dsh-wb-chip dsh-wb-chip--idle' }, `${requirements.filter(item => item.inScope === false).length} 个范围外`),
-                h('span', { className: 'dsh-wb-muted', style: { marginLeft: 'auto' } }, '设计与开发按需求并行，不强制串行'),
+              h('div', { className: 'timeline' },
+                rows.map(row => {
+                  const window = windows[row.label] ?? { left: 0, width: 10 }
+                  const barClass = row.tone === 'done' ? 'green' : row.tone === 'progress' ? '' : 'idle'
+                  return h('div', { className: 'tl-row', key: row.label },
+                    h('div', { className: 'tl-name' },
+                      h('span', { className: `chip chip--${row.tone === 'done' ? 'done' : row.tone === 'progress' ? 'prog' : 'idle'}`, style: { height: '16px', padding: '0 5px' } },
+                        h('span', { className: 'gl' }, row.tone === 'done' ? '✓' : row.tone === 'progress' ? '◐' : '○')),
+                      row.label,
+                    ),
+                    h('div', { className: 'tl-track' },
+                      h('span', {
+                        className: `tl-bar ${barClass}`,
+                        title: row.meta,
+                        style: { left: `${window.left}%`, width: `${window.width}%` },
+                      }, row.tone === 'progress' && window.width >= 15 ? row.meta : ''),
+                    ),
+                    h('div', { className: 'tl-date' }, phaseDateText(iteration.startDate, iteration.endDate, window.left, window.width)),
+                  )
+                }),
+              ),
+              h('div', { className: 'summary-line' },
+                h(DesignChip, { tone: designReady === requirements.length && requirements.length > 0 ? 'done' : 'prog', glyph: designReady === requirements.length ? '✓' : '◐' }, `设计 ${designReady}/${requirements.length} 交付`),
+                h(DesignChip, { tone: doing.length > 0 ? 'prog' : 'idle', glyph: doing.length > 0 ? '◐' : '○' }, `开发/测试 ${doing.length}/${requirements.length}`),
+                h(DesignChip, { tone: risk.count > 0 ? 'warn' : 'idle', glyph: risk.count > 0 ? '◷' : '○' }, risk.count > 0 ? risk.text : '无风险'),
+                h('span', { className: 'badge', style: { marginLeft: 'auto' } },
+                  h(DesignIcon, { name: 'branch', size: 11 }), '设计与开发轨道重叠（无固定阶段依赖）'),
               ),
             ),
-            h('div', { className: 'dsh-wb-section-head' },
-              h('div', null,
-                h('h2', null, '需求', h('span', { className: 'dsh-wb-count' }, String(requirements.length))),
-                h('p', null, '点标题进入需求全量；点会话直接进入对应 DSH 会话。'),
+            h('div', { className: 'section-hd', style: { marginTop: 0 } },
+              h('span', { className: 't' }, '需求'),
+              h('span', { className: 'n' }, String(requirements.length)),
+              h('div', { className: 'r' },
+                h('div', { className: 'seg', style: { height: '26px' } },
+                  [['all', '全部'], ['review', `待评审 ${pendingReview.length}`], ['active', `进行中 ${doing.length}`]].map(([key, label]) =>
+                    h('button', { key, type: 'button', className: reqFilter === key ? 'active' : '', onClick: () => setReqFilter(key) }, label)),
+                ),
+                canCreate ? h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: onCreateRequirement },
+                  h(DesignIcon, { name: 'plus' }), '新建需求') : null,
               ),
-              canCreate ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: onCreateRequirement }, '+ 新建需求') : null,
             ),
-            requirements.length === 0
-              ? h('div', { className: 'dsh-wb-empty dsh-wb-empty--page' },
-                  h('b', null, '迭代还没有需求'),
-                  canCreate ? '点「新建需求」，只填名称，其他交给会话里的 skill。' : '等产品创建需求后再来。',
+            h('p', { className: 'tiny muted', style: { margin: '-4px 0 14px' } },
+              '每张需求卡只显示', h('b', null, '设计状态'), '和涉及平台的进展；认领 / 指派 / 提交 / 变更都由 skill 在',
+              h('b', null, '会话'), '里完成。点标题进入「需求全量」，卡片链到总述 / 设计稿 / 会话。'),
+            visible.length === 0
+              ? h('div', { className: 'empty-page' },
+                  h(DesignIcon, { name: 'iter', size: 28 }),
+                  h('b', null, requirements.length === 0 ? '迭代还没有需求' : '当前筛选下没有需求'),
+                  h('span', null, requirements.length === 0 ? (canCreate ? '点「新建需求」，只填名称，其他交给会话里的 skill。' : '等产品创建需求后再来。') : '换一个筛选条件看看。'),
                 )
-              : h('div', { className: 'dsh-wb-reqcards' },
-                  requirements.map(requirement => h(RequirementCard, {
-                    key: requirement.id,
-                    requirement,
-                    state,
-                    onOpen: onOpenRequirement,
-                    onOpenSession,
-                    onOpenDesign,
-                  })),
+              : h('div', { className: 'mindmap' },
+                  visible.map(requirement => h('div', { className: 'branch', key: requirement.id },
+                    h(RequirementCard, {
+                      requirement,
+                      state,
+                      onOpen: onOpenRequirement,
+                      onOpenSession,
+                      onOpenDesign,
+                    }),
+                  )),
                 ),
           ),
-          h('aside', { className: 'dsh-wb-detail-aside' },
-            h('section', { className: 'dsh-wb-panel dsh-wb-sidecard' },
-              h('div', { className: 'dsh-wb-panel-head' }, '范围'),
-              h('div', { className: 'dsh-wb-sidecard-body' },
-                h('div', { className: 'dsh-wb-scope-line' },
-                  h('span', { className: 'dsh-wb-scope-num' }, String(requirements.filter(item => item.inScope !== false).length)),
-                  h('span', null, '个本期需求'),
-                ),
-                h('div', { className: 'dsh-wb-scope-tags' },
-                  h('span', { className: 'dsh-wb-chip dsh-wb-chip--idle' }, `范围外 ${requirements.filter(item => item.inScope === false).length}`),
-                  h('span', { className: 'dsh-wb-chip dsh-wb-chip--business' }, `进行中 ${requirements.filter(item => ['in_progress', 'testing', 'dev_done'].includes(item.status)).length}`),
-                  h('span', { className: 'dsh-wb-chip dsh-wb-chip--success' }, `已完成 ${requirements.filter(item => ['released', 'done', 'test_passed'].includes(item.status)).length}`),
-                ),
-                h('p', { className: 'dsh-wb-sidecard-tip' }, '加需求、移出范围、改阶段时间都在会话里由 skill 完成。'),
+          h('aside', { className: 'aside-col' },
+            h('div', { className: 'card' },
+              h('div', { className: 'card-hd' },
+                h('span', { className: 't' }, '活动日志'),
+                h('span', { className: 'r' }, h('span', { className: 'tiny muted' }, `${activity.length} 条`)),
               ),
-            ),
-            h('section', { className: 'dsh-wb-panel dsh-wb-sidecard' },
-              h('div', { className: 'dsh-wb-panel-head' }, '最近更新'),
-              activity.length === 0
-                ? h('div', { className: 'dsh-wb-sidecard-body dsh-wb-muted' }, '还没有活动记录。')
-                : h('div', { className: 'dsh-wb-activity' },
-                    activity.map((event, index) => {
+              h('div', { className: 'card-bd', style: { padding: '6px 0' } },
+                activity.length === 0
+                  ? h('div', { className: 'tiny muted', style: { padding: '12px 14px' } }, '还没有活动记录。')
+                  : activity.slice(0, 5).map((event, index) => {
                       const user = state.users.find(item => item.id === event.who)
-                      return h('div', { className: 'dsh-wb-activity-item', key: `${event.at}-${index}` },
+                      return h('div', { className: 'log-item', key: `${event.at}-${index}` },
                         h(Avatar, { name: user?.name ?? event.who }),
-                        h('div', { className: 'dsh-wb-activity-main' },
-                          h('b', null, event.text),
-                          h('span', null, event.sub),
-                          h('em', null, relativeTime(event.at)),
+                        h('div', { className: 'c' },
+                          h('div', { className: 'l1' }, h('b', null, user?.name ?? event.who), ' ', event.text),
+                          h('div', { className: 'l2' }, `${relativeTime(event.at)} · ${event.sub}`),
                         ),
                       )
                     }),
-                  ),
+              ),
             ),
-            h('section', { className: 'dsh-wb-panel dsh-wb-sidecard' },
-              h('div', { className: 'dsh-wb-panel-head' }, '平台'),
-              h('div', { className: 'dsh-wb-sidecard-body dsh-wb-platform-list' },
-                grouped.length === 0
-                  ? h('span', { className: 'dsh-wb-muted' }, '还没有平台组')
-                  : grouped.map(group => h('div', { className: 'dsh-wb-platform-group', key: group.id },
-                      h('b', null, group.name),
-                      h('span', null, (state.platforms ?? []).filter(item => item.groupId === group.id && item.active !== false).map(item => item.shortName ?? item.name).join(' / ') || '—'),
-                    )),
+            h('div', { className: 'card', style: { padding: '13px 14px' } },
+              h('div', { className: 'tiny muted', style: { marginBottom: '8px' } }, '范围'),
+              h('div', { className: 'row gap-4', style: { flexWrap: 'wrap' } },
+                h(DesignChip, { tone: 'plain' }, `已排期 ${requirements.filter(item => ['approved', 'scheduled'].includes(item.status)).length}`),
+                h(DesignChip, { tone: 'prog' }, `进行中 ${doing.length}`),
+                h(DesignChip, { tone: 'done' }, `已完成 ${requirements.filter(item => ['done', 'released', 'test_passed'].includes(item.status)).length}`),
+                h(DesignChip, { tone: 'na' }, `范围外 ${requirements.filter(item => item.inScope === false).length}`),
+              ),
+            ),
+            h('div', { className: 'card', style: { padding: '13px 14px' } },
+              h('div', { className: 'tiny muted', style: { marginBottom: '8px' } }, '整体进度'),
+              h('div', { className: 'row gap-3' },
+                h('div', { className: `progress${progress >= 100 ? ' green' : ''}`, style: { flex: 1 } }, h('span', { style: { width: `${Math.min(100, progress)}%` } })),
+                h('span', { className: 'tiny mono muted' }, `${progress}%`),
               ),
             ),
           ),
@@ -3979,76 +6282,231 @@ window.__ModuleLoader__.load({
         (requirement.designFiles ?? []).length,
       )
       const images = designArtifacts.filter(artifact => /^image\//i.test(String(artifact.contentType || ''))).length
-      return h('div', null,
-        h('div', { className: 'dsh-wb-detail-head' },
-          h('div', { className: 'dsh-wb-detail-head-main' },
-            h('button', { className: 'dsh-wb-back', type: 'button', onClick: onBack }, '← 迭代详情'),
-            h('div', { className: 'dsh-wb-detail-code-line' },
-              h('span', { className: 'dsh-wb-detail-code' }, requirement.code),
+      const owner = state.users.find(user => user.id === requirement.ownerId)
+      const designer = requirement.designerId ? state.users.find(user => user.id === requirement.designerId) : null
+      const versions = requirement.versions ?? []
+      const designVersions = requirement.designVersions ?? []
+      const devTasks = requirement.devTasks ?? []
+      const testRuns = requirement.testRuns ?? []
+      const latestTest = testRuns[testRuns.length - 1] ?? null
+      const grouped = groupedPlatforms(state.platforms ?? [], state.platformGroups ?? [], requirement.platformIds)
+      const includedIds = new Set(requirement.platformIds ?? [])
+      const excluded = (state.platforms ?? []).filter(item => item.active !== false && !includedIds.has(item.id))
+      const document = requirement.document ?? null
+      const latestVersion = versions[versions.length - 1] ?? null
+      const docSummary = String(document?.summary ?? '').trim() || String(latestVersion?.summary ?? '').trim()
+      const docBody = String(document?.body ?? '').trim()
+      const designFileEntries = [
+        ...designArtifacts.map(artifact => artifact.name),
+        ...(requirement.designFiles ?? []).map(file => (typeof file === 'string' ? file : (file?.name ?? file?.relativePath ?? ''))),
+      ]
+      const designShotNames = [...new Set(designFileEntries
+        .map(name => String(name ?? '').split(/[\\/]/).pop())
+        .filter(name => name !== ''))].slice(0, 3)
+      const logs = []
+      for (const version of versions) logs.push({ at: version.at, who: requirement.ownerId, text: `提交需求总述 v${version.version}`, sub: version.summary || '需求提交' })
+      for (const version of designVersions) logs.push({ at: version.at, who: version.by ?? requirement.designerId, text: `交付设计 d${version.version}`, sub: version.summary || '设计交付' })
+      for (const review of requirement.reviews ?? []) logs.push({ at: review.at, who: review.by, text: `${REVIEW_DECISION_LABELS[review.decision] ?? review.decision}需求 v${review.version ?? versions.length}`, sub: review.comment || '评审记录' })
+      for (const task of devTasks) {
+        if (task.startedAt) logs.push({ at: task.startedAt, who: task.assigneeId, text: `${platformName(state.platforms, task.platformId)} 开始开发`, sub: DEV_STATUS_LABELS[task.status] ?? task.status })
+        if (task.finishedAt) logs.push({ at: task.finishedAt, who: task.assigneeId, text: `${platformName(state.platforms, task.platformId)} 开发完成`, sub: task.mrUrl ? '已提交 MR' : '开发任务' })
+      }
+      for (const run of testRuns) logs.push({ at: run.finishedAt ?? run.startedAt, who: run.by, text: `测试${TEST_STATUS_LABELS[run.status] ?? run.status}`, sub: run.note || '测试记录' })
+      if (requirement.release?.at) logs.push({ at: requirement.release.at, who: requirement.release.by ?? requirement.ownerId, text: `发布 ${requirement.release.version}`, sub: '已发布' })
+      const sortedLogs = logs
+        .filter(event => typeof event.at === 'string' && !Number.isNaN(Date.parse(event.at)))
+        .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+        .slice(0, 6)
+      const platformCard = (platform) => {
+        const task = devTasks.find(candidate => candidate.platformId === platform.id)
+        const meta = devTaskChipMeta(task)
+        const assignee = task?.assigneeId ? state.users.find(user => user.id === task.assigneeId) : null
+        return h('div', { className: 'endcard2', key: platform.id },
+          h('div', { className: 'eh' },
+            h('span', { className: 'nm' }, `${platform.name}`),
+            h(DesignChip, { tone: meta.tone, glyph: meta.glyph, className: 'st' }, meta.label),
+          ),
+          h('dl', { className: 'kv2' },
+            h('dt', null, '负责人'),
+            h('dd', null, assignee ? h('span', { className: 'assignee' }, h(Avatar, { name: assignee.name }), assignee.name) : h('span', { className: 'muted' }, task ? '未指派 · 进入会话认领' : '待认领 · 进入会话认领')),
+            h('dt', null, '时间'),
+            h('dd', null, task?.startedAt || task?.finishedAt ? `${relativeTime(task.startedAt ?? task.finishedAt)}` : '未排期'),
+            h('dt', null, '关键产物'),
+            h('dd', null, task?.mrUrl ? 'MR 已提交' : task?.status === 'done' ? '开发完成' : '等待开发产物'),
+            h('dt', null, '依赖/阻塞'),
+            h('dd', null, task?.pipelineStatus === 'failed' ? h(DesignChip, { tone: 'block', glyph: '!' }, '流水线失败') : task ? '无' : '等待认领'),
+          ),
+          h('div', { className: 'foot' },
+            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenSession(requirement.sessionId) }, task ? '进入会话' : '进入会话认领') : null,
+            h('span', { className: 'upd' }, assignee ? `${assignee.name} · ${relativeTime(task?.finishedAt ?? task?.startedAt ?? requirement.updatedAt)}` : '—'),
+          ),
+        )
+      }
+      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+        h('div', { className: 'rf-head' },
+          h('div', { className: 'lft' },
+            h('div', { className: 'l1' },
+              h('span', { className: 'code' }, requirement.code),
               h(StatusChip, { kind: 'req', value: requirement.status }),
-              h(StatusChip, { kind: 'design', value: requirement.designStatus }),
-              requirement.designUpdatedAt ? h(DesignUpdatedChip) : null,
+              requirement.designUpdatedAt ? h(DesignChip, { tone: 'warn', glyph: '◷' }, '设计已更新') : null,
             ),
-            h('h1', { className: 'dsh-wb-page-title' }, requirement.title),
-            h('div', { className: 'dsh-wb-detail-meta' },
-              h('span', null, iteration ? `${iteration.code} ${iteration.name}` : '未归属迭代'),
-              h('span', null, `产品 ${state.users.find(user => user.id === requirement.ownerId)?.name ?? requirement.ownerId}`),
-              requirement.designerId ? h('span', null, `设计 ${state.users.find(user => user.id === requirement.designerId)?.name ?? requirement.designerId}`) : null,
-              h('span', null, `更新 ${relativeTime(requirement.updatedAt)}`),
+            h('h1', null, requirement.title),
+            h('div', { className: 'rf-meta' },
+              h('span', { className: 'it' }, '迭代 ', h('b', null, iteration ? `${iteration.code} ${iteration.name}` : '未归属')),
+              h('span', { className: 'it' }, '产品 ', h('span', { className: 'assignee' }, h(Avatar, { name: owner?.name ?? requirement.ownerId }), h('b', null, owner?.name ?? requirement.ownerId))),
+              h('span', { className: 'it' }, '设计 ', designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), h('b', null, designer.name)) : h('span', { className: 'muted' }, requirement.designStatus === 'not_needed' ? '无需设计' : '未认领')),
+              h('span', { className: 'it' }, '设计状态 ', h(StatusChip, { kind: 'design', value: requirement.designStatus })),
+              h('span', { className: 'it' }, '更新 ', h('b', null, relativeTime(requirement.updatedAt))),
             ),
           ),
-          h('div', { className: 'dsh-wb-detail-actions' },
+          h('div', { className: 'page-actions' },
+            h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: onBack }, h(DesignIcon, { name: 'chev-left' }), '返回迭代'),
             h('button', {
-              className: 'dsh-wb-btn',
+              className: 'btn btn-sm btn-ghost',
               type: 'button',
               disabled: !requirement.folderPath,
               title: requirement.folderPath ? '为这条需求新建需求、设计、开发或测试会话' : '需求文件夹还没有创建',
               onClick: () => onNewSession(requirement),
             }, '新建会话'),
-            requirement.sessionId ? h('button', { className: 'dsh-wb-btn', type: 'button', onClick: () => onOpenRequirementTab(requirement) }, '打开需求侧栏') : null,
-            requirement.sessionId ? h('button', { className: 'dsh-wb-btn', type: 'button', onClick: () => onOpenDesign(requirement) }, '打开设计侧栏') : null,
-            requirement.sessionId ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--primary', type: 'button', onClick: () => onOpenSession(requirement.sessionId) }, '进入会话') : null,
+            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenRequirementTab(requirement) }, h(DesignIcon, { name: 'external' }), '需求侧栏') : null,
+            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'package' }), '设计画布') : null,
+            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: () => onOpenSession(requirement.sessionId) }, h(DesignIcon, { name: 'workbench' }), '进入会话') : null,
           ),
         ),
-        h('div', { className: 'dsh-wb-req-summary-grid' },
-          h('div', { className: 'dsh-wb-panel dsh-wb-summary-card' },
-            h('div', { className: 'dsh-wb-summary-label' }, '设计交付'),
-            h('div', { className: 'dsh-wb-summary-value' }, String(screens), h('small', null, ' 屏')),
-            h('div', { className: 'dsh-wb-summary-sub' }, `${images} 张预览图 · d${(requirement.designVersions ?? []).length}`),
+        h('div', { className: 'banner banner--info', style: { marginBottom: '16px' } },
+          h(DesignIcon, { name: 'lock' }),
+          h('span', null, '这是需求的沉淀视图，只有', h('b', null, '已提交 / 已交付'), '的版本在这里；草稿留在本地不出现。写操作都在会话里由 skill 完成。'),
+        ),
+        h('div', { className: 'cardwall' },
+          h('div', { className: 'dcard2 span2' },
+            h('div', { className: 'ch' },
+              h(DesignIcon, { name: 'file' }),
+              h('span', { className: 't' }, '总述'),
+              h('span', { className: 'r' },
+                versions.length > 0
+                  ? h('span', { className: 'badge badge--live' }, `需求 v${versions.length} · 最新`)
+                  : h('span', { className: 'badge' }, '尚无版本'),
+                h('span', { className: 'tiny muted' }, latestVersion?.summary || (docSummary !== '' ? docSummary : '尚未提交需求总述')),
+              ),
+            ),
+            h('div', { className: 'spec-line' },
+              docSummary !== '' ? h('p', null, h('b', null, '总述：'), docSummary) : null,
+              docBody !== '' ? h('p', null, h('b', null, '正文：'), docBody) : null,
+              document?.acceptanceCriteria ? h('p', null, h('b', null, '验收：'), document.acceptanceCriteria) : null,
+              docSummary === '' && docBody === '' && !document?.acceptanceCriteria
+                ? h('p', { className: 'muted' }, '还没有提交需求总述。产品在会话里完成梳理后，这里会出现沉淀版本。')
+                : null,
+            ),
+            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '需求版本历史'),
+            h('div', null,
+              versions.length === 0
+                ? h('div', { className: 'tiny muted' }, '暂无版本。')
+                : [...versions].slice(-3).reverse().map((version, index) => h('div', { className: 'vline', key: `${version.version}-${version.at}` },
+                    h('span', { className: 'v' }, `v${version.version}`),
+                    h('span', { className: 'd' }, version.summary || '无说明'),
+                    index === 0 ? h('span', { className: 'badge', style: { marginLeft: 'auto' } }, '最新') : null,
+                  )),
+            ),
           ),
-          h('div', { className: 'dsh-wb-panel dsh-wb-summary-card' },
-            h('div', { className: 'dsh-wb-summary-label' }, '开发'),
-            h('div', { className: 'dsh-wb-summary-value' }, `${(requirement.devTasks ?? []).filter(task => task.status === 'done').length}/${(requirement.devTasks ?? []).length}`),
-            h('div', { className: 'dsh-wb-summary-sub' }, '端完成'),
+          h('div', { className: 'dcard2' },
+            h('div', { className: 'ch' },
+              h(DesignIcon, { name: 'workbench' }),
+              h('span', { className: 't' }, '原型'),
+              h('span', { className: 'r' },
+                h('span', { className: 'badge' }, `原型 ${screens} 屏`),
+                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'external' }), '打开') : null,
+              ),
+            ),
+            screens === 0
+              ? h('div', { className: 'narep', style: { margin: '2px 0 0' } }, h(DesignIcon, { name: 'workbench' }), h('span', null, '原型尚未生成，产品在会话里出原型后显示预览。'))
+              : h('div', { className: 'canvas-preview' },
+                  h('div', { className: 'bar' }, h('span', { className: 'dots' }, h('i'), h('i'), h('i')), 'prototype'),
+                  h('div', { className: 'stage', style: { height: '80px' } },
+                    h('div', { className: 'wire', style: { width: '118px', height: '60px' } }, h('i'), h('i'), h('i'))),
+                ),
+            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '原型版本历史'),
+            h('div', null,
+              designVersions.length === 0
+                ? h('div', { className: 'tiny muted' }, '设计交付后出现原型版本。')
+                : [...designVersions].slice(-2).reverse().map((version, index) => h('div', { className: 'vline', key: version.version },
+                    h('span', { className: 'v' }, `v${version.version}`),
+                    h('span', { className: 'd' }, version.summary || '设计交付'),
+                    index === 0 ? h('span', { className: 'badge', style: { marginLeft: 'auto' } }, '最新') : null,
+                  )),
+            ),
           ),
-          h('div', { className: 'dsh-wb-panel dsh-wb-summary-card' },
-            h('div', { className: 'dsh-wb-summary-label' }, '测试'),
-            h('div', { className: 'dsh-wb-summary-value' }, TEST_STATUS_LABELS[(requirement.testRuns ?? [])[(requirement.testRuns ?? []).length - 1]?.status] ?? '未开始'),
-            h('div', { className: 'dsh-wb-summary-sub' }, `${(requirement.testRuns ?? []).length} 轮记录`),
-          ),
-          h('div', { className: 'dsh-wb-panel dsh-wb-summary-card' },
-            h('div', { className: 'dsh-wb-summary-label' }, '需求版本'),
-            h('div', { className: 'dsh-wb-summary-value' }, `v${(requirement.versions ?? []).length}`),
-            h('div', { className: 'dsh-wb-summary-sub' }, requirement.inScope === false ? '范围外（暂缓）' : '本期范围'),
+          h('div', { className: 'dcard2' },
+            h('div', { className: 'ch' },
+              h(DesignIcon, { name: 'package' }),
+              h('span', { className: 't' }, '设计稿'),
+              h('span', { className: 'r' },
+                designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), designer.name) : null,
+                h(StatusChip, { kind: 'design', value: requirement.designStatus }),
+                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'external' }), '打开') : null,
+              ),
+            ),
+            designShotNames.length === 0
+              ? h('div', { className: 'narep', style: { margin: '2px 0 0' } },
+                  h(DesignIcon, { name: 'package' }),
+                  h('span', null, screens === 0 ? '设计尚未交付，交付后这里显示设计稿预览。' : '已交付设计稿，但还没有可预览的文件。'),
+                )
+              : h('div', { className: 'shot3' },
+                  designShotNames.map(name => h('div', { className: 'shot', key: name },
+                    h('div', { className: 'img' }, h('div', { className: 'wf' }, h('i'), h('i'), h('i'))),
+                    h('div', { className: 'cap' }, name),
+                  )),
+                ),
+            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'tag', size: 13 }), `设计组件 · ${screens} 屏 · ${images} 张预览`),
+            h('div', { className: 'row gap-2 wrap' },
+              h(DesignChip, { tone: 'plain' }, '部门设计系统'),
+              h(DesignChip, { tone: 'plain' }, `${(requirement.designVersions ?? []).length} 个交付版本`),
+            ),
+            requirement.designUpdatedAt ? h('div', { className: 'tiny', style: { color: 'var(--amber)' } }, '设计晚于开发更新，需评估返工。') : null,
+            h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px' } },
+              h('span', { className: 'tiny muted' }, '设计版本历史见设计会话'),
+              requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', style: { marginLeft: 'auto' }, type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'workbench' }), '进入设计会话') : null,
+            ),
           ),
         ),
-        h('section', { className: 'dsh-wb-panel dsh-wb-req-full' },
-          h('div', { className: 'dsh-wb-panel-head' }, '需求详情', h('span', { className: 'dsh-wb-count' }, requirement.folderPath ?? '本地目录未映射')),
-          h('div', { className: 'dsh-wb-req-full-body' },
-            h(RequirementDetailPanel, {
-              requirement,
-              state,
-              ctx: null,
-              onBackToSession: () => {
-                if (requirement.sessionId) onOpenSession(requirement.sessionId)
-              },
-            }),
+        grouped.length === 0
+          ? h('div', { className: 'narep', style: { marginBottom: '20px' } }, h(DesignIcon, { name: 'minus' }), '未设置涉及平台。')
+          : grouped.map(entry => h('div', { className: 'endsec', key: entry.group.id },
+              h('div', { className: 'endsec-h' },
+                h('span', { className: 't' }, entry.group.name),
+                h('span', { className: 'n' }, String(entry.items.length)),
+                h('div', { className: 'r', style: { marginLeft: 'auto' } }, h('span', { className: 'tiny muted' }, '负责人 / 时间 / 关键产物 / 依赖')),
+              ),
+              h('div', { className: 'egrid' }, entry.items.map(platformCard)),
+            )),
+        excluded.length > 0
+          ? h('div', { className: 'narep', style: { marginBottom: '20px' } },
+              h(DesignIcon, { name: 'minus' }), `不涉及：${excluded.map(item => item.name).join('、')}（产品已确认，本需求不改）`)
+          : null,
+        h('div', { className: 'dcard2' },
+          h('div', { className: 'ch' },
+            h(DesignIcon, { name: 'history' }),
+            h('span', { className: 't' }, '需求日志'),
+            h('span', { className: 'r tiny muted' }, '谁在什么时候做了什么'),
+          ),
+          h('div', { className: 'card-bd', style: { padding: '6px 0' } },
+            sortedLogs.length === 0
+              ? h('div', { className: 'tiny muted', style: { padding: '12px 14px' } }, '还没有提交或交付记录。')
+              : sortedLogs.map((event, index) => {
+                  const user = state.users.find(item => item.id === event.who)
+                  return h('div', { className: 'log-item', key: `${event.at}-${index}` },
+                    h(Avatar, { name: user?.name ?? event.who }),
+                    h('div', { className: 'c' },
+                      h('div', { className: 'l1' }, h('b', null, user?.name ?? event.who), ' ', event.text),
+                      h('div', { className: 'l2' }, `${relativeTime(event.at)} · ${event.sub}`),
+                    ),
+                  )
+                }),
           ),
         ),
       )
     }
 
-    function MyWorkbenchView({ state, filter, onFilter, onOpenRequirement }) {
+    function MyWorkbenchView({ state, filter, onFilter, onOpenRequirement, onOpenSession, onOpenDesign }) {
       const uid = state.currentUser.id
       const mine = (state.requirements ?? []).filter(requirement =>
         requirement.ownerId === uid ||
@@ -4068,49 +6526,120 @@ window.__ModuleLoader__.load({
       })
       const month = new Date().toISOString().slice(0, 7)
       const monthDone = mine.filter(requirement =>
-        requirement.release && String(requirement.release.at ?? '').startsWith(month)).length
-      const active = mine.filter(requirement => !['released', 'done', 'draft'].includes(requirement.status)).length
+        requirement.release && String(requirement.release.at ?? '').startsWith(month))
+      const active = mine.filter(requirement => !['released', 'done', 'draft'].includes(requirement.status))
       const todo = mine.filter(requirement =>
         (requirement.designerId === uid && !['delivered', 'not_needed'].includes(requirement.designStatus)) ||
-        (requirement.ownerId === uid && ['pending_review', 'draft'].includes(requirement.status))).length
-      return h('div', null,
-        h('div', { className: 'dsh-wb-page-head' },
-          h('div', { className: 'dsh-wb-page-title-block' },
-            h('h1', { className: 'dsh-wb-page-title' }, '我的工作台'),
-            h('p', { className: 'dsh-wb-page-sub' }, `${state.currentUser.name} · ${roleLabel(state.currentUser.activeRole)} · 和我有关的需求、设计与待办`),
+        (requirement.ownerId === uid && ['pending_review', 'draft'].includes(requirement.status)))
+      const delivered = mine.filter(requirement => ['released', 'done', 'test_passed'].includes(requirement.status))
+      const onTime = mine.length === 0 ? 0 : Math.round((delivered.length / mine.length) * 100)
+      const roleChips = (requirement) => {
+        const roles = []
+        if (requirement.ownerId === uid) roles.push('产品')
+        if (requirement.designerId === uid) roles.push('设计')
+        if ((requirement.reviewerIds ?? []).includes(uid)) roles.push('评审')
+        if ((requirement.devTasks ?? []).some(task => task.assigneeId === uid)) roles.push('开发')
+        return roles.length === 0 ? ['关注'] : roles
+      }
+      const todoOf = (requirement) => {
+        if (requirement.designerId === uid && requirement.designStatus === 'changes_requested') return { tone: 'block', glyph: '!', label: '设计被退回' }
+        if (requirement.designerId === uid && !['delivered', 'not_needed'].includes(requirement.designStatus)) return { tone: 'warn', glyph: '◷', label: '设计待交付' }
+        if (requirement.ownerId === uid && requirement.status === 'pending_review') return { tone: 'warn', glyph: '◷', label: '待你评审' }
+        if (requirement.ownerId === uid && requirement.status === 'draft') return { tone: 'idle', glyph: '○', label: '需求待提交' }
+        if (requirement.designUpdatedAt) return { tone: 'warn', glyph: '◷', label: '变更待同步' }
+        return null
+      }
+      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+        h('div', { className: 'page-head' },
+          h('div', { className: 'ttl-block' },
+            h('h1', { className: 'page-title' }, '我的工作台'),
+            h('div', { className: 'page-sub' }, `${state.currentUser.name} · ${mine.length} 项 · ${todo.length} 待处理 · ${active.length} 进行中`),
           ),
         ),
-        h('div', { className: 'dsh-wb-my-stats' },
-          h(StatCard, { label: '本月完成', value: monthDone }),
-          h(StatCard, { label: '进行中', value: active }),
-          h(StatCard, { label: '待我处理', value: todo }),
-          h(StatCard, { label: '我参与', value: mine.length }),
-        ),
-        h('div', { className: 'dsh-wb-iter-toolbar' },
-          h('div', { className: 'dsh-wb-seg' },
-            [['all', '全部'], ['todo', '待我处理'], ['requirement', '需求'], ['design', '设计任务']].map(([key, label]) =>
-              h('button', { key, type: 'button', className: filter === key ? 'is-on' : '', onClick: () => onFilter(key) }, label)),
+        h('p', { className: 'filter-note' }, '需求、设计任务、待办合并为一份清单，按需求去重——一眼看清「这条需求里我是谁、要做什么」。'),
+        h('div', { className: 'statbar' },
+          h('div', { className: 'st' },
+            h('div', { className: 'lab' }, h(DesignIcon, { name: 'check-circle' }), '本月完成'),
+            h('div', { className: 'v' }, String(monthDone.length), h('small', null, `需求 ${monthDone.filter(item => item.ownerId === uid).length} · 设计 ${monthDone.filter(item => item.designerId === uid).length}`)),
+            h('div', { className: 'd' }, monthDone.length > 0 ? `涉及 ${new Set(monthDone.map(item => item.iterationId)).size} 个迭代` : '本月还没有完成项'),
           ),
+          h('div', { className: 'st' },
+            h('div', { className: 'lab' }, h(DesignIcon, { name: 'dot' }), '进行中'),
+            h('div', { className: 'v' }, String(active.length), h('small', null, `需求 ${active.filter(item => item.ownerId === uid).length} · 设计 ${active.filter(item => item.designerId === uid).length}`)),
+            h('div', { className: 'd' }, active.length > 0 ? `都在 ${[...new Set(active.map(item => (state.iterations ?? []).find(iteration => iteration.id === item.iterationId)?.code).filter(Boolean))].join(' / ') || '当前迭代'}` : '暂无进行中'),
+          ),
+          h('div', { className: 'st' },
+            h('div', { className: 'lab' }, h(DesignIcon, { name: 'clock' }), '待我处理'),
+            h('div', { className: 'v' }, String(todo.length)),
+            h('div', { className: 'd' }, todo.length > 0 ? `待评审 ${todo.filter(item => item.status === 'pending_review').length} · 设计 ${todo.filter(item => item.designerId === uid).length}` : '都处理完了'),
+          ),
+          h('div', { className: 'st' },
+            h('div', { className: 'lab' }, h(DesignIcon, { name: 'target' }), '按时交付'),
+            h('div', { className: 'v' }, String(onTime), h('small', null, '%')),
+            h('div', { className: 'd' }, `近 30 天 · ${delivered.length}/${mine.length}`),
+          ),
+        ),
+        h('div', { className: 'toolbar' },
+          h('div', { className: 'seg' },
+            [['all', `全部 ${mine.length}`], ['requirement', `需求 ${mine.filter(item => item.ownerId === uid || (item.reviewerIds ?? []).includes(uid)).length}`], ['design', `设计任务 ${mine.filter(item => item.designerId === uid).length}`], ['todo', `待我处理 ${todo.length}`]].map(([key, label]) =>
+              h('button', { key, type: 'button', className: filter === key ? 'active' : '', onClick: () => onFilter(key) }, label)),
+          ),
+          h('div', { className: 'spacer' }),
+          h('span', { className: 'tiny muted' }, `按迭代 · ${[...new Set(mine.map(item => item.iterationId))].length} 个`),
         ),
         visible.length === 0
-          ? h('div', { className: 'dsh-wb-empty dsh-wb-empty--page' }, h('b', null, '这里还没有你要处理的事'), '等需求指派或设计任务分配后再来。')
-          : h('div', { className: 'dsh-wb-panel dsh-wb-my-list' },
-              visible.map(requirement => h(RequirementRow, {
-                key: requirement.id,
-                requirement,
-                selected: false,
-                onSelect: () => onOpenRequirement(requirement.id),
-                users: state.users,
-                platforms: state.platforms,
-              })),
+          ? h('div', { className: 'empty-page' },
+              h(DesignIcon, { name: filter === 'todo' ? 'check-circle' : 'workbench', size: 28 }),
+              h('b', null, filter === 'todo' ? '暂无待办' : '这里还没有你要处理的事'),
+              h('span', null, filter === 'todo' ? '都处理完了。' : '等需求指派或设计任务分配后再来。'),
+            )
+          : h('div', { className: 'worklist' },
+              visible.map(requirement => {
+                const owner = state.users.find(user => user.id === requirement.ownerId)
+                const designer = requirement.designerId ? state.users.find(user => user.id === requirement.designerId) : null
+                const todoMeta = todoOf(requirement)
+                const statusKind = requirement.designerId === uid ? 'design' : 'req'
+                const statusValue = statusKind === 'design' ? requirement.designStatus : requirement.status
+                const statusMap = statusKind === 'design' ? DESIGN_STATUS : REQ_STATUS
+                const statusMeta = statusMap[statusValue] ?? { label: statusValue, tone: 'idle', glyph: '·' }
+                const sub = designer ? `${designer.name} 设计 · ${relativeTime(requirement.designUpdatedAt ?? requirement.updatedAt)}更新` : `${owner?.name ?? '—'} 负责 · ${relativeTime(requirement.updatedAt)}更新`
+                return h('div', { className: 'witem', key: requirement.id },
+                  h('span', { className: 'wcode' }, requirement.code),
+                  h('div', { className: 'wmain' },
+                    h('a', { className: 'wname', href: '#', onClick: event => { event.preventDefault(); onOpenRequirement(requirement.id) } }, requirement.title),
+                    h('div', { className: 'wsub' }, sub),
+                  ),
+                  h('div', { className: 'wroles' }, roleChips(requirement).map(role => h(DesignChip, { key: role, tone: 'plain' }, role))),
+                  h(DesignChip, { tone: designTone(statusMeta.tone), glyph: statusMeta.glyph, className: 'wstat' }, statusMeta.label),
+                  todoMeta
+                    ? h(DesignChip, { tone: todoMeta.tone, glyph: todoMeta.glyph, className: 'wtodo' }, todoMeta.label)
+                    : h('span', { className: 'wtodo tiny muted' }, '无待办'),
+                  requirement.sessionId
+                    ? h('button', {
+                        className: `wgo btn btn-sm${todoMeta ? ' btn-primary' : ''}`,
+                        type: 'button',
+                        onClick: () => requirement.designerId === uid && onOpenDesign ? onOpenDesign(requirement) : (onOpenSession ? onOpenSession(requirement.sessionId) : onOpenRequirement(requirement.id)),
+                      }, requirement.designerId === uid ? '设计会话' : '进入会话')
+                    : h('button', { className: 'wgo btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenRequirement(requirement.id) }, '查看需求'),
+                )
+              }),
             ),
       )
     }
 
     function NotificationsView({ state, onOpenRequirement, onReload, onToast }) {
       const [busy, setBusy] = useState(false)
+      const [filter, setFilter] = useState('all')
       const items = Array.isArray(state.notifications) ? state.notifications : []
       const unread = state.unreadNotificationCount ?? items.filter(item => item.read !== true).length
+      const kindOf = item => String(item.type ?? item.kind ?? '')
+      const filtered = items.filter(item => {
+        if (filter === 'unread') return item.read !== true
+        if (filter === 'assign') return /assign|design_claimed|review_requested/.test(kindOf(item))
+        if (filter === 'change') return /change|update|moved/.test(kindOf(item))
+        if (filter === 'system') return /system|iteration|frozen|released|skill/.test(kindOf(item))
+        return true
+      })
       const markAll = async () => {
         if (busy) return
         setBusy(true)
@@ -4132,30 +6661,67 @@ window.__ModuleLoader__.load({
         }
         if (item.requirementId) onOpenRequirement(item.requirementId)
       }
-      return h('div', null,
-        h('div', { className: 'dsh-wb-page-head' },
-          h('div', { className: 'dsh-wb-page-title-block' },
-            h('h1', { className: 'dsh-wb-page-title' }, '通知'),
-            h('p', { className: 'dsh-wb-page-sub' }, `${unread} 条未读 · 需求提交、评审、设计交付、测试与技能审核`),
+      const iconFor = (item) => {
+        const kind = kindOf(item)
+        if (/design_updated|design_delivered|deliver/.test(kind)) return { name: 'package', color: 'var(--violet)' }
+        if (/review_requested|assign|claimed/.test(kind)) return { name: 'clock', color: 'var(--amber)' }
+        if (/reject|failed|changes/.test(kind)) return { name: 'alert', color: 'var(--red)' }
+        if (/iteration|frozen|released|system/.test(kind)) return { name: 'check-circle', color: 'var(--text-3)' }
+        if (/change|update|moved/.test(kind)) return { name: 'edit', color: 'var(--amber)' }
+        return { name: 'bell', color: 'var(--text-2)' }
+      }
+      return h('div', { className: 'page', style: { maxWidth: '920px' } },
+        h('div', { className: 'page-head' },
+          h('div', { className: 'ttl-block' },
+            h('h1', { className: 'page-title' }, '通知中心'),
+            h('div', { className: 'page-sub' }, `${unread} 条未读 · 共 ${items.length} 条 · 指派 / 变更 / 交付 / 系统`),
           ),
-          unread > 0 ? h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: () => { void markAll() } }, busy ? '处理中…' : '全部已读') : null,
+          items.length > 0 ? h('div', { className: 'page-actions' },
+            h('button', { className: 'btn btn-sm', type: 'button', disabled: busy || unread === 0, onClick: () => { void markAll() } },
+              busy ? '处理中…' : '全部标为已读'),
+          ) : null,
         ),
-        items.length === 0
-          ? h('div', { className: 'dsh-wb-empty dsh-wb-empty--page' }, h('b', null, '还没有通知'), '团队动作会出现在这里。')
-          : h('div', { className: 'dsh-wb-panel dsh-wb-notif-page' },
-              items.map(item => h('button', {
-                className: `dsh-wb-notif${item.read === true ? '' : ' is-unread'}`,
-                type: 'button',
-                key: item.id,
-                onClick: () => { void open(item) },
-              },
-                h('span', { className: 'dsh-wb-notif-title' },
-                  item.read === true ? null : h('span', { className: 'dsh-wb-notif-dot' }),
-                  item.title,
-                ),
-                item.body ? h('span', { className: 'dsh-wb-notif-body' }, item.body) : null,
-                h('span', { className: 'dsh-wb-notif-time' }, relativeTime(item.at)),
-              )),
+        h('div', { className: 'toolbar' },
+          h('div', { className: 'seg' },
+            [['all', '全部'], ['unread', `未读 ${unread}`], ['assign', '指派'], ['change', '变更'], ['system', '系统']].map(([key, label]) =>
+              h('button', { key, type: 'button', className: filter === key ? 'active' : '', onClick: () => setFilter(key) }, label)),
+          ),
+        ),
+        filtered.length === 0
+          ? h('div', { className: 'empty-page' },
+              h(DesignIcon, { name: 'bell', size: 28 }),
+              h('b', null, items.length === 0 ? '没有通知' : '这个筛选下没有通知'),
+              h('span', null, items.length === 0 ? '有指派 / 变更时会提醒。' : '换一个筛选看看。'),
+            )
+          : h('div', { className: 'card' },
+              h('div', { className: 'card-bd', style: { padding: 0 } },
+                filtered.map(item => {
+                  const icon = iconFor(item)
+                  return h('div', {
+                    className: `notif${item.read === true ? '' : ' unread'}`,
+                    key: item.id,
+                    role: 'button',
+                    tabIndex: 0,
+                    style: { cursor: item.requirementId ? 'pointer' : 'default' },
+                    onClick: () => { void open(item) },
+                    onKeyDown: event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void open(item) } },
+                  },
+                    h('span', { className: 'ico', style: { color: icon.color } }, h(DesignIcon, { name: icon.name })),
+                    h('div', { className: 'c' },
+                      h('div', { className: 't' }, h('b', null, item.title)),
+                      h('div', { className: 's' }, h('span', null, item.body || '—')),
+                    ),
+                    h('div', { className: 'rt' },
+                      h('span', { className: 'time' }, relativeTime(item.at)),
+                      item.requirementId ? h('button', {
+                        className: 'btn btn-sm btn-ghost',
+                        type: 'button',
+                        onClick: event => { event.stopPropagation(); void open(item) },
+                      }, '查看') : null,
+                    ),
+                  )
+                }),
+              ),
             ),
       )
     }
@@ -4263,20 +6829,33 @@ window.__ModuleLoader__.load({
       }
 
       if (workbench.loading && state === null) {
-        return h('div', { className: 'dsh-wb-page' },
-          h('div', { className: 'dsh-wb-skeleton', style: { width: '180px', height: '22px' } }),
-          h('div', { className: 'dsh-wb-skeleton', style: { width: '60%' } }),
-          h('div', { className: 'dsh-wb-skeleton', style: { width: '80%' } }),
+        return h('div', { className: 'dsh-wb-design' },
+          h('div', { className: 'shell' },
+            h('div', { className: 'scroll' },
+              h('div', { className: 'page' },
+                h('div', { className: 'empty-page' },
+                  h(DesignIcon, { name: 'refresh', size: 28 }),
+                  h('b', null, '正在读取工作台'),
+                  h('span', null, '正在同步迭代、需求与通知。'),
+                ),
+              ),
+            ),
+          ),
         )
       }
 
       if (state === null) {
-        return h('div', { className: 'dsh-wb-page' },
-          h('div', { className: 'dsh-wb-empty' },
-            h('b', null, '工作台没有加载出来'),
-            workbench.error ?? '请检查插件服务是否启动',
-            h('div', { style: { marginTop: '12px' } },
-              h('button', { className: 'dsh-wb-btn dsh-wb-btn--primary', type: 'button', onClick: () => { void workbench.reload() } }, '重试'),
+        return h('div', { className: 'dsh-wb-design' },
+          h('div', { className: 'shell' },
+            h('div', { className: 'scroll' },
+              h('div', { className: 'page' },
+                h('div', { className: 'empty-page' },
+                  h(DesignIcon, { name: 'alert', size: 28, style: { color: 'var(--red)' } }),
+                  h('b', null, '工作台没有加载出来'),
+                  h('span', null, workbench.error ?? '请检查插件服务是否启动'),
+                  h('button', { className: 'btn btn-primary', type: 'button', style: { marginTop: '6px' }, onClick: () => { void workbench.reload() } }, '重试'),
+                ),
+              ),
             ),
           ),
         )
@@ -4296,100 +6875,131 @@ window.__ModuleLoader__.load({
         ['notifications', '通知'],
       ]
       const onNav = (key) => {
-        if (key === 'skills') { setSkillsOpen(true); return }
-        if (key === 'settings') { setSettingsOpen(true); return }
+        if (key === 'skills') { setView('skills'); return }
+        if (key === 'settings') { setView('settings'); return }
         if (key === 'iterations') { setView('iterations'); return }
         if (key === 'my') { setView('my'); return }
         if (key === 'notifications') { setView('notifications'); return }
       }
       const navActive = view === 'iteration' || view === 'requirement' ? 'iterations' : view
 
-      return h('div', { className: 'dsh-wb-page dsh-wb-shell' },
-        h('header', { className: 'dsh-wb-navbar' },
-          h('div', { className: 'dsh-wb-nav-brand' },
-            h('span', { className: 'dsh-wb-nav-logo' }, '研发工作台'),
-            h('span', { className: 'dsh-wb-nav-badge' }, '插件'),
-          ),
-          h('nav', { className: 'dsh-wb-nav', 'aria-label': '研发工作台导航' },
-            navItems.map(([key, label]) => h('button', {
-              key,
-              type: 'button',
-              className: navActive === key ? 'is-active' : '',
-              'aria-current': navActive === key ? 'page' : undefined,
-              onClick: () => onNav(key),
-            }, label, key === 'notifications' && unread > 0 ? h('span', { className: 'dsh-wb-nav-count' }, unread > 99 ? '99+' : String(unread)) : null)),
-          ),
-          h('div', { className: 'dsh-wb-nav-actions' },
-            canConfig ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--ghost dsh-wb-btn--sm', type: 'button', onClick: () => setPlatformOpen(true) }, '平台配置') : null,
-            isAdmin ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--ghost dsh-wb-btn--sm', type: 'button', onClick: () => setAdminOpen(true) }, '管理') : null,
+      return h('div', { className: 'dsh-wb-design' },
+        h('div', { className: 'shell' },
+          h('header', { className: 'topbar' },
+            h('div', { className: 'plugnac' },
+              h('span', { className: 'plugnac-title' }, h(DesignIcon, { name: 'workbench' }), '研发工作台'),
+              h('span', { className: 'plugnac-sep' }),
+              navItems.map(([key, label]) => h('a', {
+                key,
+                href: '#',
+                className: navActive === key ? 'active' : '',
+                'aria-current': navActive === key ? 'page' : undefined,
+                style: { position: 'relative' },
+                onClick: event => { event.preventDefault(); onNav(key) },
+              }, label, key === 'notifications' && unread > 0
+                ? h('span', { className: 'nav-badge' }, unread > 99 ? '99+' : String(unread))
+                : null)),
+            ),
+            h('div', { className: 'spacer' }),
+            view === 'iterations'
+              ? h('div', { className: 'search', style: { width: '220px' } },
+                  h(DesignIcon, { name: 'search' }),
+                  h('input', {
+                    value: iterationQuery,
+                    placeholder: '搜索迭代',
+                    'aria-label': '搜索迭代',
+                    onChange: event => setIterationQuery(event.target.value),
+                  }),
+                )
+              : null,
             h('button', {
-              className: 'dsh-wb-userchip',
+              className: 'dropdown-trigger',
               type: 'button',
               title: '个人设置',
-              onClick: () => setSettingsOpen(true),
+              onClick: () => setView('settings'),
             },
-              h('span', { className: 'dsh-wb-userchip-dot' }),
-              h('span', null,
-                h('b', null, state.currentUser.name),
-                h('span', null, ` · ${roleLabel(state.currentUser.activeRole)}`),
-              ),
-              auth.provider === 'mock' ? h('span', { className: 'dsh-wb-mock' }, 'MOCK') : null,
+              h(Avatar, { name: state.currentUser.name }),
+              `当前身份：${roleLabel(state.currentUser.activeRole)}`,
+              auth.provider === 'mock' ? h('span', { className: 'badge badge--mock' }, 'MOCK') : null,
+              h(DesignIcon, { name: 'chev-down', className: 'chev' }),
             ),
           ),
-        ),
-        h('div', { className: 'dsh-wb-content' },
-          workbench.error !== null ? h('div', { className: 'dsh-wb-dialog-err', style: { marginBottom: '12px' } }, workbench.error) : null,
-          view === 'iterations'
-            ? h(IterationListView, {
-                state,
-                query: iterationQuery,
-                onQuery: setIterationQuery,
-                filter: iterationFilter,
-                onFilter: setIterationFilter,
-                sort: iterationSort,
-                onSort: setIterationSort,
-                onOpen: (id) => { void openIteration(id) },
-                onCreate: () => setIterationOpen(true),
-                canCreate: canConfig,
-              })
-            : view === 'iteration'
-              ? h(IterationDetailView, {
+          h('div', { className: 'scroll' },
+            workbench.error !== null && workbench.error !== ''
+              ? h('div', { className: 'page', style: { paddingBottom: 0 } },
+                  h('div', { className: 'banner banner--mock' }, h(DesignIcon, { name: 'alert' }), h('span', null, workbench.error)),
+                )
+              : null,
+            view === 'iterations'
+              ? h(IterationListView, {
                   state,
-                  requirements,
-                  onBack: () => setView('iterations'),
-                  onCreateRequirement: () => setDialogOpen(true),
-                  onOpenSettings: () => setIterationManageOpen(true),
+                  query: iterationQuery,
+                  onQuery: setIterationQuery,
+                  filter: iterationFilter,
+                  onFilter: setIterationFilter,
+                  sort: iterationSort,
+                  onSort: setIterationSort,
+                  onOpen: (id) => { void openIteration(id) },
+                  onCreate: () => setIterationOpen(true),
                   canCreate,
-                  canConfig,
-                  onOpenRequirement: (id) => { void openRequirement(id) },
-                  onOpenSession: (sessionId) => openSession(sessionId),
-                  onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
                 })
-              : view === 'requirement'
-                ? selectedRequirement === null
-                  ? h('div', { className: 'dsh-wb-empty dsh-wb-empty--page' }, h('b', null, '需求已不在当前迭代'), '回到迭代列表重新选择。')
-                  : h(RequirementPageView, {
-                      state,
-                      requirement: selectedRequirement,
-                      onBack: () => setView('iteration'),
-                      onOpenSession: (sessionId) => openSession(sessionId),
-                      onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
-                      onOpenRequirementTab: (requirement) => openSessionFor(requirement, 'requirement'),
-                      onNewSession: (requirement) => setSessionFor(requirement),
-                    })
-                : view === 'my'
-                  ? h(MyWorkbenchView, {
-                      state,
-                      filter: myFilter,
-                      onFilter: setMyFilter,
-                      onOpenRequirement: (id) => { void openRequirement(id) },
-                    })
-                  : h(NotificationsView, {
-                      state,
-                      onOpenRequirement: (id) => { void openRequirement(id) },
-                      onReload: workbench.reload,
-                      onToast: showToast,
-                    }),
+              : view === 'iteration'
+                ? h(IterationDetailView, {
+                    state,
+                    requirements,
+                    onBack: () => setView('iterations'),
+                    onCreateRequirement: () => setDialogOpen(true),
+                    onOpenSettings: () => setIterationManageOpen(true),
+                    canCreate,
+                    canConfig,
+                    onOpenRequirement: (id) => { void openRequirement(id) },
+                    onOpenSession: (sessionId) => openSession(sessionId),
+                    onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+                  })
+                : view === 'requirement'
+                  ? selectedRequirement === null
+                    ? h('div', { className: 'page' },
+                        h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到迭代列表重新选择。')))
+                    : h(RequirementPageView, {
+                        state,
+                        requirement: selectedRequirement,
+                        onBack: () => setView('iteration'),
+                        onOpenSession: (sessionId) => openSession(sessionId),
+                        onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+                        onOpenRequirementTab: (requirement) => openSessionFor(requirement, 'requirement'),
+                        onNewSession: (requirement) => setSessionFor(requirement),
+                      })
+                  : view === 'my'
+                    ? h(MyWorkbenchView, {
+                        state,
+                        filter: myFilter,
+                        onFilter: setMyFilter,
+                        onOpenRequirement: (id) => { void openRequirement(id) },
+                        onOpenSession: (sessionId) => openSession(sessionId),
+                        onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+                      })
+                    : view === 'settings'
+                      ? h(SettingsPage, {
+                          auth,
+                          state,
+                          onReload: workbench.reload,
+                          onToast: showToast,
+                          onOpenPlatform: () => setPlatformOpen(true),
+                          onOpenAdmin: () => setAdminOpen(true),
+                        })
+                      : view === 'skills'
+                        ? h(SkillLibraryPage, {
+                            state,
+                            onReload: workbench.reload,
+                            onToast: showToast,
+                          })
+                        : h(NotificationsView, {
+                            state,
+                            onOpenRequirement: (id) => { void openRequirement(id) },
+                            onReload: workbench.reload,
+                            onToast: showToast,
+                          }),
+          ),
         ),
         dialogOpen ? h(CreateRequirementDialog, {
           ctx,
@@ -4443,12 +7053,12 @@ window.__ModuleLoader__.load({
           onReload: workbench.reload,
           onToast: showToast,
         }) : null,
-        h('div', { className: 'dsh-wb-toast-region', 'aria-live': 'polite', 'aria-atomic': 'true' },
+        h('div', { className: 'toast-region', 'aria-live': 'polite', 'aria-atomic': 'true' },
           toast !== null
-            ? h('div', { className: `dsh-wb-toast${toast.isError ? ' is-error' : ''}`, role: toast.isError ? 'alert' : 'status' },
-                h('span', { className: 'dsh-wb-toast-text' }, toast.message),
+            ? h('div', { className: `wb-toast${toast.isError ? ' error' : ''}`, role: toast.isError ? 'alert' : 'status' },
+                h('span', null, toast.message),
                 h('button', {
-                  className: 'dsh-wb-toast-close',
+                  className: '',
                   type: 'button',
                   'aria-label': '关闭提示',
                   onClick: () => setToast(null),

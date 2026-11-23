@@ -197,8 +197,13 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 浏览器 E2E（最新）：
 
 - `poc/e2e/screenshots/workbench-dashboard.png`：工作台首页。
-- `poc/e2e/screenshots/workbench-requirement-detail.png`：需求详情、活文档、团队文件。
-- `poc/e2e/screenshots/workbench-notifications.png`：通知聚合与分组筛选。
+- `poc/e2e/screenshots/workbench-iterations.png`：迭代列表与统计卡。
+- `poc/e2e/screenshots/workbench-iteration-detail.png`：迭代详情、需求卡与活动日志。
+- `poc/e2e/screenshots/workbench-requirement.png`：需求全量、总述、原型/设计稿、平台卡与日志。
+- `poc/e2e/screenshots/workbench-my.png`：我的工作台合并清单。
+- `poc/e2e/screenshots/workbench-notifications.png`：通知中心与筛选。
+- `poc/e2e/screenshots/workbench-skills.png`：技能库列表、详情、版本与角色包。
+- `poc/e2e/screenshots/workbench-settings.png`：设置页。
 - `poc/e2e/screenshots/workbench-admin.png`：管理后台。
 - `poc/e2e/screenshots/workbench-design-pane.png`：右侧需求与 Design Studio 画布。
 - `poc/e2e/screenshots/workbench-gitlab-real.png`：需求详情里的真实 GitLab 分支、MR 和
@@ -207,10 +212,10 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 - `poc/e2e/screenshots/gitlab-pipelines.png`：Runner 执行成功的真实流水线列表。
 - `poc/e2e/screenshots/gitlab-merge-requests.png`：工作台创建的真实 MR。
 
-早期人工验证（保留）：
+设计稿对照（`design/` 为唯一视觉基准）：
 
-- `artifacts/screenshots/app/01-login.png` … `11-dev-session.png`：登录、首次引导、统计卡、详情、
-  设计画布、通知、技能、命令生命周期、新建会话。
+- `artifacts/screenshots/app/01-login.png` … `10-my-workbench.png`：登录、首次引导、迭代列表、
+  需求全量、设计画布、通知、技能、新建技能、设置、我的工作台。
 
 ## 正式版前必须处理
 

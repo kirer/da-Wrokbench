@@ -17,81 +17,103 @@ async function openWorkbench(page, identity) {
   await entry.click()
   await page.waitForTimeout(600)
 
-  const heading = page.getByRole('heading', { name: '研发工作台' })
-  const login = page.getByRole('button', { name: new RegExp(`${identity}[\\s\\S]*进入`) }).first()
-  const profile = page.locator('button.dsh-wb-userchip').first()
+  const row = page.locator('.user-row').filter({ hasText: identity }).first()
+  await expect(row).toBeVisible()
+  await row.click()
+  await page.getByRole('button', { name: new RegExp(`以「${identity}」身份进入`) }).click()
 
-  // 已有工作台 Cookie 但身份不对时，先从个人设置退出。
-  if (await profile.isVisible().catch(() => false)) {
-    await profile.click()
-    const logout = page.getByRole('button', { name: '退出登录' })
-    if (await logout.isVisible().catch(() => false)) await logout.click()
-    await page.waitForTimeout(400)
+  await expect(page.locator('.dsh-wb-design .plugnac')).toBeVisible()
+  const identityButton = page.locator('.dsh-wb-design .topbar > button.dropdown-trigger')
+  await expect(identityButton).toContainText('当前身份')
+  const avatar = identityButton.locator('.avatar').first()
+  if (await avatar.isVisible().catch(() => false)) {
+    await expect(avatar).toHaveText(identity.slice(0, 1))
   }
-  if (await login.isVisible().catch(() => false)) {
-    await login.click()
-  }
-  await heading.waitFor()
-  await expect(page.locator('button.dsh-wb-userchip')).toContainText(identity)
 }
 
-test('工作台首页、需求详情、活文档与团队文件', async ({ page }) => {
+test('迭代列表、需求详情与活文档', async ({ page }) => {
   await openWorkbench(page, '李四')
-  await expect(page.locator('button.dsh-wb-row').first()).toBeVisible()
-  await page.screenshot({ path: 'screenshots/workbench-dashboard.png', fullPage: false })
+  await expect(page.locator('.table tbody tr').first()).toBeVisible()
+  await page.screenshot({ path: 'screenshots/workbench-iterations.png', fullPage: false })
 
-  const row = page.locator('button.dsh-wb-row').filter({ hasText: 'S11-001' }).first()
-  await row.click()
-  await expect(page.locator('.dsh-wb-detail')).toContainText('会员积分改版')
-  await expect(page.locator('.dsh-wb-doc')).toContainText('需求文档')
-  await expect(page.locator('.dsh-wb-artifacts')).toContainText('团队文件')
-  await expect(page.locator('.dsh-wb-upload')).toContainText('上传附件')
-  await page.screenshot({ path: 'screenshots/workbench-requirement-detail.png', fullPage: true })
+  const iteration = page.locator('.table tbody tr').filter({ hasText: '2026-S11' }).first()
+  await iteration.click()
+  await expect(page.locator('.rc-title').first()).toBeVisible()
+  await page.screenshot({ path: 'screenshots/workbench-iteration-detail.png', fullPage: false })
+
+  const requirement = page.locator('.rc-title').filter({ hasText: '会员积分改版' }).first()
+  await requirement.click()
+  await expect(page.locator('.rf-head')).toContainText('会员积分改版')
+  await expect(page.locator('.cardwall')).toContainText('总述')
+  await expect(page.locator('.endsec').first()).toContainText('负责人')
+  await page.screenshot({ path: 'screenshots/workbench-requirement.png', fullPage: true })
 })
 
-test('通知按需求聚合', async ({ page }) => {
-  await openWorkbench(page, '张三')
-  await page.locator('button.dsh-wb-iconbtn').filter({ hasText: '通知' }).click()
-  await expect(page.locator('.dsh-wb-popover')).toBeVisible()
-  await expect(page.locator('.dsh-wb-notif-group').first()).toContainText('全部')
-  await expect(page.locator('.dsh-wb-notif').first()).toBeVisible()
-  await page.locator('.dsh-wb-notif-group').nth(1).click()
-  await expect(page.locator('.dsh-wb-notif-group.is-active')).toHaveCount(1)
-  await page.screenshot({ path: 'screenshots/workbench-notifications.png' })
+test('我的工作台与通知中心', async ({ page }) => {
+  await openWorkbench(page, '李四')
+  await page.locator('.plugnac a').filter({ hasText: '我的工作台' }).click()
+  await expect(page.locator('.statbar')).toContainText('本月完成')
+  await expect(page.locator('.worklist .witem').first()).toBeVisible()
+  await page.screenshot({ path: 'screenshots/workbench-my.png', fullPage: false })
+
+  await page.locator('.plugnac a').filter({ hasText: '通知' }).click()
+  await expect(page.locator('.notif').first()).toBeVisible()
+  await expect(page.locator('.page-title')).toContainText('通知中心')
+  await page.screenshot({ path: 'screenshots/workbench-notifications.png', fullPage: false })
 })
 
-test('管理员后台', async ({ page }) => {
+test('技能库筛选、详情与新建表单', async ({ page }) => {
+  await openWorkbench(page, '李四')
+  await page.locator('.plugnac a').filter({ hasText: '技能库' }).click()
+  await expect(page.locator('.skill-layout')).toBeVisible()
+  await expect(page.locator('.skill-list .srow').first()).toBeVisible()
+  const first = page.locator('.skill-list .srow').first()
+  await first.click()
+  await expect(page.locator('.detail')).toContainText('内容预览')
+  await expect(page.locator('.detail')).toContainText('版本历史')
+  await page.screenshot({ path: 'screenshots/workbench-skills.png', fullPage: false })
+
+  await page.getByRole('button', { name: '新建技能' }).click()
+  await expect(page.locator('.detail .detail-hd')).toContainText('新建技能')
+  await page.getByRole('button', { name: '取消' }).first().click()
+  await expect(page.locator('.detail .detail-hd')).not.toContainText('新建技能')
+})
+
+test('设置页与管理员后台', async ({ page }) => {
   await openWorkbench(page, '管理员')
-  await page.getByRole('button', { name: '管理', exact: true }).click()
-  await expect(page.getByRole('dialog')).toContainText('用户与角色')
-  await expect(page.getByRole('dialog')).toContainText('钉钉同步')
-  await expect(page.getByRole('dialog')).toContainText('集成状态')
-  await expect(page.getByRole('dialog')).toContainText('审计事件')
-  await page.screenshot({ path: 'screenshots/workbench-admin.png' })
+  await page.locator('.plugnac a').filter({ hasText: '设置' }).click()
+  await expect(page.locator('.settings-layout')).toBeVisible()
+  await expect(page.locator('.set-sec').first()).toContainText('身份与平台')
+  await page.screenshot({ path: 'screenshots/workbench-settings.png', fullPage: false })
+
+  await page.getByRole('button', { name: '用户与权限' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText('用户与角色')
+  await expect(dialog).toContainText('钉钉同步')
+  await expect(dialog).toContainText('集成状态')
+  await expect(dialog).toContainText('审计事件')
+  await page.screenshot({ path: 'screenshots/workbench-admin.png', fullPage: false })
 })
 
-test('右侧需求与设计画布（会话归属人）', async ({ page }) => {
+test('右侧需求侧栏与设计画布', async ({ page }) => {
   await openWorkbench(page, '张三')
-  const row = page.locator('button.dsh-wb-row').filter({ hasText: 'S11-001' }).first()
-  await row.click()
-  const enter = page.getByRole('button', { name: '进入会话' })
-  if (await enter.isDisabled()) {
-    // 换机或服务端重置后，本机可能没有这个需求的会话映射；现场建一个设计会话。
-    await page.getByRole('button', { name: '新建会话' }).click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toContainText(`新建会话 · S11-001`)
-    await dialog.getByRole('button', { name: '创建会话' }).click()
-    await expect(dialog).toHaveCount(0, { timeout: 30000 })
+  const iteration = page.locator('.table tbody tr').filter({ hasText: '2026-S11' }).first()
+  await iteration.click()
+  const requirement = page.locator('.rc-title').filter({ hasText: '会员积分改版' }).first()
+  await requirement.click()
+
+  const side = page.getByRole('button', { name: '需求侧栏' })
+  if (await side.isVisible().catch(() => false)) {
+    await side.click()
   } else {
-    await enter.click()
+    await page.getByRole('button', { name: '进入会话' }).click()
   }
   const tab = page.getByRole('tab', { name: /需求/ }).first()
   await tab.waitFor({ state: 'visible' })
   await expect(page.locator('.dsh-wb-notice.is-error')).toHaveCount(0)
   await expect(page.locator('.dsh-wb-design-canvas')).toBeVisible()
-  // 右侧栏是滑入动画；等宽度稳定后再截图，否则截到动画中的窄条。
   await page.waitForTimeout(1200)
   const pane = await page.locator('.dsh-wb-design-canvas').boundingBox()
   expect(pane?.width ?? 0).toBeGreaterThan(250)
-  await page.screenshot({ path: 'screenshots/workbench-design-pane.png' })
+  await page.screenshot({ path: 'screenshots/workbench-design-pane.png', fullPage: false })
 })
