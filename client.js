@@ -5,7 +5,7 @@
  *   - a left sidebar entry + main panel: 研发工作台
  *   - a right sidebar tab: 需求 (requirement context for the open session)
  *
- * The visual language follows DSH Design Studio: DSW alias tokens, compact
+ * The visual language follows the DSH workbench canvas: DSW alias tokens, compact
  * rows, 6–8 px radii, monospace codes.
  */
 
@@ -50,7 +50,7 @@ window.__ModuleLoader__.load({
         else window.localStorage.removeItem(TOKEN_KEY)
       } catch (_) { /* 无 localStorage 时退回 Cookie */ }
     }
-    const DS_API = '/dsh-design-studio/api/'
+    const DS_API = '/dsh-workbench/canvas/'
 
     // 设计稿 `design/` 是唯一视觉基准：tokens + app.css + 页面内联样式，作用域收在 .dsh-wb-design 内。
     const DESIGN_CSS = String.raw`
@@ -1658,7 +1658,7 @@ window.__ModuleLoader__.load({
       host.innerHTML = DESIGN_ICONS
       document.body.appendChild(host)
     }
-    // 内嵌的 Design Studio 画布按 package-local chunk 懒加载；加载完再渲染右栏 tab。
+    // 内嵌的 设计画布按 package-local chunk 懒加载；加载完再渲染右栏 tab。
     let designStudioState = { runtime: null, error: null }
     const designStudioListeners = new Set()
     let designStudioRetry = null
@@ -2234,7 +2234,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-canvas-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;height:32px;padding:0 8px 0 10px;border-bottom:1px solid var(--dsw-alias-border-l1);font-size:11px;color:var(--dsw-alias-label-secondary)}
 .dsh-wb-canvas-drawer-body{flex:1;min-height:0;overflow:auto}
 .dsh-wb-canvas-drawer .dsh-wb-rqdetail{border-bottom:0}
-/* 画布保留 Design Studio 的整套能力：首页、外观、体检、导出、版本、工具坞。
+/*画布保留整套能力：首页、外观、体检、导出、版本、工具坞。
    只收起市场与设计库这两个整屏入口（内嵌首页已经用工作台自己的作品代替）。 */
 .dsh-wb-design-canvas .ddp-market,
 .dsh-wb-design-canvas .ddp-libwrap{display:none!important}
@@ -2857,8 +2857,8 @@ window.__ModuleLoader__.load({
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         `设计状态：${requirement.designStatus}；已有设计文件：${(requirement.designFiles ?? []).length} 个`,
         '',
-        '请先加载 wb-ui-design 技能，在这个需求的 design/ 目录里做设计稿（一屏一个 HTML；已有设计文件在需求文件夹根目录时就放它旁边），',
-        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用 Design Studio 的 preview / check 工具。',
+        '请先加载 ui-design 技能，在这个需求的 design/ 目录里做设计稿（一屏一个 HTML；已有设计文件在需求文件夹根目录时就放它旁边），',
+        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用画布的 preview / check 工具。',
       ].join('\n')
     }
 
@@ -4361,7 +4361,7 @@ window.__ModuleLoader__.load({
                 ['1', '迭代', '建迭代、定阶段时间、圈需求范围'],
                 ['2', '需求', '产品在会话里梳理需求，存草稿、提交评审'],
                 ['3', '评审 · 排期', '不依赖设计，评审与设计可并行'],
-                ['4', '设计 · 交付', '设计工作台出稿、比对版本、提交交付'],
+                ['4', '设计 · 交付', '设计画布出稿、比对版本、提交交付'],
               ].map(([no, title, desc]) => h('div', { className: 'fi', key: no },
                 h('span', { className: 'no' }, no),
                 h('div', null, h('div', { className: 'tt' }, title), h('div', { className: 'dd' }, desc)),
@@ -8190,7 +8190,7 @@ window.__ModuleLoader__.load({
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         '',
         `请在这个需求里做产品原型：一屏一个 HTML 写进 ${prototypeDir}，先保证信息结构、关键流程和状态完整，不追求最终视觉。`,
-        '右侧「需求」面板会自动把 prototype/ 里的页面显示成原型画布，不需要开 Design Studio。',
+        '右侧「需求」面板会自动把 prototype/ 里的页面显示成原型画布，不需要开画布。',
       ].join('\n')
     }
 
@@ -8213,8 +8213,8 @@ window.__ModuleLoader__.load({
         '- 视觉方向（品牌色、参考、信息密度）：',
         '- 端与交付范围：',
         '',
-        '补全后请加载 wb-ui-design 技能，一屏一个 HTML 写进这条需求的设计目录 design/，沿用原型里的信息结构和验收标准。',
-        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用 Design Studio 的 preview / check 工具，再用 /design-deliver 交付。',
+        '补全后请加载 ui-design 技能，一屏一个 HTML 写进这条需求的设计目录 design/，沿用原型里的信息结构和验收标准。',
+        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用画布的 preview / check 工具，再用 /design-deliver 交付。',
       ].join('\n')
     }
 
@@ -8381,8 +8381,8 @@ window.__ModuleLoader__.load({
       return null
     }
 
-    // 工作台的作品（按迭代分组）：喂给 Design Studio 的首页上的「接着做」和「需求原型」。
-    // kind 决定只看哪一边：需求面板只列 prototype/，设计台只列 design/，原型和设计稿不混在一起。
+    // 工作台的作品（按迭代分组）：喂给画布的首页上的「接着做」和「需求原型」。
+    // kind 决定只看哪一边：需求面板只列 prototype/，设计画布只列 design/，原型和设计稿不混在一起。
     // thumbKey 变化（预览票据换好）时重算，缩略图地址才会带上票据。
     function workSessionId(requirement, kind) {
       if (kind === 'design') {
@@ -8462,7 +8462,7 @@ window.__ModuleLoader__.load({
         )
       }
       if (!studio.runtime) {
-        return h('div', { className: 'dsh-wb-design-msg' }, h('span', { className: 'dsh-wb-spinner' }), '正在加载 Design Studio…')
+        return h('div', { className: 'dsh-wb-design-msg' }, h('span', { className: 'dsh-wb-spinner' }), '正在加载画布…')
       }
       return h('div', { className: 'dsh-wb-design-canvas dsh-wb-canvas-studio' },
         opening ? h('div', { className: 'dsh-wb-canvas-loading' }, '正在打开画布…') : null,
@@ -8471,14 +8471,14 @@ window.__ModuleLoader__.load({
           error,
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: onRefresh }, '重试'),
         ) : null,
-        // inputActions 是宿主的输入门面：Design Studio 的画笔画标注、点选元素、
+        // inputActions 是宿主的输入门面：画布的画笔画标注、点选元素、
         // 样式修改都靠它“发到对话”，不传就只能退回复制。
         h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork, inputActions }),
       )
     }
 
     // 需求还没有原型 / 设计稿时，右栏先开一张空白画布：host 在 prototype/ 或 design/ 下放
-    // 一个 _ 开头的占位 HTML，打开它就有完整的 Design Studio 画布。真正出图后这里会切到
+    // 一个 _ 开头的占位 HTML，打开它就有完整的设计画布。真正出图后这里会切到
     // 对应目录。两类会话用同一套逻辑，只是目录不同。
     function useBlankCanvas(requirement, attempt, kind = 'prototype', enabled = true) {
       const [pathValue, setPathValue] = useState('')
@@ -8598,7 +8598,7 @@ window.__ModuleLoader__.load({
     }
 
     // 没有编辑权限的角色（开发、测试、评审）在同一个右栏里看只读预览：
-    // 每屏一个沙箱 iframe，和需求说明一起滚动，不挂 Design Studio 的编辑画布。
+    // 每屏一个沙箱 iframe，和需求说明一起滚动，不挂画布的编辑画布。
     function ReadonlyPreviewPanel({ requirement, kind, sid, ctx, ownerHint = false }) {
       usePreviewTickets([requirement.id])
       const doc = requirement.document ?? {}
@@ -8674,7 +8674,7 @@ window.__ModuleLoader__.load({
       return `${(size / 1024 / 1024).toFixed(1)} MB`
     }
 
-    // 把一段文字作为引用块插进这个 DSH 会话的输入框（和 Design Studio 的
+    // 把一段文字作为引用块插进这个 DSH 会话的输入框（和画布的
     // “发到对话”同一个输入门面）：用户看到的是引用，发出去模型拿到完整文字。
     async function quoteIntoComposer(ctx, sessionId, text) {
       const body = String(text ?? '').trim()
@@ -9143,7 +9143,7 @@ window.__ModuleLoader__.load({
           h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => { void reload() } }, '重试'),
         )
       } else if (requirement === null) {
-        // 这个会话还没有关联需求：仍然给 Design Studio 的首页。
+        // 这个会话还没有关联需求：仍然给画布的首页。
         body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: '', onRefresh: () => { void reload() } })
       } else if (hasPrototype) {
         body = canEditPrototype
@@ -9755,7 +9755,7 @@ window.__ModuleLoader__.load({
         label: '研发工作台',
       }, WorkbenchIcon)), 'dsh-workbench: sidebar entry')
 
-      // Design Studio 的画布以 package-local chunk 懒加载，加载后由它注册文案、点选标签等外围能力；
+      //画布组件以 package-local chunk 懒加载，加载后由它注册文案、点选标签等外围能力；
       // tab 本身仍由工作台注册，画布与需求上下文在同一个右栏面板里。
       ctx.effect(() => {
         let disposed = false
@@ -9764,7 +9764,7 @@ window.__ModuleLoader__.load({
           const mine = ++attempt
           publishDesignStudio({ runtime: null, error: null })
           Promise.resolve()
-            .then(() => require.async('./client.design-studio.js'))
+            .then(() => require.async('./client.canvas.js'))
             .then((runtime) => {
               if (disposed || mine !== attempt) return
               runtime.apply(ctx, { embed: { kind: DESIGN_TAB_KIND, openFor: openWorkbenchTabFor } })

@@ -21,8 +21,8 @@ RUN if [ -n "$APT_MIRROR" ]; then \
     && npm cache clean --force
 
 WORKDIR /opt/dsh-workbench
-COPY package.json cordis.patch.yml index.js client.js client.design-studio.js ./
-COPY design-studio ./design-studio
+COPY package.json cordis.patch.yml index.js client.js client.canvas.js ./
+COPY canvas ./canvas
 
 ENV DSH_HOME=/home/node/.dsh \
     WORKBENCH_SERVER_URL=http://host.docker.internal:3210 \

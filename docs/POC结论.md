@@ -2,7 +2,7 @@
 
 验证时间：2026-11-22
 环境：DeepSeek Harness 0.2.2-rc.5，独立 profile `workbench-poc`，Rust 1.9x，Docker Desktop
-插件目录：仓库根目录（`index.js`、`client.js`、`client.design-studio.js`、`design-studio/`、`package.json`、`cordis.patch.yml`）
+插件目录：仓库根目录（`index.js`、`client.js`、`client.canvas.js`、`canvas/`、`package.json`、`cordis.patch.yml`）
 参考设计：`需求梳理与方案建议.md` v0.3
 
 ## 一句话结论
@@ -66,7 +66,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
   审核/发布/版本/归档、事件流、管理员审计。
 - **管理后台**：用户与角色、钉钉同步、集成状态（不回传密钥）、审计事件。
 - **工作台 UI**：7 个统计卡、需求列表与详情、会签/开发/测试/发布卡、通知铃、技能管理、
-  管理后台、平台配置；右侧需求面板 + 精简 Design Studio 画布。
+  管理后台、平台配置；右侧需求面板 + 精简设计画布。
 
 ## 验证结果
 
@@ -154,7 +154,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 | 需求活文档产品身份 403 | 编辑权限改为 `can_product() \|\| can_plan()` |
 | DingTalk `/gettoken` 解析错层，报“没有返回 access_token” | 按顶层 `access_token` 解析 |
 | GitLab 变更后 dev-start/dev-finish 返回旧分支/MR | 变更后重新读取快照再响应 |
-| Design Studio 技能弹窗宽度被基础样式覆盖 | 提高选择器优先级 |
+| 画布技能弹窗宽度被基础样式覆盖 | 提高选择器优先级 |
 | 统计卡拥挤 | 拆成 7 张卡 |
 | 会签测试只设一人，第二次评审 409 | 测试设置两名会签人，覆盖全部通过逻辑 |
 | Playwright 在登录页等“研发工作台”标题超时 | 先识别登录页，必要时退出再选身份 |
@@ -169,7 +169,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 ## DSH 插件机制结论
 
 - 客户端插件用 `window.__ModuleLoader__.load({ id, factory })`，`require('react')`，无需构建；
-  package-local chunk 用 `require.async('./client.design-studio.js')`。
+  package-local chunk 用 `require.async('./client.canvas.js')`。
 - 右栏：`ctx.sidebarRightTabs.register({ id, kind, title, keepMounted, guide })` +
   `ctx.slots.inject('sidebar.right.pane.tab', ...)`；同一 tab 内组合需求条和设计画布。
 - 主机命令 `ctx.commands.register({ name, description, input, handler })`；带 `input` 的命令
@@ -178,7 +178,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
   因此额外做 toast。
 - 工作台会话从右侧栏反查需求：服务端记录 → 本机映射 → DSH session；工具/命令省略需求编号时
   用当前会话反查，不把原始 DSH session ID 发给服务端。
-- Design Studio host 半端与预览服务随插件挂载；画布组件由 package-local chunk 懒加载。
+- 画布 host 半端（`canvas/`）与预览服务随插件挂载；画布组件由 package-local chunk 懒加载。
 - 右侧栏是滑入动画，E2E 截图需等宽度稳定，否则会截到动画中的窄条。
 
 ## 安全边界
@@ -205,7 +205,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 - `e2e/screenshots/workbench-skills.png`：技能库列表、详情、版本与角色包。
 - `e2e/screenshots/workbench-settings.png`：设置页。
 - `e2e/screenshots/workbench-admin.png`：管理后台。
-- `e2e/screenshots/workbench-design-pane.png`：右侧需求与 Design Studio 画布。
+- `e2e/screenshots/workbench-design-pane.png`：右侧需求与设计画布。
 - `e2e/screenshots/workbench-gitlab-real.png`：需求详情里的真实 GitLab 分支、MR 和
   流水线链接。
 - `e2e/screenshots/gitlab-project.png`：本地 GitLab 的 `workbench/trade-server` 项目。
@@ -230,7 +230,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
    指标、错误告警、审计导出和外部 uptime 监控。
 5. **文件存储**：附件/设计稿存状态快照，单文件 3 MB（解码后）上限；正式版换对象存储、
    分片上传、病毒扫描和访问签名。
-6. **设计画布维护**：`design-studio/` 是裁剪后的上游代码，升级需补丁清单、快照对比和
+6. **设计画布维护**：`canvas/` 源自 MIT 授权的上游代码（已并入本插件），升级需补丁清单、快照对比和
    画布交互回归；当前 E2E 只覆盖打开与展示，不覆盖改字/切屏/样式保存。
 7. **技能治理**：需要版本签名、审核留痕、角色可见性和运行时隔离；目前技能正文靠提示词
    约束，模型是否遵守不可强制。
@@ -241,7 +241,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 10. **CI 的浏览器 E2E**：工作流已定义但默认关闭，需要可用的 DSH 宿主和 `DSH_URL`；
     当前 E2E 在本机真实宿主上跑通。
 11. **版本管理**：当前目录不是 git 仓库；正式交付前应初始化仓库、补 LICENSE/第三方声明
-    （Design Studio 为 MIT）并建立提交规范。
+    （上游为 MIT，许可证见 `canvas/LICENSE`）并建立提交规范。
 
 ## 结论
 

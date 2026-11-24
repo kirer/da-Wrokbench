@@ -1,7 +1,7 @@
 # DSH 部门研发工作台
 
-DSH 插件形态的部门研发工作台：左侧是迭代/需求/通知/技能入口，右侧是基于
-Design Studio 改造的「需求原型」与「设计稿」双画布；共享协作数据由 Rust 服务端保存。
+DSH 插件形态的部门研发工作台：左侧是迭代/需求/通知/技能入口，右侧是「需求原型」与
+「设计稿」双画布；共享协作数据由 Rust 服务端保存。
 
 **仓库根目录就是插件目录** —— `package.json`、`index.js`、`client.js` 都在根上，
 `dsh plugin add <仓库路径>` 直接指向根目录即可。
@@ -15,11 +15,15 @@ Design Studio 改造的「需求原型」与「设计稿」双画布；共享协
 | [`package.json`](package.json) | 插件清单：`main`、`exports`、`dsh.bundle` / `dsh.client` |
 | [`index.js`](index.js) | **宿主半端（Host BFF）**：同源 Cookie 鉴权、转发服务端、本机文件夹与 DSH 会话映射 |
 | [`client.js`](client.js) | **浏览器半端**：左侧「研发工作台」主面板 |
-| [`client.design-studio.js`](client.design-studio.js) | 浏览器半端的 Design Studio chunk，必须与 `client.js` 同目录 |
+| [`client.canvas.js`](client.canvas.js) | 浏览器半端的**设计画布** chunk（右侧「设计」面板），必须与 `client.js` 同目录 |
+| [`canvas/`](canvas/) | 设计画布的**宿主半端**：预览服务、`/dsh-workbench/canvas/*` 接口、体检/截图工具、ui-design 技能 |
 | [`cordis.patch.yml`](cordis.patch.yml) | profile patch：把 `dsh-workbench` 插进插件栈 |
-| [`design-studio/`](design-studio/) | 内嵌的 `dsh-design-studio@0.29.0`（MIT）宿主半端：画布、外观、体检、导出、版本 |
 
 `npm pack` 只会打包上面这些（见 `package.json` 的 `files`），服务端和部署脚本不会进包。
+
+`canvas/` 里的画布代码来自 MIT 授权的 `dsh-design-studio@0.29.0`（原作者 OrderG-X，
+许可证见 [`canvas/LICENSE`](canvas/LICENSE)），已并入本插件：包名、接口路径、缓存目录、
+技能与工具名全部改到 `dsh-workbench` 命名空间下，不再作为独立插件存在。
 
 ### 服务与工具（插件不加载）
 

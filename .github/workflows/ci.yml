@@ -6,8 +6,8 @@ on:
       - 'server/**'
       - 'index.js'
       - 'client.js'
-      - 'client.design-studio.js'
-      - 'design-studio/**'
+      - 'client.canvas.js'
+      - 'canvas/**'
       - 'tests/**'
       - 'tools/**'
       - 'package.json'
@@ -48,7 +48,7 @@ jobs:
         run: cargo test --locked
       - name: 客户端语法检查
         working-directory: .
-        run: node --check index.js && node --check client.js && node --check client.design-studio.js
+        run: node --check index.js && node --check client.js && node --check client.canvas.js
       - name: API 回归
         run: |
           DATABASE_PATH="$RUNNER_TEMP/workbench-api.db" PORT=3210 ./target/debug/dsh-workbench-server &
@@ -85,7 +85,7 @@ jobs:
         with:
           node-version: 22
       - run: npm pack --dry-run
-      - run: node --check client.design-studio.js
+      - run: node --check client.canvas.js
 
   docker:
     name: Docker 镜像构建

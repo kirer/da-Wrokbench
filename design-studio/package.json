@@ -1,8 +1,0 @@
-{
-  "name": "dsh-design-studio",
-  "version": "0.29.0",
-  "private": true,
-  "type": "module",
-  "description": "Vendored host half of dsh-design-studio@0.29.0 (MIT), merged into dsh-workbench.",
-  "license": "MIT"
-}

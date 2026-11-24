@@ -5,7 +5,7 @@
  *   - Rust 团队服务端（server/）保存共享协作数据：用户、平台、迭代、需求、
  *     评审、排期、设计版本、开发/测试/发布、技能、通知与事件。
  *   - DSH host 插件只做 BFF：同源 Cookie 鉴权、转发团队服务端、保存本机
- *     顶级文件夹与 DSH 会话映射、创建本地目录、挂载 Design Studio 画布。
+ *     顶级文件夹与 DSH 会话映射、创建本地目录、挂载设计画布。
  *   - 会话里的工具/技能通过内部令牌代表当前用户调用团队服务端。
  */
 
@@ -13,9 +13,9 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-// 改造自 dsh-design-studio@0.29.0（MIT）：host 半端并入工作台插件，右侧栏由工作台统一注册。
-import * as designStudio from './design-studio/lib/index.js'
-import * as designStudioSkill from './design-studio/lib/skill.js'
+// 设计画布宿主代码（MIT，见 canvas/LICENSE）已并入本插件，右侧栏由工作台统一注册。
+import * as canvasHost from './canvas/index.js'
+import * as canvasSkill from './canvas/skill.js'
 
 export const name = 'dsh-workbench'
 // webServer 只在 web profile 存在；headless/CLI profile 仍可挂载工具、技能和命令。
@@ -353,7 +353,7 @@ function ensureRequirementFolder(parent, name, local, userId, unique = false) {
 const DESIGN_FILE_SKIP = new Set(['node_modules', '.git', '.dsh', 'exports', 'refs', 'dist', 'build', 'prototype', 'design'])
 const PROTOTYPE_DIR = 'prototype'
 const DESIGN_DIR = 'design'
-// 新建需求后右栏先摆一张空白画布。文件名以 _ 开头，Design Studio 和工作台扫描
+// 新建需求后右栏先摆一张空白画布。文件名以 _ 开头，画布和工作台扫描
 // 都把它当草稿忽略，真正开始做原型后不会混进「原型作品」列表。
 const BLANK_CANVAS_NAME = '_canvas.html'
 const BLANK_CANVAS_HTML = `<!doctype html>
@@ -399,7 +399,7 @@ function listHtmlFiles(dirPath, baseDir, relativeBase) {
     let entries
     try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
     for (const entry of entries) {
-      // 和 Design Studio 一致：. 开头是隐藏文件，_ 开头是草稿 / 空白画布占位，都不算一屏。
+      // 和画布一致：. 开头是隐藏文件，_ 开头是草稿 / 空白画布占位，都不算一屏。
       if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue
       const full = path.join(dir, entry.name)
       if (entry.isDirectory()) {
@@ -1022,7 +1022,7 @@ function makeRoute(local, hostCtx = null) {
         return json(res, 200, {
           ok: true,
           plugin: 'dsh-workbench',
-          // 容器里的 DSH 网页经宿主机端口访问时，Design Studio 的随机预览端口在容器内，
+          // 容器里的 DSH 网页经宿主机端口访问时，画布的随机预览端口在容器内，
           // 浏览器直接连不上；画布改用服务端打包的 srcdoc 预览。
           remotePreview: process.env.WORKBENCH_REMOTE_PREVIEW === '1'
             || String(process.env.DSH_WORKBENCH_BASE || '').startsWith('/workbench'),
@@ -1140,7 +1140,7 @@ function makeRoute(local, hostCtx = null) {
         return json(res, 200, { tickets, expiresIn: PREVIEW_TICKET_TTL_MS / 1000 })
       }
 
-      // 设计稿预览：工作台自己的同源路由，不依赖 Design Studio 的随机端口预览服务。
+      // 设计稿预览：工作台自己的同源路由，不依赖画布的随机端口预览服务。
       // 交付版本从团队服务端取，本机文件从当前用户的需求文件夹取，都只读、只允许文本/图片。
       if (req.method === 'GET' && route === '/design-preview') {
         const requirementId = url.searchParams.get('requirementId') || ''
@@ -1481,7 +1481,7 @@ function makeRoute(local, hostCtx = null) {
       }
 
       // 新建需求后右栏立刻有一张空白画布：在需求目录的 prototype/ 下放一个 _ 开头的
-      // 占位 HTML，Design Studio 打开它就有画布（外观 / 体检 / 导出 / 版本都在）。
+      // 占位 HTML，画布打开它就有画布（外观 / 体检 / 导出 / 版本都在）。
       // 真正的原型写进 prototype/ 后，右栏会切到原型目录，这张占位页不会再出现。
       if (req.method === 'POST' && route === '/design/blank-canvas') {
         const body = await readJson(req)
@@ -2434,9 +2434,9 @@ function registerTools(ctx, local) {
           + `需求文件夹：${folder ? '已创建（本机，路径不进入模型上下文）' : '尚未创建'}。\n`
           + `已有原型（${prototypes.length}，prototype/ 只作为需求参考，不参与设计交付）：${prototypeText}。\n`
           + `已有设计文件（${files.length}）：${fileText}。\n`
-          + '开始设计：先加载 wb-ui-design 技能；设计稿写进这条需求的 design/ 目录（一屏一个 HTML 文件），'
+          + '开始设计：先加载 ui-design 技能；设计稿写进这条需求的 design/ 目录（一屏一个 HTML 文件），'
           + '不要覆盖 prototype/ 里的需求原型。右侧「设计」面板会自动跟随 design/ 的文件刷新；'
-          + '不要调用 wb_preview_page / wb_check_design / wb_look_design，也不要打开 Design Studio 的设计台。'
+          + '不要调用 wb_preview_page / wb_check_design / wb_look_design，也不要打开画布自带的独立预览面板。'
           + '交付时调用 workbench_deliver_design。',
         )
       },
@@ -2886,10 +2886,10 @@ const SKILLS = [
       '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹和已有文件。',
       '2. 先判断这次要产出什么：',
       '   - 需求会话里描述需求 → 做**产品原型**：一屏一个 HTML 写进 `prototype/`，优先信息结构、关键流程和状态完整，不追求最终视觉。',
-      '   - 设计会话里做高保真 → 做**设计稿**：加载 `wb-ui-design` 技能，一屏一个 HTML 写进 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
+      '   - 设计会话里做高保真 → 做**设计稿**：加载 `ui-design` 技能，一屏一个 HTML 写进 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
       '3. 做设计稿且设计未认领、当前身份是设计时，调用 `workbench_claim_design`。',
       '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名不带序号，一屏一个语义化名字。',
-      '5. 不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开 Design Studio 的「设计台」：工作台的「需求」面板会自动把 prototype/ 里的页面显示成原型画布，「设计」面板会自动把 design/ 里的页面显示成设计画布，文件写完自动刷新。wb-ui-design 技能里要求 preview / check 的步骤在本工作台里跳过。',
+      '5. 不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开画布自带的独立预览面板：工作台的「需求」面板会自动把 prototype/ 里的页面显示成原型画布，「设计」面板会自动把 design/ 里的页面显示成设计画布，文件写完自动刷新。ui-design 技能里要求 preview / check 的步骤在本工作台里跳过。',
       '6. 需要视觉自查时按 ui-design 技能的「自查」清单读源文件检查；最多三轮。',
       '7. 只汇报改动文件、取舍和剩余问题；不要编造原型或设计状态。',
       '8. 设计稿完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
@@ -3403,10 +3403,10 @@ function registerCommands(ctx, local) {
 }
 
 // ---------------------------------------------------------------------------
-// Design Studio
+// 设计画布（canvas/）
 // ---------------------------------------------------------------------------
 
-function mountDesignStudio(ctx) {
+function mountCanvas(ctx) {
   const warn = (what, reason) => {
     const text = reason instanceof Error ? reason.message : String(reason)
     try { ctx.logger?.warn?.(`[dsh-workbench] ${what}: ${text}`) } catch { /* ignore */ }
@@ -3414,37 +3414,37 @@ function mountDesignStudio(ctx) {
   try {
     ctx.inject(['webServer'], (sub) => {
       try {
-        designStudio.apply(sub)
+        canvasHost.apply(sub)
       } catch (reason) {
-        warn('Design Studio host 启动失败', reason)
+        warn('设计画布 host 启动失败', reason)
       }
     })
   } catch (reason) {
-    warn('Design Studio host 启动失败', reason)
+    warn('设计画布 host 启动失败', reason)
   }
   try {
-    designStudioSkill.apply(ctx)
+    canvasSkill.apply(ctx)
   } catch (reason) {
-    warn('Design Studio 技能挂载失败', reason)
+    warn('设计画布技能挂载失败', reason)
   }
   try {
     ctx.inject(['tools'], (sub) => {
       try {
-        sub.tools.register({ ...designStudio.previewTool })
+        sub.tools.register({ ...canvasHost.previewTool })
         sub.tools.register({
-          ...designStudio.checkTool,
-          execute: (args, exec) => designStudio.checkTool.execute(args, exec, ctx),
+          ...canvasHost.checkTool,
+          execute: (args, exec) => canvasHost.checkTool.execute(args, exec, ctx),
         })
         sub.tools.register({
-          ...designStudio.lookTool,
-          execute: (args, exec) => designStudio.lookTool.execute(args, exec, ctx),
+          ...canvasHost.lookTool,
+          execute: (args, exec) => canvasHost.lookTool.execute(args, exec, ctx),
         })
       } catch (reason) {
-        warn('Design Studio 工具挂载失败', reason)
+        warn('设计画布工具挂载失败', reason)
       }
     })
   } catch (reason) {
-    warn('Design Studio 工具注入失败', reason)
+    warn('设计画布工具注入失败', reason)
   }
 }
 
@@ -3459,7 +3459,7 @@ export function apply(ctx, config = {}) {
   const local = loadLocal()
   fs.mkdirSync(defaultBaseDir(), { recursive: true })
 
-  mountDesignStudio(ctx)
+  mountCanvas(ctx)
 
   ctx.inject(['webServer'], (sub) => {
     sub.effect(() => sub.webServer.register({
