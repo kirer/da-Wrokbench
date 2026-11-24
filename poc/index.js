@@ -539,6 +539,9 @@ function withoutLocalPaths(payload) {
   const copy = { ...payload }
   delete copy.baseDir
   delete copy.defaultBaseDir
+  // mock 用户名单是「所有账号 id + 姓名 + 角色」，远端可访问时等于一份账号目录；
+  // 只有本机请求才需要它来渲染快速登录。
+  delete copy.mock
   if (copy.user && typeof copy.user === 'object') {
     copy.user = {
       ...copy.user,
@@ -748,6 +751,11 @@ function assertSameOrigin(req) {
       throw httpError(403, '跨站写请求已被拒绝')
     }
   }
+  // Origin: "null" 不只来自桌面端，沙箱 iframe、file:// 页面也会发它。只有
+  // 同时没有 Referer 和 Sec-Fetch-* 时才按桌面端放行（桌面壳转发时会剥掉这些头）。
+  if (origin === 'null' && (!isDesktopClient(req) || req.headers['sec-fetch-site'] !== undefined)) {
+    throw httpError(403, '跨站写请求已被拒绝')
+  }
   const site = req.headers['sec-fetch-site']
   if (typeof site === 'string' && site !== '' && site !== 'same-origin' && site !== 'none') {
     throw httpError(403, '跨站写请求已被拒绝')
@@ -839,7 +847,9 @@ async function sessionFromRequest(req, local) {
 
 function isLoopbackRequest(req) {
   const raw = req.socket?.remoteAddress
-  if (typeof raw !== 'string' || raw === '') return true
+  // 取不到地址时必须按「非本机」处理：以前 fail-open，Unix socket 或某些代理
+  // 场景下会把远端当成 127.0.0.1，直接放开全部本机路径接口。
+  if (typeof raw !== 'string' || raw === '') return false
   const address = raw.replace(/^::ffff:/i, '').toLowerCase()
   return address === '127.0.0.1' || address === '::1'
 }
@@ -1047,7 +1057,16 @@ function makeRoute(local, hostCtx = null) {
       }
       if (req.method === 'POST' && route === '/auth/logout') {
         const token = tokenFromRequest(req)
-        if (token !== '') authSessionCache.delete(token)
+        if (token !== '') {
+          authSessionCache.delete(token)
+          // 只清 Cookie 不吊销，等于让被复制的 token 在 TTL 内继续有效（默认 7 天）。
+          // 服务端把 jti 记进吊销集合；这里失败也不阻塞登出，本地照常清凭证。
+          try {
+            await serverRaw('/auth/logout', { method: 'POST', token })
+          } catch (reason) {
+            console.warn('[dsh-workbench] server logout failed', reason instanceof Error ? reason.message : reason)
+          }
+        }
         appendCookie(res, serializeCookie(AUTH_COOKIE, '', 0))
         return json(res, 200, { ok: true })
       }
@@ -1198,8 +1217,20 @@ function makeRoute(local, hostCtx = null) {
         const baseDir = baseDirFor(local, userId)
         const folder = folderPathFor(localUser(local, userId), baseDir, stateData, baseRequirement)
         if (folder === '' || !fs.existsSync(folder)) return json(res, 404, { error: '需求目录不存在' })
+        if (codeBrowserDenied(relative)) {
+          return json(res, 404, { error: '这个路径不开放浏览' })
+        }
         const target = path.resolve(folder, relative)
         if (!isInside(folder, target)) return json(res, 403, { error: '路径不在需求目录内' })
+        // 路径本身合规不代表目标合规：仓库里可能有一个指向 .env 的普通链接目录。
+        // 按真实路径再判一次，目录列表和单文件读取都覆盖到。
+        try {
+          const realTarget = fs.realpathSync(target)
+          const relativeReal = path.relative(fs.realpathSync(folder), realTarget).split(path.sep).join('/')
+          if (codeBrowserDenied(relativeReal)) return json(res, 404, { error: '这个路径不开放浏览' })
+        } catch {
+          return json(res, 404, { error: '路径读不到' })
+        }
         try {
           assertNoSymlinkBetween(folder, target)
           const real = fs.realpathSync(target)
@@ -1221,7 +1252,7 @@ function makeRoute(local, hostCtx = null) {
           const stat = fs.statSync(real)
           if (!stat.isDirectory()) return json(res, 400, { error: '不是目录' })
           const entries = fs.readdirSync(real, { withFileTypes: true })
-            .filter(entry => !CODE_BROWSER_SKIP.has(entry.name))
+            .filter(entry => !codeBrowserDenied(entry.name))
             .map((entry) => {
               const full = path.join(real, entry.name)
               let size = 0
@@ -1252,6 +1283,14 @@ function makeRoute(local, hostCtx = null) {
         const dshSessionId = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
         if (dshSessionId === '' || dshSessionId.length > 200) {
           return json(res, 400, { error: '缺少合法的会话 ID' })
+        }
+        // 只接受已经绑定了工作台需求的 DSH 会话。否则知道别人某个会话 ID 就能
+        // 把它认到自己名下，之后该会话里的工具调用都以认领人身份执行。
+        const bound = Object.values(local.users || {}).some(user => (
+          typeof user?.dshSessions?.[dshSessionId] === 'string'
+        ))
+        if (!bound) {
+          return json(res, 404, { error: '这个会话还没有绑定工作台需求，不能认领' })
         }
         const owner = findSessionOwner(local, dshSessionId)
         if (owner !== null && owner !== userId) {
@@ -1617,8 +1656,13 @@ function makeRoute(local, hostCtx = null) {
       })
       return json(res, result.status, result.data)
     } catch (error) {
-      const status = Number.isInteger(error?.status) ? error.status : 500
-      return json(res, status, { error: error instanceof Error ? error.message : String(error) })
+      // 只有我们自己抛的 httpError 才能原样回给浏览器。fs/path 抛出的错误里带
+      // 本机绝对路径（比如 ENOENT /Users/kirer/...），不能直接透出。
+      if (Number.isInteger(error?.status)) {
+        return json(res, error.status, { error: error instanceof Error ? error.message : String(error) })
+      }
+      console.error('[dsh-workbench] unhandled route error', route, error)
+      return json(res, 500, { error: '本机工作台处理请求失败，详情见宿主日志' })
     }
   }
 }
@@ -1943,6 +1987,31 @@ const TEST_REPORT_MAX_BYTES = 3_900_000
 // 开发右栏只读浏览需求目录时跳过的大型/敏感目录，避免把 node_modules 或
 // .git 整个翻出来，也避免把 .local 凭据显示在界面里。
 const CODE_BROWSER_SKIP = new Set(['.git', 'node_modules', '.local', '.DS_Store', 'dist', 'target', '.next', '.cache'])
+// 目录列表和单文件读取必须用同一套拒绝规则：只过滤列表等于没过滤，
+// 直接请求路径仍能拿到 .env / .git/config / *.pem 的明文。
+const CODE_BROWSER_DENY_EXT = new Set([
+  '.pem', '.key', '.p12', '.pfx', '.crt', '.cer', '.der', '.keystore', '.jks', '.p8',
+  '.sqlite', '.sqlite3', '.db',
+])
+// 少数点开头的文件是开发时确实要看、又不含凭据的，单独放行。
+const CODE_BROWSER_ALLOW_DOTFILES = new Set([
+  '.gitignore', '.gitattributes', '.editorconfig', '.dockerignore',
+  '.env.example', '.env.sample', '.env.template',
+])
+function codeBrowserDenied(relativePath) {
+  const segments = String(relativePath || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(segment => segment !== '' && segment !== '.')
+  if (segments.some(segment => segment === '..')) return true
+  for (const segment of segments) {
+    if (CODE_BROWSER_SKIP.has(segment)) return true
+    // 点开头的文件/目录（.env、.npmrc、.netrc、.git-credentials、.ssh 等）一律不开放。
+    if (segment.startsWith('.') && !CODE_BROWSER_ALLOW_DOTFILES.has(segment)) return true
+  }
+  const name = segments[segments.length - 1] || ''
+  return CODE_BROWSER_DENY_EXT.has(path.extname(name).toLowerCase())
+}
 const CODE_PREVIEW_MAX_BYTES = 200_000
 const DESIGN_UPLOAD_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -2188,6 +2257,13 @@ async function mirrorPrototypesForUser(userId, data, localState, baseDir) {
       const target = path.join(dir, name)
       if (!isInside(folder, target)) continue
       try {
+        // assertNoSymlinkBetween 只查目录段；target 自身如果是指向 ~/.zshrc 的链接，
+        // writeFileSync 会顺着链接写出去。最后一级也要单独判。
+        let targetIsLink = false
+        try {
+          targetIsLink = fs.lstatSync(target).isSymbolicLink()
+        } catch { /* 不存在就是普通新建 */ }
+        if (targetIsLink) continue
         if (fs.existsSync(target)) {
           const stat = fs.statSync(target)
           if (stat.isFile() && stat.size === artifact.size) continue
@@ -2197,6 +2273,9 @@ async function mirrorPrototypesForUser(userId, data, localState, baseDir) {
         if (typeof content !== 'string') continue
         assertNoSymlinkBetween(folder, dir)
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+        // mkdir -p 之后 target 仍可能是并发/预置的链接；写之前按真实父目录再确认一次。
+        const realDir = fs.realpathSync(dir)
+        if (!isInside(fs.realpathSync(folder), realDir)) continue
         fs.writeFileSync(
           target,
           artifact.encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8'),

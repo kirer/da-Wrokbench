@@ -1161,8 +1161,21 @@ pub fn set_reviewers(
     let previous = snap.requirements[index].reviewer_ids.clone();
     let unchanged = previous.len() == clean.len()
         && previous.iter().all(|id| clean.contains(id));
-    snap.requirements[index].reviewer_ids = clean.clone();
     let round = snap.requirements[index].versions.len() as u32;
+    // 本轮已经投过 reject 的会签人不能被移出列表：否则负责人先把驳回意见“删掉”，
+    // 剩下的会签人全通过时需求就直接变成已通过，评审等于被绕过。
+    let rejected_out = snap.requirements[index].reviews.iter().any(|review| {
+        review.version == round
+            && review.decision == "rejected"
+            && previous.contains(&review.by)
+            && !clean.contains(&review.by)
+    });
+    if rejected_out {
+        return Err(ApiError::conflict(
+            "本轮已有会签人退回，不能把退回人移出会签列表；请让产品修改后重新提交",
+        ));
+    }
+    snap.requirements[index].reviewer_ids = clean.clone();
     let mut approved: HashSet<String> = HashSet::new();
     let mut rejected = false;
     for review in snap.requirements[index]
@@ -2922,6 +2935,13 @@ pub fn update_requirement_document(
     }
     let index = req_index(snap, reference)?;
     check_not_creating(&snap.requirements[index], "编辑需求文档")?;
+    // 有产品身份不等于能改任意需求的文档：只有这条需求的产品负责人，
+    // 或负责人/管理员才能写，否则 A 产品可以把 B 产品的需求改成完全不同的内容。
+    if snap.requirements[index].owner_id != actor.id && !actor.can_plan() {
+        return Err(ApiError::forbidden(
+            "只有这条需求的产品负责人或负责人/管理员可以编辑需求文档",
+        ));
+    }
     if input.summary.is_none() && input.acceptance_criteria.is_none() && input.body.is_none() {
         return Err(ApiError::bad("没有需要保存的文档内容"));
     }
@@ -3081,6 +3101,24 @@ pub fn add_artifact(
             return Err(ApiError::conflict("该需求标记为无需设计"));
         }
     }
+    // 原型和测试报告会被宿主写进每个人的本机需求目录（mirrorPrototypesForUser），
+    // 所以必须和设计稿一样有角色门槛：否则任何登录用户都能往别人的原型目录里写文件，
+    // 或者伪造一份“测试通过”的证据。
+    if kind == "prototype"
+        && snap.requirements[index].owner_id != actor.id
+        && !actor.can_plan()
+    {
+        return Err(ApiError::forbidden(format!(
+            "{} 不是这条需求的产品负责人，不能上传原型",
+            actor.name
+        )));
+    }
+    if kind == "test-report" && !actor.can_test() {
+        return Err(ApiError::forbidden(format!(
+            "{} 没有上传测试报告的权限（需要测试/负责人/管理员身份）",
+            actor.name
+        )));
+    }
     let content = input.content;
     if content.is_empty() {
         return Err(ApiError::bad("附件内容为空"));
@@ -3172,6 +3210,26 @@ pub fn add_artifact(
     Ok(meta)
 }
 
+/// 需求参与人：负责人、设计师、会签人、开发负责人、建过会话的人、写过评审/测试的人，
+/// 以及负责人/管理员。设计稿、原型、测试报告本来就镜像到全团队本机，不做限制；
+/// 普通附件（日志、截图、客户资料）只有参与人能读。
+fn is_requirement_participant(requirement: &Requirement, actor: &User) -> bool {
+    actor.can_plan()
+        || requirement.owner_id == actor.id
+        || requirement.designer_id.as_deref() == Some(actor.id.as_str())
+        || requirement.reviewer_ids.iter().any(|id| id == &actor.id)
+        || requirement
+            .dev_tasks
+            .iter()
+            .any(|task| task.assignee_id.as_deref() == Some(actor.id.as_str()))
+        || requirement
+            .sessions
+            .iter()
+            .any(|session| session.created_by.as_deref() == Some(actor.id.as_str()))
+        || requirement.reviews.iter().any(|review| review.by == actor.id)
+        || requirement.test_runs.iter().any(|run| run.by == actor.id)
+}
+
 pub fn get_artifact(snap: &Snapshot, id: &str) -> Result<(ArtifactMeta, String), ApiError> {
     let meta = snap
         .requirements
@@ -3187,6 +3245,33 @@ pub fn get_artifact(snap: &Snapshot, id: &str) -> Result<(ArtifactMeta, String),
         .map(|item| item.content.clone())
         .ok_or_else(|| ApiError::not_found("附件内容不存在"))?;
     Ok((meta, content))
+}
+
+/// 带可见性校验的读取。设计稿/原型/测试报告本来就镜像到全团队本机，保持全员可读；
+/// 普通附件（日志、截图、客户资料）只对需求参与人开放，避免 id 泄漏后任意账号读正文。
+pub fn get_artifact_for(
+    snap: &Snapshot,
+    actor: &User,
+    id: &str,
+) -> Result<(ArtifactMeta, String), ApiError> {
+    let requirement = snap
+        .requirements
+        .iter()
+        .find(|requirement| requirement.artifacts.iter().any(|artifact| artifact.id == id))
+        .ok_or_else(|| ApiError::not_found("附件不存在"))?;
+    let shared_kind = matches!(
+        requirement
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.id == id)
+            .map(|artifact| artifact.kind.as_str()),
+        Some("design") | Some("prototype") | Some("test-report")
+    );
+    if !shared_kind && !is_requirement_participant(requirement, actor) {
+        // 用 404 而不是 403：不确认「这个 id 存在」本身就是信息。
+        return Err(ApiError::not_found("附件不存在"));
+    }
+    get_artifact(snap, id)
 }
 
 #[cfg(test)]
@@ -3245,5 +3330,147 @@ mod tests {
         let snap = snapshot_with(STATUS_DRAFT, &["S1-001", "S1-007", "S2-100"]);
         let iteration = &snap.iterations[0];
         assert_eq!(next_code(&snap, iteration), "S1-008");
+    }
+
+    fn user(id: &str, roles: &[&str]) -> User {
+        serde_json::from_value(json!({
+            "id": id,
+            "name": id,
+            "roles": roles,
+            "active": true,
+        }))
+        .expect("fixture user")
+    }
+
+    fn snapshot_with_artifact(kind: &str, owner_id: &str) -> Snapshot {
+        let mut snap = snapshot_with(STATUS_DRAFT, &["S1-001"]);
+        snap.requirements[0].owner_id = owner_id.to_string();
+        let requirement_id = snap.requirements[0].id.clone();
+        snap.requirements[0].artifacts.push(ArtifactMeta {
+            id: "art-1".to_string(),
+            requirement_id,
+            name: "f.txt".to_string(),
+            kind: kind.to_string(),
+            content_type: "text/plain".to_string(),
+            encoding: String::new(),
+            size: 3,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            created_by: owner_id.to_string(),
+            design_version: None,
+        });
+        snap.artifact_contents.push(ArtifactContent {
+            id: "art-1".to_string(),
+            content: "abc".to_string(),
+        });
+        snap
+    }
+
+    #[test]
+    fn plain_attachments_are_participant_only() {
+        let snap = snapshot_with_artifact("attachment", "u-owner");
+        let owner = user("u-owner", &["product"]);
+        let stranger = user("u-stranger", &["dev"]);
+        let lead = user("u-lead", &["lead"]);
+        assert!(get_artifact_for(&snap, &owner, "art-1").is_ok());
+        assert!(get_artifact_for(&snap, &lead, "art-1").is_ok());
+        let error = get_artifact_for(&snap, &stranger, "art-1")
+            .expect_err("non-participant must not read a plain attachment");
+        assert_eq!(error.status, axum::http::StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn shared_deliverable_kinds_stay_readable() {
+        for kind in ["design", "prototype", "test-report"] {
+            let snap = snapshot_with_artifact(kind, "u-owner");
+            let stranger = user("u-stranger", &["dev"]);
+            assert!(
+                get_artifact_for(&snap, &stranger, "art-1").is_ok(),
+                "{kind} must stay readable by everyone"
+            );
+        }
+    }
+
+    #[test]
+    fn only_owner_or_planner_may_upload_prototypes() {
+        let mut snap = snapshot_with(STATUS_DRAFT, &["S1-001"]);
+        snap.requirements[0].owner_id = "u-owner".to_string();
+        let owner = user("u-owner", &["product"]);
+        let other_product = user("u-other", &["product"]);
+        let dev = user("u-dev", &["dev"]);
+        let input = || ArtifactInput {
+            name: "prototype/a.html".to_string(),
+            content_type: "text/html".to_string(),
+            content: "<html></html>".to_string(),
+            encoding: String::new(),
+            kind: "prototype".to_string(),
+            design_version: None,
+        };
+        assert!(add_artifact(&mut snap, &owner, "S1-001", input()).is_ok());
+        assert!(add_artifact(&mut snap, &other_product, "S1-001", input()).is_err());
+        assert!(add_artifact(&mut snap, &dev, "S1-001", input()).is_err());
+    }
+
+    #[test]
+    fn only_testers_may_upload_test_reports() {
+        let mut snap = snapshot_with(STATUS_TESTING, &["S1-001"]);
+        let dev = user("u-dev", &["dev"]);
+        let qa = user("u-qa", &["qa"]);
+        let input = || ArtifactInput {
+            name: "report.html".to_string(),
+            content_type: "text/html".to_string(),
+            content: "<html></html>".to_string(),
+            encoding: String::new(),
+            kind: "test-report".to_string(),
+            design_version: None,
+        };
+        assert!(add_artifact(&mut snap, &dev, "S1-001", input()).is_err());
+        assert!(add_artifact(&mut snap, &qa, "S1-001", input()).is_ok());
+    }
+
+    #[test]
+    fn document_edits_are_owner_scoped() {
+        let mut snap = snapshot_with(STATUS_DRAFT, &["S1-001"]);
+        snap.requirements[0].owner_id = "u-owner".to_string();
+        let owner = user("u-owner", &["product"]);
+        let other_product = user("u-other", &["product"]);
+        let lead = user("u-lead", &["lead"]);
+        let body = || DocumentInput {
+            summary: Some("摘要".to_string()),
+            acceptance_criteria: None,
+            body: None,
+            expected_version: None,
+        };
+        assert!(update_requirement_document(&mut snap, &owner, "S1-001", body()).is_ok());
+        assert!(update_requirement_document(&mut snap, &other_product, "S1-001", body()).is_err());
+        assert!(update_requirement_document(&mut snap, &lead, "S1-001", body()).is_ok());
+    }
+
+    #[test]
+    fn rejected_reviewer_cannot_be_removed() {
+        let mut snap = snapshot_with(STATUS_PENDING_REVIEW, &["S1-001"]);
+        // 会签人必须是真实的负责人账号，否则会先被用户存在性校验挡下。
+        snap.users = vec![user("u-owner", &["product"]), user("u-a", &["lead"]), user("u-b", &["lead"])];
+        snap.requirements[0].reviewer_ids = vec!["u-a".to_string(), "u-b".to_string()];
+        snap.requirements[0].versions.push(Version {
+            version: 1,
+            summary: "v1".to_string(),
+            at: "2026-01-01T00:00:00Z".to_string(),
+            by: "u-owner".to_string(),
+        });
+        snap.requirements[0].reviews.push(Review {
+            id: "rv-1".to_string(),
+            version: 1,
+            decision: "rejected".to_string(),
+            comment: "不行".to_string(),
+            at: "2026-01-01T00:00:00Z".to_string(),
+            by: "u-b".to_string(),
+        });
+        // set_reviewers 本身要求负责人/管理员身份：这里模拟负责人改会签名单。
+        let owner = user("u-owner", &["lead"]);
+        let ids = |list: &[&str]| list.iter().map(|id| id.to_string()).collect::<Vec<_>>();
+        let error = set_reviewers(&mut snap, &owner, "S1-001", ids(&["u-a"]))
+            .expect_err("rejecting reviewer must not be removable this round");
+        assert_eq!(error.status, axum::http::StatusCode::CONFLICT);
+        assert!(set_reviewers(&mut snap, &owner, "S1-001", ids(&["u-a", "u-b"])).is_ok());
     }
 }

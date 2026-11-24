@@ -158,12 +158,10 @@ try {
 
   console.log('== 会话认领与防串号 ==')
   const sessionId = `bff-test-${Date.now()}`
-  const claim = await jsonFetch('/dsh-workbench/api/sessions/claim', {
+  const unboundClaim = await jsonFetch('/dsh-workbench/api/sessions/claim', {
     method: 'POST', cookie: lisiCookie, body: { sessionId }, headers: { origin: bff.base },
   })
-  check('本人可认领 DSH 会话', claim.status === 200, claim.text)
-  const localAfter = JSON.parse(fs.readFileSync(mod.__test.localFile(), 'utf8'))
-  check('认领会话写入本机会话映射', localAfter.users?.lisi?.sessionUsers?.[sessionId] === 'lisi')
+  check('没有工作台记录的会话不能被认领', unboundClaim.status === 404, `HTTP ${unboundClaim.status}`)
   check('local.json 权限为 600', (fs.statSync(mod.__test.localFile()).mode & 0o777) === 0o600)
 
   const zhangsanLogin = await jsonFetch('/dsh-workbench/api/auth/mock', { method: 'POST', headers: browserLoginHeaders, body: { userId: 'zhangsan' } })
@@ -182,6 +180,48 @@ try {
     String(createdRequirement?.folderPath ?? '').endsWith('/产品可以新建需求'),
     createdRequirement?.folderPath ?? '',
   )
+  const requirementDir = String(createdRequirement.folderPath)
+  fs.mkdirSync(path.join(requirementDir, 'src'), { recursive: true })
+  fs.writeFileSync(path.join(requirementDir, '.env'), 'DINGTALK_CLIENT_SECRET=leaked')
+  fs.writeFileSync(path.join(requirementDir, 'deploy.pem'), '-----BEGIN PRIVATE KEY-----')
+  fs.writeFileSync(path.join(requirementDir, 'src', 'app.js'), 'console.log(1)')
+  fs.writeFileSync(path.join(requirementDir, '.gitignore'), 'node_modules/')
+  const listRequirementDir = await jsonFetch(
+    `/dsh-workbench/api/requirement-files?requirementId=${encodeURIComponent(createdRequirement.id)}&path=`,
+    { cookie: lisiCookie },
+  )
+  const listedNames = (listRequirementDir.data?.entries ?? []).map(entry => entry.name)
+  check(
+    '代码浏览器不列 dotfile 与密钥文件',
+    listRequirementDir.status === 200 && !listedNames.includes('.env') && !listedNames.includes('deploy.pem') && listedNames.includes('src'),
+    JSON.stringify(listedNames),
+  )
+  const readEnv = await jsonFetch(
+    `/dsh-workbench/api/requirement-file?requirementId=${encodeURIComponent(createdRequirement.id)}&path=.env`,
+    { cookie: lisiCookie },
+  )
+  check('代码浏览器读不到 .env 明文', readEnv.status === 404, `HTTP ${readEnv.status} ${readEnv.text.slice(0, 80)}`)
+  const readPem = await jsonFetch(
+    `/dsh-workbench/api/requirement-file?requirementId=${encodeURIComponent(createdRequirement.id)}&path=deploy.pem`,
+    { cookie: lisiCookie },
+  )
+  check('代码浏览器读不到私钥文件', readPem.status === 404, `HTTP ${readPem.status}`)
+  const readGit = await jsonFetch(
+    `/dsh-workbench/api/requirement-file?requirementId=${encodeURIComponent(createdRequirement.id)}&path=.git/config`,
+    { cookie: lisiCookie },
+  )
+  check('代码浏览器读不到 .git/config', readGit.status === 404, `HTTP ${readGit.status}`)
+  const readSource = await jsonFetch(
+    `/dsh-workbench/api/requirement-file?requirementId=${encodeURIComponent(createdRequirement.id)}&path=src/app.js`,
+    { cookie: lisiCookie },
+  )
+  check('代码浏览器仍能读普通源码', readSource.status === 200 && readSource.data?.content === 'console.log(1)', readSource.text.slice(0, 80))
+  const readGitignore = await jsonFetch(
+    `/dsh-workbench/api/requirement-file?requirementId=${encodeURIComponent(createdRequirement.id)}&path=.gitignore`,
+    { cookie: lisiCookie },
+  )
+  check('代码浏览器仍能读 .gitignore', readGitignore.status === 200, `HTTP ${readGitignore.status}`)
+
   const sessionRoot = path.join(WORKBENCH_BASE, 'ITER-TEST')
   const artifactDir = path.join(sessionRoot, '资料目录')
   fs.mkdirSync(sessionRoot, { recursive: true })
@@ -205,8 +245,14 @@ try {
       && (sessionRecord.data?.requirement?.sessions ?? []).some(item => item.folderPath === sessionRoot),
     sessionRecord.text,
   )
+  const claimOwn = await jsonFetch('/dsh-workbench/api/sessions/claim', {
+    method: 'POST', cookie: lisiCookie, body: { sessionId: 'bff-dsh-session' }, headers: { origin: bff.base },
+  })
+  check('已绑定需求的会话可以认领', claimOwn.status === 200, claimOwn.text)
+  const localAfter = JSON.parse(fs.readFileSync(mod.__test.localFile(), 'utf8'))
+  check('认领写入本机会话映射', localAfter.users?.lisi?.sessionUsers?.['bff-dsh-session'] === 'lisi')
   const crossClaim = await jsonFetch('/dsh-workbench/api/sessions/claim', {
-    method: 'POST', cookie: zhangsanLogin.cookie, body: { sessionId }, headers: { origin: bff.base },
+    method: 'POST', cookie: zhangsanLogin.cookie, body: { sessionId: 'bff-dsh-session' }, headers: { origin: bff.base },
   })
   check('其他账号不能认领已归属会话', crossClaim.status === 403, `HTTP ${crossClaim.status}`)
   const tooLong = await jsonFetch('/dsh-workbench/api/sessions/claim', {

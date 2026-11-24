@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -76,6 +77,8 @@ for (const req of targets.sort((a, b) => a.code.localeCompare(b.code))) {
   console.log(`${req.code} ${req.title} -> ${bound.requirement.status} sessions=${JSON.stringify(sessions)}`)
 }
 const PLAN_FILE = process.env.UAT_PLAN || path.join(UAT_ROOT, 'uat-plan.json')
-fs.mkdirSync(UAT_ROOT, { recursive: true })
-fs.writeFileSync(PLAN_FILE, JSON.stringify(plan, null, 2))
+fs.mkdirSync(UAT_ROOT, { recursive: true, mode: 0o700 })
+// 计划文件里有本机目录和 DSH 会话 ID，只给当前用户读。
+fs.writeFileSync(PLAN_FILE, JSON.stringify(plan, null, 2), { mode: 0o600 })
+fs.chmodSync(PLAN_FILE, 0o600)
 console.log(`wrote ${PLAN_FILE}`)

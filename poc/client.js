@@ -2698,6 +2698,17 @@ window.__ModuleLoader__.load({
     function resetDataCaches() {
       workbenchStore.requestId += 1
       emitStore(workbenchStore, { state: null, error: null, loading: true })
+      // 预览票据和只读标记都绑在上一个账号上：票据会让宿主按上一个用户的
+      // baseDir 解析本机文件，只读标记会让新账号看到「改为可编辑」。
+      // 不清理，B 在 A 登出后的 120 秒内登录会看到 A 的需求目录。
+      previewTickets.clear()
+      previewTicketQueued.clear()
+      previewTicketInFlight = null
+      readonlyPreviewKeys.clear()
+      explicitlyOpenedTabs.clear()
+      autoOpenedSessionTabs.clear()
+      notifyPreviewTickets()
+      for (const sub of readonlyPreviewSubs) { try { sub() } catch (_) { /* 组件已卸载 */ } }
       // 不能清空 Map：已经挂载的 hook 仍持有旧 store 引用，清空会让它们继续
       // 轮询一个不再被复用的对象，新账号登录后还看得到旧数据。就地把所有
       // store 清空，正在运行的轮询器会用新 token 重新取数。

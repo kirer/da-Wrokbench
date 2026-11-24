@@ -47,6 +47,42 @@ pub enum Store {
 pub struct AppState {
     pub store: Store,
     pub config: Arc<Config>,
+    /// 已吊销的 JWT（jti -> 原过期时间戳）。退出登录后旧 token 立刻失效，
+    /// 不再等到 TTL 自然过期。只在内存里，重启后失效——重启本身也让
+    /// 未过期的 token 失去意义（客户端会重新登录）。
+    pub revoked: Arc<Mutex<std::collections::HashMap<String, i64>>>,
+    /// 简单的按 key 令牌桶，用于登录/Webhook 这类无鉴权入口。
+    pub limiter: Arc<Mutex<std::collections::HashMap<String, RateBucket>>>,
+}
+
+/// 令牌桶：capacity 个令牌，每 refill_secs 秒补满一个。
+#[derive(Clone, Copy)]
+pub struct RateBucket {
+    tokens: f64,
+    last: i64,
+    capacity: f64,
+    refill_secs: f64,
+}
+
+impl RateBucket {
+    fn new(capacity: f64, refill_secs: f64, now: i64) -> Self {
+        Self { tokens: capacity, last: now, capacity, refill_secs }
+    }
+
+    fn take(&mut self, now: i64) -> bool {
+        let elapsed = (now - self.last).max(0) as f64;
+        self.last = now;
+        self.tokens = (self.tokens + elapsed / self.refill_secs).min(self.capacity);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+        true
+    }
+
+    fn refund(&mut self) {
+        self.tokens = (self.tokens + 1.0).min(self.capacity);
+    }
 }
 
 impl AppState {
@@ -54,6 +90,8 @@ impl AppState {
         Self {
             store: Store::Sqlite(Arc::new(Mutex::new(conn))),
             config: Arc::new(config),
+            revoked: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            limiter: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -61,7 +99,78 @@ impl AppState {
         Self {
             store: Store::Postgres(pool),
             config: Arc::new(config),
+            revoked: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            limiter: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// 返回 false 表示超限。key 由调用方拼成「路由:来源」，不同入口互不影响。
+    fn allow(&self, key: &str, capacity: f64, refill_secs: f64) -> bool {
+        let now = unix_now();
+        let mut buckets = match self.limiter.lock() {
+            Ok(guard) => guard,
+            Err(_) => return true, // 锁坏了也不能让登录彻底不可用
+        };
+        // 顺手清掉长期不用的 key，避免按 IP 无限增长。
+        if buckets.len() > 4096 {
+            buckets.retain(|_, bucket| now - bucket.last < 3600);
+        }
+        let bucket = buckets
+            .entry(key.to_string())
+            .or_insert_with(|| RateBucket::new(capacity, refill_secs, now));
+        bucket.capacity = capacity;
+        bucket.refill_secs = refill_secs;
+        bucket.take(now)
+    }
+
+    /// 成功登录把预扣的令牌还回去：只有失败尝试才真正消耗配额。
+    /// 本地部署时全员登录都经过宿主 BFF、来源都是 127.0.0.1，按「所有尝试」
+    /// 计数会把正常使用也卡住；按失败计数既挡枚举，又不误伤日常登录。
+    fn refund_auth_attempt(&self, key: &str) {
+        if let Ok(mut buckets) = self.limiter.lock() {
+            if let Some(bucket) = buckets.get_mut(key) {
+                bucket.refund();
+            }
+        }
+    }
+
+    fn is_revoked(&self, jti: &str, now: i64) -> bool {
+        let Ok(mut revoked) = self.revoked.lock() else { return false };
+        revoked.retain(|_, expires_at| *expires_at > now);
+        revoked.contains_key(jti)
+    }
+
+    fn revoke(&self, jti: &str, expires_at: i64) {
+        if jti.is_empty() {
+            return;
+        }
+        if let Ok(mut revoked) = self.revoked.lock() {
+            revoked.insert(jti.to_string(), expires_at);
+        }
+    }
+}
+
+/// 登录/Webhook 入口的来源地址。取不到 peer（Unix socket、内嵌测试）时统一
+/// 记成 "unknown"，不返回错误——限流不能成为拒绝服务的新入口。
+pub struct ClientIp(String);
+
+impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(ClientIp(
+            parts
+                .extensions
+                .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                .map(|info| info.0.ip().to_string())
+                .unwrap_or_else(|| "unknown".to_string()),
+        ))
+    }
+}
+
+impl ClientIp {
+    fn key(&self, route: &str) -> String {
+        format!("{route}:{}", self.0)
     }
 }
 
@@ -179,6 +288,9 @@ struct Claims {
     provider: String,
     iat: i64,
     exp: i64,
+    /// 令牌唯一标识，退出登录时写进吊销集合。
+    #[serde(default)]
+    jti: String,
 }
 
 pub struct AuthUser(pub User);
@@ -246,6 +358,9 @@ impl FromRequestParts<AppState> for AuthUser {
             &validation,
         )
         .map_err(|_| ApiError::unauthorized("登录已过期，请重新登录"))?;
+        if !data.claims.jti.is_empty() && state.is_revoked(&data.claims.jti, unix_now()) {
+            return Err(ApiError::unauthorized("登录已失效，请重新登录"));
+        }
         let user = find_user(state, &data.claims.sub)
             .await?
             .filter(|user| user.active)
@@ -273,6 +388,7 @@ fn issue_token(config: &Config, user: &User) -> Result<(String, i64), ApiError> 
         provider: config.auth_provider.clone(),
         iat: now,
         exp: now + config.token_ttl_seconds,
+        jti: uuid::Uuid::new_v4().to_string(),
     };
     let token = encode(
         &Header::default(),
@@ -380,20 +496,58 @@ struct MockLogin {
 
 async fn auth_mock(
     State(state): State<AppState>,
+    ip: ClientIp,
     Json(input): Json<MockLogin>,
 ) -> Result<Json<Value>, ApiError> {
     if state.config.auth_provider != "mock" {
         return Err(ApiError::not_found("Mock 登录未启用"));
     }
-    let user = find_user(&state, &input.user_id)
-        .await?
-        .filter(|user| user.active)
-        .ok_or_else(|| ApiError::unauthorized("Mock 用户不存在或已停用"))?;
+    // 登录入口按来源限流：60 次突发、每秒补 1 个（稳态 60 次/分）。
+    // 不能太紧：本机部署时所有用户的登录都经过宿主 BFF，来源都是 127.0.0.1，
+    // 8 人同时登录 + UAT 脚本重跑就会误伤；太松又等于没限。mock 登录没有密码，
+    // 不限流就能被脚本枚举全部账号；钉钉交换同理（授权码可重放）。
+    if !state.allow(&ip.key("auth"), 60.0, 1.0) {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "登录尝试过于频繁，请稍后再试",
+        ));
+    }
+    let user = match find_user(&state, &input.user_id).await? {
+        Some(user) if user.active => user,
+        _ => {
+            return Err(ApiError::unauthorized("Mock 用户不存在或已停用"));
+        }
+    };
+    state.refund_auth_attempt(&ip.key("auth"));
     let (token, expires_in) = issue_token(&state.config, &user)?;
     let mut payload = auth_payload(&state.config, &user);
     payload["token"] = json!(token);
     payload["expiresIn"] = json!(expires_in);
     Ok(Json(payload))
+}
+
+/// 退出登录：把当前令牌的 jti 记进吊销集合。宿主 BFF 清 Cookie 后还要调这里，
+/// 否则被复制的 token 在 TTL 内（默认 7 天）仍然能读到全部数据。
+async fn auth_logout(
+    State(state): State<AppState>,
+    AuthUser(_user): AuthUser,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let header = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let token = header.strip_prefix("Bearer ").unwrap_or_default();
+    if !token.is_empty() {
+        if let Ok(data) = decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(state.config.auth_secret.as_bytes()),
+            &Validation::new(Algorithm::HS256),
+        ) {
+            state.revoke(&data.claims.jti, data.claims.exp);
+        }
+    }
+    Ok(Json(json!({ "ok": true })))
 }
 
 async fn auth_session(State(state): State<AppState>, AuthUser(user): AuthUser) -> Result<Json<Value>, ApiError> {
@@ -430,11 +584,36 @@ struct DingTalkProfile {
 
 async fn dingtalk_exchange(
     State(state): State<AppState>,
+    ip: ClientIp,
     Json(input): Json<DingTalkExchange>,
 ) -> Result<Json<Value>, ApiError> {
     if state.config.auth_provider != "dingtalk" {
         return Err(ApiError::not_found("钉钉登录未启用"));
     }
+    if !state.allow(&ip.key("auth"), 60.0, 1.0) {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "登录尝试过于频繁，请稍后再试",
+        ));
+    }
+    let result = dingtalk_exchange_inner(&state, input).await;
+    // 只有「凭证类失败」才真正消耗配额。上游 5xx / 网络错误不扣，否则一次钉钉
+    // 故障就会把所有人锁在门外一分钟。
+    let credential_failure = result
+        .as_ref()
+        .err()
+        .map(|error| !error.status.is_server_error())
+        .unwrap_or(false);
+    if !credential_failure {
+        state.refund_auth_attempt(&ip.key("auth"));
+    }
+    result
+}
+
+async fn dingtalk_exchange_inner(
+    state: &AppState,
+    input: DingTalkExchange,
+) -> Result<Json<Value>, ApiError> {
     let client_id = state
         .config
         .dingtalk_client_id
@@ -493,7 +672,7 @@ async fn dingtalk_exchange(
     let profile: DingTalkProfile = profile_response.json().await.map_err(|error| {
         ApiError::new(StatusCode::BAD_GATEWAY, format!("钉钉用户响应不合法：{error}"))
     })?;
-    let user = mutate(&state, |snapshot| {
+    let user = mutate(state, |snapshot| {
         let user = snapshot
             .users
             .iter_mut()
@@ -930,11 +1109,11 @@ async fn add_artifact(
 
 async fn get_artifact(
     State(state): State<AppState>,
-    _auth: AuthUser,
+    AuthUser(actor): AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = read_snapshot(&state).await?;
-    let (artifact, content) = domain::get_artifact(&snapshot, &id)?;
+    let (artifact, content) = domain::get_artifact_for(&snapshot, &actor, &id)?;
     Ok(Json(json!({ "artifact": artifact, "content": content })))
 }
 
@@ -1886,9 +2065,17 @@ async fn admin_dingtalk_sync(
 
 async fn gitlab_webhook(
     State(state): State<AppState>,
+    ip: ClientIp,
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Json<Value>, ApiError> {
+    // 令牌错误的请求也要限流：否则可以用 8 MB 请求体持续打解析前的比较路径。
+    if !state.allow(&ip.key("webhook"), 120.0, 1.0) {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Webhook 请求过于频繁",
+        ));
+    }
     let token = headers
         .get("x-gitlab-token")
         .and_then(|value| value.to_str().ok());
@@ -2069,6 +2256,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/mock", post(auth_mock))
         .route("/auth/dingtalk/exchange", post(dingtalk_exchange))
         .route("/auth/session", get(auth_session))
+        .route("/auth/logout", post(auth_logout))
         .route("/onboarding/complete", post(onboarding_complete))
         .route("/state", get(get_state))
         .route("/iterations", post(create_iteration))
