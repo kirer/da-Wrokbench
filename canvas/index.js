@@ -29,11 +29,8 @@
  *     POST /dsh-workbench/canvas/style            预览里调样式 { session, key, loc, css, name } → 写进那个元素在源码里的 style 属性（改前改后各存一版）
  *     POST /dsh-workbench/canvas/locate           样式规则在源码第几行 { session, items: [{ href, sel, n }] } → { items: [{ file, line } | null] }
  *     GET  /dsh-workbench/canvas/bundle?session=&key=&v=&parent=  远程看：这一屏连同样式、图片打成一份 → { html, deps }（放进沙盒 iframe；deps 改了再取）
- *     POST /dsh-workbench/canvas/phone            手机上看：{ session, on: true, path } 开局域网入口（给链接和二维码）、
- *                                                   { on: false } 关掉、{ follow: path } 电脑上换了一屏手机跟着跳
- *     POST /dsh-workbench/canvas/pubshare         公网链接（实验）：{ session, on: true, …整套演示的参数 } 用 cloudflared 临时通道放出整套 HTML 演示、
- *                                                   { on: false } 关掉、{ peek: true } 看状态（带二维码）、{ update: true, … } 换参数、
- *                                                   { download: true } 下载 cloudflared（人点了才下）、{ cancel: true } 取消下载
+ *
+ * 我的作品（设计库 › 我的作品）在 gallery/routes.js：works / workthumb / pack / usezip。
  *
  * 页面本身由 serve.js 开的独立端口提供（见那边的说明）。
  */
@@ -48,18 +45,12 @@ import { createHub, webOrigins, trustedOrigins, resolveInRoot, ERR_CATCHER, defa
 import { bundle, inlinePicker, strictMeta, MAX_TOTAL as BUNDLE_MAX } from './bundle.js'
 import { buildPack, PACK_SCREENS } from './htmlpack.js'
 import { createLibrary } from './works.js'
-import { createInspiration } from './inspire.js'
+import { isPhotoAsset } from './photo-assets.js'
 import { pickStyleText } from './styles.js'
 import { createLibraryRoutes } from './gallery/routes.js'
-import { createMarket } from './gallery/market.js'
-import { createMarketRoutes } from './gallery/market-routes.js'
-import { createPhotos, loadPhotoIndex, searchPhotos, onlyByTheme, ratioNote, isPhotoAsset, orientOf, MAX_PHOTOS } from './photos.js'
 import { createTracker, parseTarget, findRule, allScreens, classSigs, exportOrder, KINDS } from './core.js'
 import { createDrafts } from './draft.js'
 import { createHistory } from './history.js'
-import { createPhone } from './phone.js'
-import { createPublicShare } from './tunnel.js'
-import { qrMatrix } from './qr.js'
 import { makePdf, makePptx, jpegInfo } from './doc.js'
 import { createBrowser } from './browser.js'
 import { createCanvasThumbs, createDirRevs } from './canvthumb.js'
@@ -99,7 +90,7 @@ const SKILL_RANK = 600 // 和 DSH 自带的技能同一档；用户 / 项目里�
  * 几行之间靠这个互通（同一个包里的模块 Node 只加载一次）：工作台起来后放 tracker、无头浏览器（browser）；
  * 「自动打开预览」那行开着时 autoOpen > 0
  */
-export const studio = { tracker: null, impl: null, openPreview: null, autoOpen: 0, offline: 0, annotations: 0, check: null, browser: null, market: null, photos: null, sessionCwd: null, log: () => {} }
+export const studio = { tracker: null, impl: null, openPreview: null, autoOpen: 0, offline: 0, annotations: 0, check: null, browser: null, sessionCwd: null, log: () => {} }
 
 /** 设计技能：模型做界面设计时加载（DSH 的 skill 工具），也能让用户手动调 */
 export const designSkill = {
@@ -590,69 +581,6 @@ export const handoffTool = {
   },
 }
 
-const ORIENT = { landscape: '横图', portrait: '竖图', square: '方图' }
-
-/** find_photos 工具：从自带照片库按描述找图，复制进设计目录（图用本地文件，分享、导出、离线预览都带得走） */
-export const photoTool = {
-  name: 'find_photos',
-  description:
-    '从设计画布自带的照片库里按描述找照片，复制进设计目录的 assets/，返回能直接写进 HTML 的相对路径和替代文字。' +
-    '民宿酒店、餐饮、奶茶咖啡、健身、美妆、服饰、教育、旅行风景这类靠照片说话的设计，需要头图、封面、商品图时用，别画插画冒充照片。' +
-    '库里是 AI 生成的示意图；用户给了自己的照片就用用户的。',
-  parameters: specToJsonSchema({
-    query: { type: 'string', required: true, description: '要什么样的照片，中文英文都行，带上题材和画面，如「民宿 卧室」「奶茶 手拿」「gym interior」' },
-    dir: { type: 'string', description: '这套设计的文件夹（绝对路径或相对会话目录），图放进它的 assets/。不填用正在预览的设计目录' },
-    count: { type: 'number', description: `要几张，1–${MAX_PHOTOS}，默认 3` },
-    ratio: { type: 'string', enum: Object.keys(ORIENT), description: 'landscape 横图、portrait 竖图、square 方图；不够时会补别的比例（用 object-fit: cover 裁）' },
-  }),
-  output: {
-    schema: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' } }, required: ['text'] },
-    render: (_args, value) => [{ type: 'text', text: value.text }],
-  },
-  async execute(args, exec) {
-    const id = toolSession(exec, '找照片')
-    const a = args || {}
-    const photos = studio.photos
-    if (!photos) return { text: '这个版本的设计画布没带照片库。这次用 CSS / SVG 画，并告诉用户这里需要一张什么样的照片。' }
-    const query = typeof a.query === 'string' ? a.query.trim() : ''
-    if (!query) return { text: 'query 不能空：写要什么样的照片，如「民宿 卧室」。' }
-    const cwd = studio.sessionCwd ? await studio.sessionCwd(id) : studio.tracker.cwdOf(id)
-    const t = studio.tracker.stateOf(id).target
-    const root = t && t.kind === 'file' ? t.root : ''
-    const dir = typeof a.dir === 'string' && a.dir.trim() ? resolvePath(a.dir, cwd) : root
-    if (!dir) return { text: '不知道放哪：先建好这套设计的文件夹，把路径写进 dir。' }
-    const allowed = pinRoots([cwd, root])
-    if (!allowed(dir)) return { text: `${dir} 不在会话目录（${cwd}）里，图不能放那儿。放进这套设计自己的文件夹。` }
-    const ratio = Object.hasOwn(ORIENT, a.ratio) ? a.ratio : ''
-    const search = (used) => searchPhotos(photos.index, { query, ratio, count: a.count, used, seed: dir })
-    // 先搜一遍：库里没有就不用下载
-    if (!search(new Set()).length) {
-      const names = Object.values(photos.index.themes).map((x) => x.label).join('、')
-      return { text: `库里没有符合「${query}」的照片。现有题材：${names}。换个说法再找；实在没有就用 CSS / SVG 画，并告诉用户这里需要一张什么样的照片。` }
-    }
-    try {
-      const placed = await photos.provide({ dir, allowed, pick: search })
-      const want = Math.min(MAX_PHOTOS, Math.max(1, Math.floor(Number(a.count)) || 3))
-      const broad = onlyByTheme(photos.index, { query })
-      const few = !broad && placed.length < want ? `具体画面只找到这 ${placed.length} 张；要更多就只写题材再搜一次。\n` : ''
-      const list = placed.map(({ p, rel }, i) => `${i + 1}. ${rel}（${ORIENT[orientOf(p.w, p.h)]} ${p.w}×${p.h}）alt：${p.alt} / ${p.altEn}`)
-      return {
-        text:
-          `${broad ? `按题材找到 ${placed.length} 张（没有和「${query}」里具体画面对得上的标签，看描述合不合适再用；不合适就用 CSS / SVG 画，并告诉用户这里需要什么样的照片）` : `找到 ${placed.length} 张`}，已放进 ${path.join(dir, 'assets')}：\n${list.join('\n')}\n${few}${ratioNote(placed.map((x) => x.p), ratio)}` +
-          '这是按关键词找的，先看上面的描述和需求对不对得上，对不上的别用（没用上的图不会进分享包）。\n' +
-          '用法：<img src="assets/文件名" alt="…"> 配 object-fit: cover；alt 按界面语言选一个；HTML 不在这个文件夹时改相对路径。\n' +
-          '这些是 AI 生成的示意图，不是用户真实的店铺或产品：别写「实拍」，也别把图上的场景当事实写进文案；做完告诉用户上线前换成真实照片。',
-      }
-    } catch (e) {
-      studio.log(e)
-      if (e && e.code === 'off') return { text: '「设计库不联网」开着，照片库下载不了。这次用 CSS / SVG 画，并告诉用户：关掉这个开关就能用自带照片。' }
-      if (e && e.code === 'link') return { text: `${path.join(dir, 'assets')} 指向了这个文件夹外面，图不能放那儿。` }
-      if (e && /^(EACCES|EPERM|EROFS|ENOTDIR|EEXIST|ENOSPC)$/.test(e.code || '')) return { text: `${path.join(dir, 'assets')} 写不进去（${e.code}）。换一个文件夹，或者这次用 CSS / SVG 画。` }
-      return { text: '照片库这会儿下载不了（网络问题）。这次先用 CSS / SVG 画，并告诉用户这里需要一张什么样的照片，稍后可以再试。' }
-    }
-  },
-}
-
 /** pick_style 工具：用户没定风格时按题材挑一张风格卡（模型自己定，消费类题目总落回米色暖调；给了具体配色它照做得很好） */
 export const styleTool = {
   name: 'pick_style',
@@ -899,10 +827,6 @@ export function apply(ctx) {
   const history = createHistory({ base: HISTORY_DIR, log })
   // 我的作品 + 哪些文件是别人做的（设计库来的）：别人做的、没改过的页面预览时加硬规矩
   const library = createLibrary({ log })
-  // 设计市场：目录和批次包从 npm 镜像来，验过签名、逐个文件核对过才用；市场上的页面原样预览时也加硬规矩
-  const seedDir = fileURLToPath(new URL('./gallery-seed', import.meta.url))
-  // 「设计库不联网」那行开着：市场不访问任何网址
-  const market = createMarket({ version: VERSION, log, seedDir: fs.existsSync(path.join(seedDir, 'index.json')) ? seedDir : '', online: () => studio.offline === 0 })
   const drafts = createDrafts({ log }) // 正在写的页面（边写边看）：tracker 往里推，预览服务器往外吐
   const thumbDirs = createDirRevs() // 画布缩略图（issue #17）：各目录的资源修订号，预览服务器报改动时更新
   const hub = createHub({
@@ -910,7 +834,7 @@ export function apply(ctx) {
     history,
     drafts,
     skipAnnots: () => studio.annotations > 0, // 业务标注开着时这个文件只给右侧栏看，改了不刷新页面
-    strict: { html: (buf) => library.strictHtml(buf) || market.strictHtml(buf), root: (dir) => library.strictRoot(dir) || market.isStaging(dir), versions: (dir) => library.strictVersions(dir) },
+    strict: { html: (buf) => library.strictHtml(buf), root: (dir) => library.strictRoot(dir), versions: (dir) => library.strictVersions(dir) },
     // 桌面版的 dsh-app://app 是默认就认的；这里补上 DSH 网页端的地址，和 DSH 配置里声明的对外地址（反向代理 / 域名）
     parents: () => {
       let own = []
@@ -957,10 +881,6 @@ export function apply(ctx) {
   ctx.effect(() => {
     studio.tracker = tracker
     studio.log = log
-    studio.market = market
-    const photoIndex = loadPhotoIndex()
-    const photos = photoIndex ? createPhotos({ market, index: photoIndex, log }) : null
-    studio.photos = photos
     studio.sessionCwd = sessionCwd
     studio.impl = implStore
     studio.openPreview = open
@@ -968,8 +888,6 @@ export function apply(ctx) {
       if (studio.impl === implStore) { implStore.flush(); studio.impl = null }
       if (studio.openPreview === open) studio.openPreview = null
       if (studio.tracker === tracker) { studio.tracker = null; studio.log = () => {} }
-      if (studio.market === market) { market.abort(); studio.market = null }
-      if (studio.photos === photos) studio.photos = null
       if (studio.sessionCwd === sessionCwd) studio.sessionCwd = null
     }
   }, 'dsh-workbench canvas: tracker')
@@ -982,22 +900,6 @@ export function apply(ctx) {
       if (studio.browser === browser) studio.browser = null
     }
   }, 'dsh-workbench canvas: headless browser')
-  const phone = createPhone({ upstream: (session) => tracker.snapshot(session).origin || '', log })
-  ctx.effect(() => () => phone.stopAll(), 'dsh-workbench canvas: phone links')
-  // 公网链接（#27）：只放整套 HTML 演示，每次有人打开按现在的文件打包（文件没改就用上次的）
-  const pub = createPublicShare({
-    build: (p) => {
-      const { pack, files } = packDesign(p.root, 0, p)
-      return { html: pack.html, deps: files }
-    },
-    // 这个会话换了设计（或关了）：关掉，别把不在眼前的设计一直开在公网上（插件自己每 5 秒看一眼，不靠右侧栏开着）
-    alive: (session, p) => {
-      const t = tracker.stateOf(session).target
-      return !!(t && t.kind === 'file' && t.root === p.root)
-    },
-    log,
-  })
-  ctx.effect(() => () => { pub.stopAll(); pub.cancelTool() }, 'dsh-workbench canvas: public links')
 
   // ── 接口 ──────────────────────────────────────────────────────────────────
 
@@ -1059,14 +961,13 @@ export function apply(ctx) {
   function state(req, res) {
     if (!admit(req, res)) return
     const session = new URL(req.url, 'http://x').searchParams.get('session') || ''
-    const ph = phone.status(session)
     const c = checks.get(session)
     // 调节滑块：tweaks.json 改了（模型写的 / 写回的）右侧栏跟着变
     const t = tracker.stateOf(session).target
     let tweaks = null
     if (t && t.kind === 'file') { try { tweaks = readTweaks(t.root) } catch (e) { log(e) } }
     const snap = tracker.snapshot(session)
-    json(res, 200, { ...snap, impl: implStore.list(implRoot(snap)), strict: strictScreens(snap), phone: { on: ph.on, seen: ph.seen || 0 }, pub: pub.status(session, { brief: true }), tweaks, ...annotsField(session, new URL(req.url, 'http://x').searchParams.get('an')), ...(c ? { checkReq: c.id } : {}) })
+    json(res, 200, { ...snap, impl: implStore.list(implRoot(snap)), strict: strictScreens(snap), tweaks, ...annotsField(session, new URL(req.url, 'http://x').searchParams.get('an')), ...(c ? { checkReq: c.id } : {}) })
   }
 
   /** 正在看的几屏里，哪些是别人做的、没改过的（地址列表）：右侧栏给它们的 iframe 加沙盒、不给剪贴板 */
@@ -1311,7 +1212,7 @@ export function apply(ctx) {
       const target = parseTarget(body.target, await sessionCwd(session))
       await tracker.setTarget(session, target, { source: 'user', popup: false })
       // 换了设计，公网链接马上关（右侧栏要马上知道，不等下一次刷新）
-      json(res, 200, { ...tracker.snapshot(session), ...annotsField(session), pub: pub.status(session, { brief: true }) })
+      json(res, 200, { ...tracker.snapshot(session), ...annotsField(session) })
     } catch (e) {
       json(res, 400, { error: e.message })
     }
@@ -1328,7 +1229,7 @@ export function apply(ctx) {
     for (const k of ['kind', 'size', 'view', 'focus']) if (typeof body[k] === 'string') patch[k] = body[k]
     try {
       await tracker.setView(session, patch)
-      json(res, 200, { ...tracker.snapshot(session), ...annotsField(session), pub: pub.status(session, { brief: true }) })
+      json(res, 200, { ...tracker.snapshot(session), ...annotsField(session) })
     } catch (e) {
       json(res, 400, { error: e.message })
     }
@@ -1340,8 +1241,6 @@ export function apply(ctx) {
     let body
     try { body = await readBody(req) } catch (e) { return json(res, 400, { error: e.message }) }
     tracker.clear(String(body.session || ''))
-    phone.stop(String(body.session || ''))
-    pub.stop(String(body.session || ''))
     json(res, 200, tracker.snapshot(String(body.session || '')))
   }
 
@@ -1856,7 +1755,7 @@ export function apply(ctx) {
       const s = fs.statSync(f)
       return s.isFile() && s.size <= BUNDLE_MAX ? fs.readFileSync(f) : null
     }
-    const strictOf = (page) => library.strictHtml(page) || market.strictHtml(page) || (v > 0 && library.strictVersions(root))
+    const strictOf = (page) => library.strictHtml(page) || (v > 0 && library.strictVersions(root))
     const pack = buildPack({ ...params, read, strictOf })
     return { pack, deps, files: [...files] }
   }
@@ -1944,65 +1843,7 @@ export function apply(ctx) {
     json(res, 200, { ok: true })
   }
 
-  /** 手机上看：开 / 关局域网入口，或让开着的手机跟着跳到另一屏 */
-  async function phoneRoute(req, res) {
-    if (!admit(req, res)) return
-    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    let body
-    try { body = await readBody(req) } catch (e) { return json(res, 400, { error: e.message }) }
-    const session = String(body.session || '')
-    if (!session) return json(res, 400, { error: '缺 session' })
-    if (typeof body.follow === 'string') return json(res, 200, { ok: phone.follow(session, body.follow) })
-    if (body.on === false) {
-      phone.stop(session)
-      return json(res, 200, phone.status(session))
-    }
-    if (!tracker.snapshot(session).origin) return json(res, 400, { error: '还没有在预览的页面' })
-    const st = await phone.start(session, typeof body.path === 'string' && body.path.startsWith('/') ? body.path : '/')
-    // 二维码一行一串 0 / 1，右侧栏画成 SVG
-    json(res, 200, st.on ? { ...st, qr: qrMatrix(st.url).map((row) => row.map((c) => (c ? 1 : 0)).join('')) } : st)
-  }
-
-  /**
-   * 公网链接（#27，实验）：{ session, on: true, …整套演示的参数 } 开（开着就换参数），{ on: false } 关，
-   * { peek: true } 只看状态（连上了带二维码）。只能右侧栏里人点开，不给模型工具
-   */
-  async function pubShareRoute(req, res) {
-    if (!admit(req, res)) return
-    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    let body
-    try { body = await readBody(req, 1024 * 1024) } catch (e) { return json(res, 400, { error: e.message }) }
-    const session = String(body.session || '')
-    if (!session) return json(res, 400, { error: '缺 session' })
-    const withQr = (x) => (x.on && x.url ? { ...x, qr: qrMatrix(x.url).map((row) => row.map((c) => (c ? 1 : 0)).join('')) } : x)
-    if (body.on === false) {
-      pub.stop(session)
-      return json(res, 200, { ...pub.status(session), tool: pub.hasTool() })
-    }
-    // 看状态：顺带说本机有没有 cloudflared（没有的话右侧栏先请人下载）
-    if (body.peek === true) return json(res, 200, { ...withQr(pub.status(session)), tool: pub.hasTool() })
-    // 人点了「下载」：从 Cloudflare 官方 GitHub 下到插件自己的目录，进度在 peek 里；「取消」停下
-    if (body.download === true || body.cancel === true) {
-      if (body.cancel === true) pub.cancelTool()
-      else pub.fetchTool()
-      return json(res, 200, { ...pub.status(session), tool: pub.hasTool() })
-    }
-    const t = tracker.stateOf(session).target
-    if (!t || t.kind !== 'file') return json(res, 400, { error: 'not-file' })
-    if (targetMoved(res, session, body.target)) return
-    const params = packParams(body)
-    if (!params) return json(res, 400, { error: 'noScreens' })
-    const p = { root: t.root, ...params }
-    // 右侧栏换了屏、画幅、深浅色：开着就跟着换，没开不新开（开要人点）
-    if (body.update === true) return json(res, 200, { ok: pub.update(session, p) })
-    const r = await pub.start(session, p, { name: params.title || path.basename(t.root) })
-    // 没开起来的原因（没装 cloudflared、打包不出来）start 直接给；开着的照状态给
-    const now = pub.status(session)
-    json(res, 200, { ...withQr(now.on ? now : { ...now, ...r }), tool: pub.hasTool() })
-  }
-
-  // 设计库：我的作品、灵感、打 zip、拖 zip 进来用
-  const inspiration = createInspiration({ log })
+  // 设计库：我的作品、打 zip、拖 zip 进来用
   /**
    * 会话目录：跑过工具的会话插件自己记着；新会话（还没跑过工具）问 DSH——先看活着的会话，再查存下来的会话头。
    * 都拿不到给家目录（「用这个开始」就放到 ~/DSH 设计）
@@ -2031,21 +1872,20 @@ export function apply(ctx) {
     } catch (e) { log(e) }
     return ''
   }
-  const lib = createLibraryRoutes({ admit, readBody, json, tracker, library, inspiration, studio, open, storeLoad: fileStore.load, version: VERSION, exported, log, sessionCwd, vocab: () => market.vocab() })
+  const lib = createLibraryRoutes({ admit, readBody, json, tracker, library, studio, open, storeLoad: fileStore.load, version: VERSION, exported, log, sessionCwd })
   // 画布上睡着的屏的缩略图（issue #17）
   const canvasThumbs = createCanvasThumbs({
     tracker,
     dirs: thumbDirs,
     browser: () => studio.browser,
     trust: () => { try { return library.trustRev() } catch (e) { log(e); return '' } },
-    strictRoot: (root) => { try { return library.strictRoot(root) || market.isStaging(root) } catch (e) { log(e); return true } },
+    strictRoot: (root) => { try { return library.strictRoot(root) } catch (e) { log(e); return true } },
     admit,
     json,
     log,
   })
-  const mk = createMarketRoutes({ admit, readBody, json, tracker, library, market, open, systemsDir: SYSTEMS_DIR, log, sessionCwd })
 
-  const routes = { works: lib.works, workthumb: lib.workthumb, scrthumb: canvasThumbs.route, pack: lib.pack, usezip: lib.usezip, ghauth: lib.ghauth, submit: lib.submit, inspire: lib.inspire, inspimg: lib.inspimg, ...mk, state, open: openRoute, view: viewRoute, close: closeRoute, history: historyRoute, restore: restoreRoute, hidden: hiddenRoute, edit: editRoute, style: styleRoute, sharecheck: shareCheckRoute, bundle: bundleRoute, ref: refRoute, export: exportRoute, doc: docRoute, htmlpack: htmlPackRoute, pubshare: pubShareRoute, reveal: revealRoute, phone: phoneRoute, check: checkRoute, locate: locateRoute, tweak: tweakRoute, systems: systemsRoute, frames: framesRoute, systhumb: systhumbRoute, project: projectRoute, impl: implRoute, implcmp: implCmpRoute, implshot: implShotRoute }
+  const routes = { works: lib.works, workthumb: lib.workthumb, scrthumb: canvasThumbs.route, pack: lib.pack, usezip: lib.usezip, state, open: openRoute, view: viewRoute, close: closeRoute, history: historyRoute, restore: restoreRoute, hidden: hiddenRoute, edit: editRoute, style: styleRoute, sharecheck: shareCheckRoute, bundle: bundleRoute, ref: refRoute, export: exportRoute, doc: docRoute, htmlpack: htmlPackRoute, reveal: revealRoute, check: checkRoute, locate: locateRoute, tweak: tweakRoute, systems: systemsRoute, frames: framesRoute, systhumb: systhumbRoute, project: projectRoute, impl: implRoute, implcmp: implCmpRoute, implshot: implShotRoute }
   for (const [key, handler] of Object.entries(routes)) {
     ctx.effect(() => ctx.webServer.register({
       kind: 'exact',
@@ -2069,15 +1909,6 @@ export function apply(ctx) {
         log(e)
       }
     })
-    // 会话归档了：它的公网链接马上关（面板进不去了，别让链接一直开到点）。老版本 DSH 没有这个事件，就只是收不到
-    ctx.on('workspace/session-archived', (req) => {
-      try {
-        const id = req && req.sessionId
-        if (id) pub.stop(String(id))
-      } catch (e) {
-        log(e)
-      }
-    }, { global: true })
     // 用户在右侧栏亲手改了设计：模型下一步开始前补一条说明（DSH 自带的时间、操作卡片提醒也是这么加的），
     // 免得它凭自己之前写的内容接着改、做进项目时用回旧样子（#28）。老版本 DSH 没有这个事件，就只是收不到
     ctx.on('agent/pre-step', async (payload, next) => {

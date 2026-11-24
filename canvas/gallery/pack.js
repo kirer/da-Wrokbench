@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { cleanPath, checkPack, normalizeHtml, titleOf, metaKind, message, LIMITS, capsOf, FORMAT, pctBytes, imageInfo } from './policy.js'
 import { writeZip } from './zip.js'
-import { isPhotoAsset } from '../photos.js'
+import { isPhotoAsset } from '../photo-assets.js'
 import { decodeEntities } from './html.js'
 
 /** 页面文本 → 去掉注释、解开各种转义、全小写，用来判断提没提到某个文件 */

@@ -1,16 +1,11 @@
 /**
- * 设计库的接口（右侧栏 › 设计库）：
+ * 我的作品的接口（右侧栏 › 设计库 › 我的作品）：
  *
  *   GET  works                       我的作品（顺手从设计画布缓存补回以前的设计）
  *   POST works      { op, dir, to? } pin / unpin / hide（移出列表）/ reveal（在文件夹里显示）/ relocate（挪走了，重新定位）
  *   GET  workthumb  ?id=             作品缩略图（第一屏，无头浏览器截的，按文件修改时间缓存）
- *   POST pack       { dir, license } 打成 zip：先规范化，再用和机器人同一份规则查；过了存到「下载」
+ *   POST pack       { dir, license } 打成 zip：先规范化，再查一遍；过了存到「下载」
  *   POST usezip     { session, name, data } 拖进来的 zip →「用这个开始」：查、落到新文件夹、登记、打开
- *   GET  inspire                     灵感（参考图、网址、我的风格）
- *   POST inspire    { op, … }        addImage / addUrl / addStyle / addMarket / remove
- *   GET  inspimg    ?id=             灵感里的图片
- *   GET/POST ghauth { op }           一键投稿：连 GitHub（设备授权）、断开
- *   POST submit     { path }         一键投稿：把刚打好的分享包投上去（见 submit.js）
  */
 
 import crypto from 'node:crypto'
@@ -23,13 +18,10 @@ import { parseMeta, metaOfFile, KIND_SIZE, prepare } from '../look.js'
 import { packDesign, zipOf, splitTitle } from './pack.js'
 import { PERSONAL_CODES } from './policy.js'
 import { readZip, ZipError } from './zip.js'
-import { renderPack } from './render.js'
 import { preparePack, installPack, baseFor, slugOf, UseError } from './use.js'
-import { createGitHub, GhError, packPrint } from './submit.js'
 
 const THUMB_DIR = path.join(os.homedir(), '.dsh', 'cache', 'dsh-workbench', 'canvas', 'works', 'thumbs')
 const MAX_ZIP_BODY = 12 * 1024 * 1024 // base64 的 8MB zip
-const MAX_IMG_BODY = 9 * 1024 * 1024
 
 const idOf = (dir) => crypto.createHash('sha1').update(path.resolve(dir)).digest('hex').slice(0, 16)
 
@@ -55,40 +47,12 @@ function manifestTitle(dir) {
   const t = (localManifest(dir) || {}).title
   return t && typeof t === 'object' ? String(t.zh || t.en || '').slice(0, 40) : ''
 }
-const TOKEN_RE = /^[0-9a-f]{32}$/
-const DESIGN_LANGS = ['zh', 'en', 'both'] // design.json 的 lang：设计里的文字是哪种语言
-/** 分享记号 → 目录里的指纹（sha256 前 32 位）和给人看的短号 */
-export const shareHashOf = (token) => crypto.createHash('sha256').update(String(token)).digest('hex').slice(0, 32)
-function shareOf(dir) {
-  const tk = (localManifest(dir) || {}).shareToken
-  if (typeof tk !== 'string' || !TOKEN_RE.test(tk)) return null
-  const hash = shareHashOf(tk)
-  return { hash, ref: hash.slice(0, 12) }
-}
-/** 投稿表单的「短名」：标题或文件夹名能拼成 a-z0-9- 就预填，不然留空让机器人生成 */
-const slugFor = (...xs) => { for (const x of xs) { const s = String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); if (s.length >= 3) return s } return '' }
-
-/** 分享前体检：机器人会拒的那几类（被系统栏压住、图片坏了、跳到不存在的页…），名字和内容仓库的一样 */
-const HARD_NAMES = {
-  covered: ['内容被系统栏压住', 'content under the system bar'],
-  capsule: ['被小程序胶囊挡住', 'covered by the mini-program capsule'],
-  island: ['被灵动岛挡住', 'covered by the Dynamic Island'],
-  winctl: ['被窗口按钮挡住', 'covered by the window buttons'],
-  homebar: ['被底部横条压住', 'covered by the home bar'],
-  img: ['图片坏了', 'broken image'],
-  deadlink: ['跳到不存在的页', 'link to a missing page'],
-}
-const hardMsg = (x, en) => {
-  const n = (HARD_NAMES[x.type] || [x.type, x.type])[en ? 1 : 0] + (x.text ? (en ? ` (${x.text})` : `（${x.text}）`) : '')
-  return en ? `"${x.file}" has a serious layout problem: ${n}` : `「${x.file}」体检有严重问题：${n}`
-}
-
 /** 一条作品记录 → 右侧栏卡片要的样子（目录不在了 exists: false） */
 export function describeWork(w) {
   const dir = w.dir
   let exists = false
   try { exists = fs.statSync(dir).isDirectory() } catch { exists = false }
-  const base = { id: idOf(dir), dir, name: path.basename(dir), pinned: !!w.pinned, trust: w.trust || '', from: w.from || null, added: w.added || 0, exists, share: exists ? shareOf(dir) : null }
+  const base = { id: idOf(dir), dir, name: path.basename(dir), pinned: !!w.pinned, trust: w.trust || '', from: w.from || null, added: w.added || 0, exists }
   if (!exists) return { ...base, title: w.title || path.basename(dir), kind: w.kind || '', screens: w.screens || 0, updated: w.updated || w.seen || 0 }
   const screens = listScreens(dir)
   let updated = 0
@@ -106,10 +70,8 @@ export function describeWork(w) {
   return { ...base, title: manifestTitle(dir) || product || w.title || path.basename(dir), kind, screens: screens.length, first: screens[0] || '', updated: Math.round(updated || w.updated || w.seen || 0), thumb: sig ? crypto.createHash('sha1').update(sig).digest('hex').slice(0, 10) : '' }
 }
 
-export function createLibraryRoutes({ admit, readBody, json, tracker, library, inspiration, studio, open, storeLoad, version = '', exported, log = () => {}, thumbDir = THUMB_DIR, downloads = path.join(os.homedir(), 'Downloads'), sessionCwd = async (id) => tracker.cwdOf(id), render = renderPack, github = createGitHub({ log }), vocab = () => ({ categories: [], tags: [] }) }) {
+export function createLibraryRoutes({ admit, readBody, json, tracker, library, studio, open, storeLoad, version = '', exported, log = () => {}, thumbDir = THUMB_DIR, downloads = path.join(os.homedir(), 'Downloads'), sessionCwd = async (id) => tracker.cwdOf(id) }) {
   const lang = (body) => (body && body.lang === 'en' ? 'en' : 'zh')
-  // 这次运行里「分享到市场」打出来的包（一键投稿只投这些）：zip 路径 → { ref, slug, title, license }
-  const shared = new Map()
 
   // 作品库里登记的、目录在哪（id → 记录）：只认列得出来的，别让请求指到别的目录
   const byId = (id) => library.list().find((w) => idOf(w.dir) === id) || null
@@ -211,15 +173,6 @@ export function createLibraryRoutes({ admit, readBody, json, tracker, library, i
     fs.createReadStream(file).on('error', () => res.end()).pipe(res)
   }
 
-  // 分类、标签只收词表里有的（机器人按同一份词表查，不在里面会被拒）；没传就沿用 design.json 里原来的
-  const vocabNow = () => { try { const v = vocab() || {}; return { categories: Array.isArray(v.categories) ? v.categories : [], tags: Array.isArray(v.tags) ? v.tags : [] } } catch { return { categories: [], tags: [] } } }
-  function shareMeta(body) {
-    const v = vocabNow()
-    // 词表拿不到（没联网也没种子）：这两栏表单里不显示，design.json 里原来的留着
-    const ids = (k, max) => (Array.isArray(body[k]) && v[k].length ? [...new Set(body[k].filter((x) => typeof x === 'string' && v[k].some((y) => y.id === x)))].slice(0, max) : undefined)
-    return { categories: ids('categories', 2), tags: ids('tags', 8), designLang: DESIGN_LANGS.includes(body.designLang) ? body.designLang : undefined }
-  }
-
   async function pack(req, res) {
     if (!admit(req, res)) return
     if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
@@ -232,55 +185,15 @@ export function createLibraryRoutes({ admit, readBody, json, tracker, library, i
     if (!open && !byDir(dir)) return json(res, 404, { error: 'not a design here' })
     const screens = allScreens(dir) // 打包按整套算：屏数超了要明确报，不能悄悄少几屏
     if (!screens.length) return json(res, 400, { error: 'noScreens' })
-    const local = localManifest(dir)
-    // 分享向导先要一份预填：名字、介绍、授权、分享过没有
-    if (body.info === true) {
-      const pick = (v) => (v && typeof v === 'object' ? String(v[lang(body)] || v.zh || v.en || '') : '')
-      const v = vocabNow()
-      const known = (k, max) => (local && Array.isArray(local[k]) ? local[k].filter((x) => v[k].some((y) => y.id === x)).slice(0, max) : [])
-      return json(res, 200, { title: pick(local && local.title) || manifestTitle(dir) || path.basename(dir), description: pick(local && local.description), license: local && local.license === 'CC-BY-4.0' ? 'CC-BY-4.0' : 'CC0-1.0', share: shareOf(dir), screens: screens.length, categories: known('categories', 2), tags: known('tags', 8), designLang: local && DESIGN_LANGS.includes(local.lang) ? local.lang : '', vocab: v })
-    }
     const license = body.license === 'CC-BY-4.0' ? 'CC-BY-4.0' : 'CC0-1.0'
-    // 分享到市场：四个确认都要勾；分享记号第一次分享时生成，存在作者自己的 design.json 里，包里只带它的指纹
-    const share = body.share === true
-    if (share && !['own', 'brand', 'private', 'rules'].every((k) => body.agree && body.agree[k] === true)) return json(res, 400, { error: 'agree' })
-    const token = share ? (local && typeof local.shareToken === 'string' && TOKEN_RE.test(local.shareToken) ? local.shareToken : crypto.randomBytes(16).toString('hex')) : ''
-    const shareHash = token ? shareHashOf(token) : ''
     let p
     try {
-      p = packDesign(dir, { screens, version, license, author: license === 'CC-BY-4.0' ? String(body.author || '') : '', mode: share ? 'share' : 'zip', lang: lang(body), title: share ? String(body.title || '') : '', description: share ? String(body.description || '') : '', ...(share ? shareMeta(body) : {}), shareHash, secrets: [token, local && local.shareToken].filter(Boolean) })
+      p = packDesign(dir, { screens, version, license, author: license === 'CC-BY-4.0' ? String(body.author || '') : '', mode: 'zip', lang: lang(body) })
     } catch (e) {
       log(e)
       return json(res, 500, { error: e.message })
     }
-    // 分享前体检：断网开出来量一遍（同机器人那套），机器人会拒的先在这拦住；没装 Chrome 就跳过（机器人那边还会查）
     const flags = [...p.flags]
-    if (share && p.ok) {
-      const browser = studio && studio.browser
-      if (!browser || typeof browser.available !== 'function' || !browser.available()) flags.push({ code: 'noRender', msg: lang(body) === 'en' ? 'Chrome not found, so the layout check was skipped; the review bot will run it after you submit' : '没找到 Chrome，没做分享前体检；投稿后机器人会查' })
-      else {
-        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ddp-share-'))
-        try {
-          for (const f of p.files) {
-            const to = path.join(tmp, f.path)
-            fs.mkdirSync(path.dirname(to), { recursive: true })
-            fs.writeFileSync(to, f.data)
-          }
-          const r = await render(tmp, { screens: p.manifest.screens.map((x) => x.file), kind: p.manifest.kind || 'web', shots: false, browser, qr: true })
-          // 像是有二维码：先提醒（插件不解码）；真能扫出来的，机器人会退回
-          flags.unshift(...(r.qrLike || []).slice(0, 5).map((x) => ({ code: 'qr', x: x.file, msg: lang(body) === 'en' ? `"${x.file}" seems to contain a QR code: the gallery does not accept scannable QR codes, so replace it with a placeholder square (otherwise the review bot will send it back)` : `「${x.file}」里像是有二维码：市场不收能扫的二维码，换成一个占位方块（不然机器人会退回）` })))
-          for (const x of r.hard || []) p.errors.push({ code: 'hard', x: x.file, sev: 'error', msg: hardMsg(x, lang(body) === 'en') })
-          // 开不出来的屏：机器人那边也会拒（同一套体检）
-          for (const x of r.errors || []) p.errors.push({ code: 'render', x: x.file, sev: 'error', msg: lang(body) === 'en' ? `"${x.file}" could not be opened for the check (${String(x.error || '').slice(0, 80)}): open it on the canvas to see what is wrong, then try again` : `「${x.file}」没能打开量一遍（${String(x.error || '').slice(0, 80)}）：先在画布上打开看看哪里不对，再试一次` })
-        } catch (e) {
-          log(e)
-          flags.push({ code: 'noRender', msg: lang(body) === 'en' ? 'The layout check could not run; the review bot will run it after you submit' : '分享前体检没跑成；投稿后机器人会查' })
-        } finally {
-          fs.rmSync(tmp, { recursive: true, force: true })
-        }
-        if (p.errors.length) p.ok = false
-      }
-    }
     flags.sort((a, b) => Number(PERSONAL_CODES.has(b.code)) - Number(PERSONAL_CODES.has(a.code))) // 个人信息的提醒排最前面
     const out = { ok: p.ok, errors: p.errors.slice(0, 60), more: Math.max(0, p.errors.length - 60), flags: flags.slice(0, 30), flagsMore: Math.max(0, flags.length - 30), notes: p.notes.filter((x) => x.code !== 'aiPhoto').slice(0, 60), aiPhotos: p.notes.filter((x) => x.code === 'aiPhoto').length, skipped: p.skipped, bytes: p.bytes, title: p.manifest.title, screens: p.manifest.screens.length }
     if (!p.ok) return json(res, 200, out)
@@ -293,18 +206,7 @@ export function createLibraryRoutes({ admit, readBody, json, tracker, library, i
       const zip = zipOf(p)
       fs.writeFileSync(file, zip, { flag: 'wx' })
       exported.add(file)
-      if (!share) return json(res, 200, { ...out, path: file })
-      // 作者这边记下：分享记号 + 这次填的名字介绍（下次分享预填、「我的作品」认得出已上架）；从市场来的 from 留着
-      const keep = { ...p.manifest }
-      delete keep.shareHash
-      const mine = { ...keep, ...(local && local.from ? { from: local.from } : {}), shareToken: token }
-      const tmp = path.join(dir, `.design.json.${process.pid}.tmp`)
-      fs.writeFileSync(tmp, JSON.stringify(mine, null, 2) + '\n')
-      fs.renameSync(tmp, path.join(dir, 'design.json'))
-      const sh = { ref: shareHash.slice(0, 12), slug: slugFor(t.en, t.zh, path.basename(dir)), title: t.zh || t.en || '' }
-      // 一键投稿认这份：查过的内容指纹（重新打包也一样，投过的认得出）+ zip 本身的指纹（投之前被改过就不认）
-      shared.set(file, { ...sh, license, pack: packPrint(p.files), zipSha: crypto.createHash('sha256').update(zip).digest('hex') })
-      json(res, 200, { ...out, path: file, share: { ...sh, license } })
+      json(res, 200, { ...out, path: file })
     } catch (e) {
       log(e)
       json(res, 500, { error: e.message })
@@ -347,75 +249,5 @@ export function createLibraryRoutes({ admit, readBody, json, tracker, library, i
     }
   }
 
-  async function inspire(req, res) {
-    if (!admit(req, res)) return
-    if (req.method === 'GET') return json(res, 200, { items: inspiration.list() })
-    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    let body
-    try { body = await readBody(req, MAX_IMG_BODY) } catch (e) { return json(res, 400, { error: e.message }) }
-    try {
-      let item = null
-      if (body.op === 'addImage') item = inspiration.addImage({ name: body.name, data: Buffer.from(String(body.data || ''), 'base64') })
-      else if (body.op === 'addUrl') item = inspiration.addUrl({ url: body.url, name: body.name })
-      else if (body.op === 'addStyle') item = inspiration.addStyle({ name: body.name, style: body.style, mid: body.mid })
-      else if (body.op === 'addMarket') item = inspiration.addMarket({ mid: body.mid, mtype: body.mtype, name: body.name })
-      else if (body.op === 'remove') inspiration.remove(String(body.id || ''))
-      else return json(res, 400, { error: 'bad op' })
-      json(res, 200, { item, items: inspiration.list() })
-    } catch (e) {
-      json(res, 400, { error: e.message })
-    }
-  }
-
-  function inspimg(req, res) {
-    if (!admit(req, res)) return
-    const id = new URL(req.url, 'http://x').searchParams.get('id') || ''
-    const file = /^[0-9a-f]{16}$/.test(id) ? inspiration.imageFile(id) : null
-    if (!file) return json(res, 404, { error: 'no such image' })
-    const ext = path.extname(file).slice(1)
-    res.writeHead(200, { 'Content-Type': ext === 'jpg' ? 'image/jpeg' : `image/${ext}`, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff' })
-    fs.createReadStream(file).on('error', () => res.end()).pipe(res)
-  }
-
-  // 一键投稿的错误：auth 要重新连 GitHub（不用 401，免得和 DSH 自己的登录混了）
-  const ghFail = (res, e) => {
-    if (!(e instanceof GhError)) { log(e); return json(res, 500, { error: 'device' }) }
-    json(res, e.code === 'auth' || e.code === 'who' ? 409 : e.code === 'busy' ? 429 : 502, { error: e.code, msg: String(e.message || '').slice(0, 200), status: e.status || 0 })
-  }
-
-  /** GET：连没连 GitHub、正在等输的码；POST { op: start | cancel | logout } */
-  async function ghauth(req, res) {
-    if (!admit(req, res)) return
-    if (req.method === 'GET') return json(res, 200, github.status())
-    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    let body
-    try { body = await readBody(req) } catch (e) { return json(res, 400, { error: e.message }) }
-    try {
-      if (body.op === 'start') return json(res, 200, await github.start())
-      if (body.op === 'cancel') github.cancel()
-      else if (body.op === 'logout') github.logout()
-      else return json(res, 400, { error: 'bad op' })
-      json(res, 200, github.status())
-    } catch (e) { ghFail(res, e) }
-  }
-
-  /** POST { path }：把刚才「分享到市场」打好的包直接投上去 → { url }（投稿 issue） */
-  async function submit(req, res) {
-    if (!admit(req, res)) return
-    if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' })
-    let body
-    try { body = await readBody(req) } catch (e) { return json(res, 400, { error: e.message }) }
-    const file = String(body.path || '')
-    const s = shared.get(file)
-    let zip = null
-    try { zip = s ? fs.readFileSync(file) : null } catch { zip = null }
-    if (!s || !zip || crypto.createHash('sha256').update(zip).digest('hex') !== s.zipSha) return json(res, 404, { error: 'notShared' })
-    try {
-      const { zipSha, ...meta } = s
-      const r = await github.submit({ zip, ...meta, as: typeof body.login === 'string' ? body.login.slice(0, 39) : '' })
-      json(res, 200, { ok: true, ...r })
-    } catch (e) { ghFail(res, e) }
-  }
-
-  return { works, workthumb, pack, usezip, inspire, inspimg, ghauth, submit }
+  return { works, workthumb, pack, usezip }
 }

@@ -2236,7 +2236,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-canvas-drawer .dsh-wb-rqdetail{border-bottom:0}
 /*画布保留整套能力：首页、外观、体检、导出、版本、工具坞。
    只收起市场与设计库这两个整屏入口（内嵌首页已经用工作台自己的作品代替）。 */
-.dsh-wb-design-canvas .ddp-market,
 .dsh-wb-design-canvas .ddp-libwrap{display:none!important}
 /* 迭代列表 / 迭代详情 / 我的工作台 · 按设计稿的页面结构 */
 .dsh-wb-shell{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;padding:0}

@@ -9,7 +9,7 @@
  * 回一张「设计稿 | 做出来的 | 差异」拼图、差了多少，和差得最多的几块分别是哪个元素。
  */
 
-import { PHOTO_PREFIX, isPhotoAsset } from './photos.js'
+import { PHOTO_PREFIX, isPhotoAsset } from './photo-assets.js'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
