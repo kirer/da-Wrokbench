@@ -79,7 +79,7 @@ docker exec dsh-gitlab-runner gitlab-runner verify
 
 ## 接到工作台服务端
 
-用 bootstrap 输出的值重启 Rust 服务端：
+用 bootstrap 输出的值重启 Rust 服务端（在 `poc/` 下执行）：
 
 ```bash
 set -a; . .local/gitlab.outputs.env; set +a
@@ -88,6 +88,30 @@ GITLAB_TOKEN="$WORKBENCH_GITLAB_TOKEN" \
 GITLAB_WEBHOOK_SECRET="$GITLAB_WEBHOOK_SECRET" \
 GITLAB_DEFAULT_BRANCH=main \
 ./server/target/debug/dsh-workbench-server
+```
+
+**变量名不要写错**：`.local/gitlab.outputs.env` 里 webhook 密钥叫
+`GITLAB_WEBHOOK_SECRET`，不是 `WORKBENCH_GITLAB_WEBHOOK_SECRET`。写成不存在的
+变量会展开成空串，服务端照样启动（空密钥只在生产环境才 panic），但
+`webhook_authorized()` 对任何 token 都返回 false —— GitLab 的每次 Webhook
+都吃 401，流水线和 MR 状态永远不会回写，而且界面上看不出原因。
+
+启动后确认一次，两个断言都要过：
+
+```bash
+set -a; . .local/gitlab.outputs.env; set +a
+# 1) 正确密钥 -> 200；错误密钥 -> 401
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:3210/webhooks/gitlab \
+  -H "x-gitlab-token: $GITLAB_WEBHOOK_SECRET" -H 'content-type: application/json' \
+  -d '{"object_kind":"pipeline"}'
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:3210/webhooks/gitlab \
+  -H 'x-gitlab-token: wrong' -H 'content-type: application/json' -d '{"object_kind":"pipeline"}'
+
+# 2) 管理端应报 gitlab.webhookConfigured = true
+TOKEN="$(curl -sS -X POST http://127.0.0.1:3210/auth/mock \
+  -H 'content-type: application/json' -d '{"userId":"admin"}' | jq -r .token)"
+curl -sS http://127.0.0.1:3210/admin/integrations \
+  -H "authorization: Bearer $TOKEN" | jq .gitlab
 ```
 
 然后在工作台「平台配置」里给平台填 GitLab 项目路径：
@@ -131,6 +155,10 @@ Runner 流水线成功、MR 创建、Webhook 回写新流水线。工作台详�
 - **root 密码不生效**：`GITLAB_ROOT_PASSWORD` 只在数据卷首次初始化时使用。改密码需进容器
   `gitlab-rails runner` 或重置卷。
 - **Docker Hub 拉取超时**：使用 README 中的 daocloud 镜像站拉取后重新 tag。
+- **Webhook 一直 401、流水线/MR 状态不回写**：九成是服务端没拿到
+  `GITLAB_WEBHOOK_SECRET`（启动命令里写错变量名、或没 `source` outputs 文件）。
+  用上面「接到工作台服务端」里的两条 curl 自检：正确密钥应 200，错误密钥应 401。
+  两种都 401 就是服务端侧密钥为空。
 
 ## 常用命令
 
