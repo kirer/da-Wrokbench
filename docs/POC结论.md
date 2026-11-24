@@ -2,7 +2,7 @@
 
 验证时间：2026-11-22
 环境：DeepSeek Harness 0.2.2-rc.5，独立 profile `workbench-poc`，Rust 1.9x，Docker Desktop
-插件目录：`poc/`
+插件目录：仓库根目录（`index.js`、`client.js`、`client.design-studio.js`、`design-studio/`、`package.json`、`cordis.patch.yml`）
 参考设计：`需求梳理与方案建议.md` v0.3
 
 ## 一句话结论
@@ -106,10 +106,10 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 - 再次提交触发新流水线，GitLab Webhook 把 pending/running/success 状态回写到工作台开发
   任务；事件流中出现 `integration.gitlab_pipeline`。
 - 浏览器详情能看到真实分支、MR 地址和流水线链接，见
-  `poc/e2e/screenshots/workbench-gitlab-real.png`。
+  `e2e/screenshots/workbench-gitlab-real.png`。
 
 本地 GitLab 地址 `http://127.0.0.1:8929`，root 密码和机器人/ Runner token 在
-`poc/.local/gitlab.env` 与 `poc/.local/gitlab.outputs.env`（已忽略，不提交）。Runner 使用
+`.local/gitlab.env` 与 `.local/gitlab.outputs.env`（已忽略，不提交）。Runner 使用
 容器内地址 `http://gitlab:8929` 克隆，避免把宿主 `127.0.0.1` 带进 Job 容器。
 
 ### Docker / Postgres
@@ -131,7 +131,7 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 - 通知按需求聚合与分组筛选。
 - 管理员后台（用户与角色、钉钉同步、集成状态、审计）。
 - 会话归属人打开右侧需求与设计画布；本机无映射时现场创建会话，验证跨设备兜底流程。
-- 截图见 `poc/e2e/screenshots/`；控制台无报错。
+- 截图见 `e2e/screenshots/`；控制台无报错。
 
 人工浏览器验证（上一阶段）：
 
@@ -196,21 +196,21 @@ Rust server/（axum + SQLite/WAL 或 Postgres JSONB + JWT + Mock/DingTalk）
 
 浏览器 E2E（最新）：
 
-- `poc/e2e/screenshots/workbench-dashboard.png`：工作台首页。
-- `poc/e2e/screenshots/workbench-iterations.png`：迭代列表与统计卡。
-- `poc/e2e/screenshots/workbench-iteration-detail.png`：迭代详情、需求卡与活动日志。
-- `poc/e2e/screenshots/workbench-requirement.png`：需求全量、总述、原型/设计稿、平台卡与日志。
-- `poc/e2e/screenshots/workbench-my.png`：我的工作台合并清单。
-- `poc/e2e/screenshots/workbench-notifications.png`：通知中心与筛选。
-- `poc/e2e/screenshots/workbench-skills.png`：技能库列表、详情、版本与角色包。
-- `poc/e2e/screenshots/workbench-settings.png`：设置页。
-- `poc/e2e/screenshots/workbench-admin.png`：管理后台。
-- `poc/e2e/screenshots/workbench-design-pane.png`：右侧需求与 Design Studio 画布。
-- `poc/e2e/screenshots/workbench-gitlab-real.png`：需求详情里的真实 GitLab 分支、MR 和
+- `e2e/screenshots/workbench-dashboard.png`：工作台首页。
+- `e2e/screenshots/workbench-iterations.png`：迭代列表与统计卡。
+- `e2e/screenshots/workbench-iteration-detail.png`：迭代详情、需求卡与活动日志。
+- `e2e/screenshots/workbench-requirement.png`：需求全量、总述、原型/设计稿、平台卡与日志。
+- `e2e/screenshots/workbench-my.png`：我的工作台合并清单。
+- `e2e/screenshots/workbench-notifications.png`：通知中心与筛选。
+- `e2e/screenshots/workbench-skills.png`：技能库列表、详情、版本与角色包。
+- `e2e/screenshots/workbench-settings.png`：设置页。
+- `e2e/screenshots/workbench-admin.png`：管理后台。
+- `e2e/screenshots/workbench-design-pane.png`：右侧需求与 Design Studio 画布。
+- `e2e/screenshots/workbench-gitlab-real.png`：需求详情里的真实 GitLab 分支、MR 和
   流水线链接。
-- `poc/e2e/screenshots/gitlab-project.png`：本地 GitLab 的 `workbench/trade-server` 项目。
-- `poc/e2e/screenshots/gitlab-pipelines.png`：Runner 执行成功的真实流水线列表。
-- `poc/e2e/screenshots/gitlab-merge-requests.png`：工作台创建的真实 MR。
+- `e2e/screenshots/gitlab-project.png`：本地 GitLab 的 `workbench/trade-server` 项目。
+- `e2e/screenshots/gitlab-pipelines.png`：Runner 执行成功的真实流水线列表。
+- `e2e/screenshots/gitlab-merge-requests.png`：工作台创建的真实 MR。
 
 设计稿对照（`design/` 为唯一视觉基准）：
 

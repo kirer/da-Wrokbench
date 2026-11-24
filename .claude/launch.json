@@ -8,7 +8,7 @@
       "port": 8899
     },
     {
-      "name": "workbench-poc",
+      "name": "workbench",
       "url": "http://127.0.0.1:3199",
       "port": 3199
     }

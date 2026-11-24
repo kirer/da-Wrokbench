@@ -3,17 +3,17 @@ name: workbench-ci
 on:
   push:
     paths:
-      - 'poc/server/**'
-      - 'poc/index.js'
-      - 'poc/client.js'
-      - 'poc/client.design-studio.js'
-      - 'poc/design-studio/**'
-      - 'poc/tests/**'
-      - 'poc/tools/**'
-      - 'poc/package.json'
-      - 'poc/docker-compose.yml'
-      - 'poc/deploy/**'
-      - 'poc/e2e/**'
+      - 'server/**'
+      - 'index.js'
+      - 'client.js'
+      - 'client.design-studio.js'
+      - 'design-studio/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'docker-compose.yml'
+      - 'deploy/**'
+      - 'e2e/**'
       - 'docs/**'
       - '.github/workflows/ci.yml'
   pull_request:
@@ -32,13 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: poc/server
+        working-directory: server
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: poc/server
+          workspaces: server
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -47,7 +47,7 @@ jobs:
       - name: 服务端单元测试
         run: cargo test --locked
       - name: 客户端语法检查
-        working-directory: poc
+        working-directory: .
         run: node --check index.js && node --check client.js && node --check client.design-studio.js
       - name: API 回归
         run: |
@@ -60,7 +60,7 @@ jobs:
           done
           BASE=http://127.0.0.1:3210 bash test-api.sh
       - name: Host BFF 回归
-        working-directory: poc
+        working-directory: .
         run: node tests/host-bff.mjs
       - name: 钉钉 / GitLab 集成回归（本地 mock）
         run: bash test-integrations.sh
@@ -70,15 +70,15 @@ jobs:
         with:
           name: server-test-logs
           path: |
-            poc/server/test-results/
-            poc/server/target/debug/dsh-workbench-server
+            server/test-results/
+            server/target/debug/dsh-workbench-server
 
   plugin-package:
     name: 插件打包冒烟
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: poc
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -95,7 +95,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
-          context: poc/server
+          context: server
           push: false
           tags: dsh-workbench-server:ci
 
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: poc/e2e
+        working-directory: e2e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -121,5 +121,5 @@ jobs:
         with:
           name: playwright-report
           path: |
-            poc/e2e/playwright-report/
-            poc/e2e/screenshots/
+            e2e/playwright-report/
+            e2e/screenshots/

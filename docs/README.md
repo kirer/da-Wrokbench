@@ -10,8 +10,11 @@
 | [设计修订说明与提示词.md](设计修订说明与提示词.md) | 2026-11-22 需求澄清后的修订说明，冲突时以此为准 |
 | [设计稿差异评审.md](设计稿差异评审.md) | 设计稿与需求方案的差异核对，含已撤回条目 |
 | [POC结论.md](POC结论.md) | 实现取舍、验证范围与本机/服务端边界结论 |
+| [实现说明.md](实现说明.md) | 架构、目录、环境变量、HTTP API、页面、生命周期与测试命令 |
 | [reviews/REVIEW-2026-11-22.md](reviews/REVIEW-2026-11-22.md) | 代码审查、修复记录与回归结果 |
+| [reviews/REVIEW-2026-11-23.md](reviews/REVIEW-2026-11-23.md) | 第二轮审查 |
 
 高保真设计稿本身在 [`../design/`](../design/)，预览说明见
-[`../design/README.md`](../design/README.md)。可运行实现和接口说明见
-[`../poc/README.md`](../poc/README.md)。
+[`../design/README.md`](../design/README.md)。仓库结构与快速开始见
+[`../README.md`](../README.md)，完整实现说明见
+[`实现说明.md`](实现说明.md)。

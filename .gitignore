@@ -1,4 +1,20 @@
 .DS_Store
 **/.DS_Store
 .claude/settings.local.json
-poc/dist/
+
+# 构建产物与运行时数据
+dist/
+server/target
+server/data
+runtime/
+deploy/dsh-sim/runs/
+deploy/dsh-sim/last-run.md
+deploy/dsh-sim/screenshots/archive/
+*.db
+*.db-shm
+*.db-wal
+node_modules/
+
+# 本机凭据（GitLab root 密码、机器人 token、Runner token）
+.local/
+.env
