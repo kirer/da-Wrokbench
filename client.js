@@ -1292,6 +1292,10 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .dsh-wb-stage{flex:1;min-height:0;display:flex;flex-direction:column}
 .dsh-wb-design .dsh-wb-stage-body{flex:1;min-height:0;display:flex;flex-direction:column}
 .dsh-wb-design .dsh-wb-stage-body > .dsh-wb-canvas-pane{flex:1;min-height:0}
+/* 画布工具栏和工作台上导航共用一块底板：铺满整行、同样的底色和分隔线，不再浮成深色胶囊。 */
+.dsh-wb-stage .ddp-top{left:0;right:0;top:0;align-items:center;padding:6px 20px;background:color-mix(in srgb,var(--bg) 86%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);z-index:12}
+.dsh-wb-stage .ddp-top>.ddp-isl{background:transparent;box-shadow:none;padding:0;border-radius:0;gap:2px}
+.dsh-wb-stage .ddp-top>.ddp-isl .ddp-btn{height:30px;padding:0 8px;border-radius:var(--r-sm)}
 .dsh-wb-design .topbar .plugnac{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
 .dsh-wb-design .plugnac-title{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-13);font-weight:var(--fw-semi);color:var(--text);white-space:nowrap}
 .dsh-wb-design .plugnac-title svg{width:16px;height:16px;color:var(--text-2)}
@@ -7954,12 +7958,12 @@ window.__ModuleLoader__.load({
                   // 不再单独做一条阶段栏：画布自己的工具栏就是这一屏的顶栏。
                   h('div', { className: 'dsh-wb-stage-body' },
                     stageKind === 'design'
-                      ? h(DesignTab, { sid: dockSessionId, ctx })
+                      ? h(DesignTab, { sid: dockSessionId, ctx, onBack: () => setDockOpen(false) })
                       : stageKind === 'dev'
                         ? h(CodeTab, { sid: dockSessionId, ctx })
                         : stageKind === 'test'
                           ? h(TestTab, { sid: dockSessionId, ctx })
-                          : h(RequirementTab, { sid: dockSessionId, ctx, briefHidden: true }),
+                          : h(RequirementTab, { sid: dockSessionId, ctx, briefHidden: true, onBack: () => setDockOpen(false) }),
                   ),
                 )
               : view === 'iterations'
@@ -8714,7 +8718,7 @@ window.__ModuleLoader__.load({
       return groups
     }
 
-    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined }) {
+    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined, onBack = null }) {
       const studio = useDesignStudio()
       const t = useMemo(() => (studio.runtime ? studio.runtime.makeT(ctx) : key => key), [studio.runtime, ctx])
       const { error, opening } = useCanvasTarget(sid, targetPath)
@@ -8767,7 +8771,7 @@ window.__ModuleLoader__.load({
         ) : null,
         // inputActions 是宿主的输入门面：画布的画笔画标注、点选元素、
         // 样式修改都靠它“发到对话”，不传就只能退回复制。
-        h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork, inputActions }),
+        h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork, inputActions, onBack }),
       )
     }
 
@@ -9408,7 +9412,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementTab({ sid, ctx, inputActions, briefHidden = false }) {
+    function RequirementTab({ sid, ctx, inputActions, briefHidden = false, onBack = null }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -9441,10 +9445,10 @@ window.__ModuleLoader__.load({
         )
       } else if (requirement === null) {
         // 这个会话还没有关联需求：仍然给画布的首页。
-        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: '', onRefresh: () => { void reload() } })
+        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: '', onRefresh: () => { void reload() }, onBack })
       } else if (hasPrototype) {
         body = canEditPrototype
-          ? h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: prototypePath, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
+          ? h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: prototypePath, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id, onBack })
           : h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
       } else if (!canEditPrototype) {
         body = h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
@@ -9458,7 +9462,7 @@ window.__ModuleLoader__.load({
         )
       } else if (blank.path !== '') {
         // 新建需求后直接开一张空白画布，模型出第一屏时右栏会切到真正的原型目录。
-        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
+        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id, onBack })
       } else if (blank.error !== '') {
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '空白画布没有创建'),
@@ -9751,7 +9755,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DesignTab({ sid, ctx, inputActions, briefHidden = false }) {
+    function DesignTab({ sid, ctx, inputActions, briefHidden = false, onBack = null }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -9847,6 +9851,7 @@ window.__ModuleLoader__.load({
           kind: 'design',
           currentWorkId: requirement.id,
           onRefresh: () => { void reload() },
+          onBack,
         })
       } else if (designFiles.length === 0 && blank.error !== '') {
         body = h('div', { className: 'dsh-wb-design-msg' },
@@ -9865,6 +9870,7 @@ window.__ModuleLoader__.load({
           kind: 'design',
           currentWorkId: requirement.id,
           onRefresh: () => { void reload() },
+          onBack,
         })
       }
 

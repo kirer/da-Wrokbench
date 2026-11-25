@@ -735,8 +735,10 @@ window.__ModuleLoader__.load({
       // 设计库
       library: '设计库',
       libBack: '回到画布',
-      homeBtn: '首页',
-      dHome: '回首页：接着做，看看按迭代归档的需求原型',
+      homeBtn: '全部',
+      dHome: '看全部：接着做，看看按迭代归档的需求原型',
+      backBtn: '返回',
+      dBack: '回到需求说明',
       homeBack: '回到「{name}」',
       askNewLine: '（另起一套新设计，放新文件夹里，别改现在这套）',
       askNewNote: '新做一套，现在这套不会被改',
@@ -1505,8 +1507,10 @@ window.__ModuleLoader__.load({
       hoCheckAny: 'After each screen, check it the way HANDOFF.md says (compare_design until the difference is under 3% when it runs in a browser; for a native mini program, ask the user to check it in WeChat DevTools), then move on. ',
       library: 'Library',
       libBack: 'Back to canvas',
-      homeBtn: 'Home',
-      dHome: 'Go home: start a new design, pick up another one, browse the library',
+      homeBtn: 'All',
+      dHome: 'See all: pick up a design or browse the requirement prototypes by iteration',
+      backBtn: 'Back',
+      dBack: 'Back to the requirement',
       homeBack: 'Back to "{name}"',
       askNewLine: '(Start a new design in a new folder; leave the current one as is.)',
       askNewNote: 'This starts a new design; the current one stays as is',
@@ -9839,7 +9843,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
       }
       const stLabel = (st && st.label) || ''
       const scrLabel = canvas && screens.length > 1 && !implSc
-        ? t('screensN', { name: brand || stLabel, n: screens.length })
+        ? t('screensN', { name: brand || stLabel || t('canvasShort'), n: screens.length })
         : curSc ? dropBrand(shortOf(curSc)) + (takeTag(curSc) ? ' · ' + takeTag(curSc) : '') : stLabel
       // 菜单里点某一屏：单看这一屏（「全部 n 屏」回画布）
       const pickScreen = (key) => {
@@ -9863,7 +9867,10 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         : [
           h('div', { key: 'top', className: 'ddp-top' + (anOn ? ' an3' : '') },
             h('div', { className: 'ddp-isl tl' },
-              h('button', { className: 'ddp-btn lab' + (homeAt === 'on' ? ' sel' : ''), ...tipA(t('homeBtn'), t('dHome'), homeAt === 'on' ? 'Esc' : ''), 'aria-pressed': homeAt === 'on', onClick: () => (homeAt === 'on' ? homeClose() : homeOpen()) }, h(I.home), h('span', { className: 'lb' }, t('homeBtn'))),
+              // 从需求画布进来时，左上角先给一个返回：回到需求说明，不占第二行。
+              props.onBack ? h('button', { className: 'ddp-btn lab', ...tipA(t('backBtn'), t('dBack')), onClick: props.onBack }, h(I.back), h('span', { className: 'lb' }, t('backBtn'))) : null,
+              props.onBack ? h('span', { className: 'ddp-sep' }) : null,
+              h('button', { className: 'ddp-btn lab' + (homeAt === 'on' ? ' sel' : ''), ...tipA(t('homeBtn'), t('dHome'), homeAt === 'on' ? 'Esc' : ''), 'aria-pressed': homeAt === 'on', onClick: () => (homeAt === 'on' ? homeClose() : homeOpen()) }, h(I.library), h('span', { className: 'lb' }, t('homeBtn'))),
               h('button', { className: 'ddp-btn lab' + (onCanvas ? ' sel' : ''), ...tipA(t('canvasShort'), t('dCanvas')), 'aria-pressed': onCanvas, disabled: !url, onClick: toCanvas }, h(I.canvas), h('span', { className: 'lb' }, t('canvasShort'))),
               h('span', { className: 'ddp-sep' }),
               h(ScreenMenu, { t, hidden: hiddenN, hiddenText, label: scrLabel, tip: [scrLabel || stLabel, t('dScreen')], src: stLabel, busy, list: screens.map((x) => { const L = takeTag(x); return { key: x.key, label: dropBrand(shortOf(x)) + (L ? ' · ' + L : '') } }), cur: curKey, canvas: canvas && !inMulti && !demo && !implSc, open: scrMenu, setOpen: setScrMenu,
