@@ -3274,6 +3274,52 @@ pub fn get_artifact_for(
     get_artifact(snap, id)
 }
 
+/// 删除附件。产品本机删掉或改了名的原型由宿主用它清掉服务端旧文件，
+/// 否则其他角色还会看到已经不存在的屏，需求页的屏数也会越积越多。
+pub fn delete_artifact(snap: &mut Snapshot, actor: &User, id: &str) -> Result<String, ApiError> {
+    let index = snap
+        .requirements
+        .iter()
+        .position(|requirement| requirement.artifacts.iter().any(|artifact| artifact.id == id))
+        .ok_or_else(|| ApiError::not_found("附件不存在"))?;
+    check_not_creating(&snap.requirements[index], "删除附件")?;
+    let meta = snap.requirements[index]
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.id == id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("附件不存在"))?;
+    let allowed = actor.can_plan()
+        || meta.created_by == actor.id
+        || snap.requirements[index].owner_id == actor.id
+        || match meta.kind.as_str() {
+            "design" => actor.can_design(),
+            "test-report" => actor.can_test(),
+            _ => false,
+        };
+    if !allowed {
+        return Err(ApiError::forbidden(format!(
+            "{} 不能删除这个附件",
+            actor.name
+        )));
+    }
+    snap.requirements[index]
+        .artifacts
+        .retain(|artifact| artifact.id != id);
+    snap.artifact_contents.retain(|item| item.id != id);
+    snap.requirements[index].updated_at = crate::now_iso();
+    let requirement_id = snap.requirements[index].id.clone();
+    let iteration_id = snap.requirements[index].iteration_id.clone();
+    snap.push_event(
+        Some(&actor.id),
+        "requirement.artifact_deleted",
+        Some(&requirement_id),
+        Some(&iteration_id),
+        json!({"artifactId": meta.id, "name": meta.name, "kind": meta.kind}),
+    );
+    Ok(meta.id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

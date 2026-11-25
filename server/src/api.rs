@@ -1117,6 +1117,16 @@ async fn get_artifact(
     Ok(Json(json!({ "artifact": artifact, "content": content })))
 }
 
+async fn delete_artifact(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let deleted =
+        mutate(&state, |snapshot| domain::delete_artifact(snapshot, &actor, &id)).await?;
+    Ok(Json(json!({ "deleted": deleted })))
+}
+
 async fn dev_assign(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
@@ -2290,7 +2300,7 @@ pub fn router(state: AppState) -> Router {
         .route("/requirements/{id}/design-deliver", post(design_deliver))
         .route("/requirements/{id}/document", post(update_requirement_document))
         .route("/requirements/{id}/artifacts", post(add_artifact))
-        .route("/artifacts/{id}", get(get_artifact))
+        .route("/artifacts/{id}", get(get_artifact).delete(delete_artifact))
         .route("/requirements/{id}/dev-assign", post(dev_assign))
         .route("/requirements/{id}/dev-claim", post(dev_claim))
         .route("/requirements/{id}/dev-start", post(dev_start))

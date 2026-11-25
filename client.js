@@ -27,6 +27,9 @@ window.__ModuleLoader__.load({
 
     const h = react.createElement
     const { useState, useEffect, useCallback, useMemo, useRef } = react
+    // 主面板注册时声明了会话作用域的子插槽；宿主把 SessionProvider / renderSlot
+    // 作为标准 props 传给组件，这里用 context 带给页面深处，避免逐层透传。
+    const SlotKit = react.createContext(null)
 
     const PANEL_ID = 'workbench'
     const TAB_ID = 'workbench-requirement'
@@ -1262,8 +1265,33 @@ window.__ModuleLoader__.load({
 .dsh-wb-design{position:relative;flex:1 1 auto;min-height:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:13px;line-height:var(--lh-body)}
 .dsh-wb-design .shell{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--bg)}
 .dsh-wb-design .shell > .topbar{flex:none}
-.dsh-wb-design .shell > .scroll{flex:1;min-height:0;overflow:auto}
+.dsh-wb-design .dsh-wb-shell-body{display:flex;flex:1;min-height:0;min-width:0}
+.dsh-wb-design .dsh-wb-shell-body > .scroll{flex:1;min-width:0;min-height:0;overflow:auto}
 .dsh-wb-design .page{margin:0 auto;width:100%}
+/* 画布页右侧的常驻会话坞：嵌入真实 DSH 会话，随需求切换。 */
+.dsh-wb-design .dsh-wb-dock{position:relative;width:400px;min-width:280px;max-width:62%;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line-2);background:var(--bg-elev)}
+.dsh-wb-design .dsh-wb-dock-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;z-index:6;cursor:col-resize;touch-action:none}
+.dsh-wb-design .dsh-wb-dock-resize::after{content:'';position:absolute;left:3px;top:0;bottom:0;width:1px;background:transparent;transition:background .15s}
+.dsh-wb-design .dsh-wb-dock-resize:hover::after,.dsh-wb-design .dsh-wb-dock-resize:active::after{background:var(--primary-line,var(--line-3))}
+.dsh-wb-design .dsh-wb-dock-head{flex:none;height:50px;display:flex;align-items:center;gap:9px;padding:0 11px 0 13px;border-bottom:1px solid var(--line-2)}
+.dsh-wb-design .dsh-wb-dock-head .avatar{width:28px;height:28px;font-size:11px}
+.dsh-wb-design .dsh-wb-dock-id{flex:1;min-width:0}
+.dsh-wb-design .dsh-wb-dock-name{display:flex;align-items:center;gap:6px;font-size:var(--fs-12);font-weight:var(--fw-semi);line-height:1.25}
+.dsh-wb-design .dsh-wb-dock-sub{margin-top:2px;font-size:10px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dsh-wb-design .dsh-wb-dock-close{flex:none;width:24px;height:24px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-3);cursor:pointer;font-size:15px;line-height:1}
+.dsh-wb-design .dsh-wb-dock-close:hover{background:var(--surface-2);color:var(--text)}
+.dsh-wb-design .dsh-wb-dock-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.dsh-wb-design .dsh-wb-dock-body > *{flex:1;min-height:0;min-width:0}
+.dsh-wb-design .dsh-wb-dock-body [data-conversation-content]{height:100%}
+.dsh-wb-design .dsh-wb-dock-msg{flex:none;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:18px 16px;font-size:12px;color:var(--text-3);line-height:1.6}
+.dsh-wb-design .dsh-wb-dock-toggle{height:28px;padding:0 9px;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:transparent;color:var(--text-2);font:inherit;font-size:var(--fs-12);cursor:pointer}
+.dsh-wb-design .dsh-wb-dock-toggle:hover{background:var(--surface-2);color:var(--text)}
+.dsh-wb-design .dsh-wb-dock-toggle.is-on{border-color:var(--primary-line,var(--line-2));color:var(--text);background:var(--surface-2)}
+/* 中栏工作画布：会话在右边说话，原型/设计稿在这一栏实时出图。 */
+.dsh-wb-design .scroll.is-stage{display:flex;flex-direction:column;overflow:hidden}
+.dsh-wb-design .dsh-wb-stage{flex:1;min-height:0;display:flex;flex-direction:column}
+.dsh-wb-design .dsh-wb-stage-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.dsh-wb-design .dsh-wb-stage-body > .dsh-wb-canvas-pane{flex:1;min-height:0}
 .dsh-wb-design .topbar .plugnac{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
 .dsh-wb-design .plugnac-title{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-13);font-weight:var(--fw-semi);color:var(--text);white-space:nowrap}
 .dsh-wb-design .plugnac-title svg{width:16px;height:16px;color:var(--text-2)}
@@ -4186,7 +4214,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function CreateSessionDialog({ ctx, state, requirement, onClose, onCreated, onToast }) {
+    function CreateSessionDialog({ ctx, state, requirement, stay = false, onClose, onCreated, onToast }) {
       const roles = state.currentUser.roles ?? []
       const canProduct = roles.includes('product') || roles.includes('lead') || roles.includes('admin')
       const canDesign = roles.includes('design') || roles.includes('lead') || roles.includes('admin')
@@ -4252,9 +4280,12 @@ window.__ModuleLoader__.load({
               folderPath: sessionRoot,
             }),
           })
-          ctx.uiWorkspace.openSession(sessionId)
-          // 设计会话直接落在「设计」画布；产品会话仍落在「需求」原型。
-          setTimeout(() => (type === 'design' ? openDesignTab(ctx) : openRightTab(ctx)), 300)
+          // 从会话坞里新建时留在需求页，让会话直接嵌进坞；从其它入口新建仍切到会话。
+          if (stay !== true) {
+            ctx.uiWorkspace.openSession(sessionId)
+            // 设计会话直接落在「设计」画布；产品会话仍落在「需求」原型。
+            setTimeout(() => (type === 'design' ? openDesignTab(ctx) : openRightTab(ctx)), 300)
+          }
           onToast(`${requirement.code} 的${sessionTypeLabel(type)}会话已创建`, false)
           onCreated(body.requirement)
           onClose()
@@ -4263,7 +4294,7 @@ window.__ModuleLoader__.load({
           setStep('')
           setBusy(false)
         }
-      }, [busy, sessionRoot, baseDir, requirement, state, type, ctx, onCreated, onClose, onToast])
+      }, [busy, sessionRoot, baseDir, requirement, stay, state, type, ctx, onCreated, onClose, onToast])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
@@ -5895,10 +5926,153 @@ window.__ModuleLoader__.load({
     }
 
     function MainPage({ ctx }) {
-      return h(WorkbenchGate, { ctx })
+      const kit = react.useContext(SlotKit)
+      return h(WorkbenchGate, { ctx, kit })
     }
 
-    function WorkbenchGate({ ctx }) {
+    // 「一个需求 × 一个人 = 一个会话」：优先取本人名下、与当前角色匹配的会话，
+    // 没有就让用户在工作台里创建，不拿同事的会话顶替。
+    function dockSessionOf(requirement, user) {
+      const own = (requirement?.sessions ?? [])
+        .filter(session =>
+          session.own === true && typeof session.sessionId === 'string' && session.sessionId !== '')
+        // 同一类型可能建过不止一场；会话坞永远打开最新的一场。
+        .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+      if (own.length === 0) return null
+      const byRole = { product: 'requirement', design: 'design', dev: 'dev', qa: 'test', lead: 'requirement' }
+      const preferred = byRole[user?.activeRole]
+      return own.find(session => session.type === preferred) ?? own[0]
+    }
+
+    // 会话坞里只放对话本身：固定 Chat 视图，复用宿主的 conversation.content 工厂。
+    // 与 DSH 右栏的子会话（sidebar.chat.conversation）是同一套嵌入方式。
+    function ChatOnlyView(props) {
+      return props.renderSlot('conversation.session', { view: 'chat' })
+    }
+
+    function WorkbenchChat({ ctx, sessionId, renderFactorySlot, useSession, useConversation, useSessions }) {
+      const none = () => undefined
+      const useSessionSafe = typeof useSession === 'function' ? useSession : none
+      const useConversationSafe = typeof useConversation === 'function' ? useConversation : none
+      const useSessionsSafe = typeof useSessions === 'function' ? useSessions : none
+      const session = useSessionSafe(value => value)
+      const conversation = useConversationSafe(value => value)
+      const summaryBlank = useSessionsSafe(state => state?.byId?.[sessionId]?.blank)
+      const active = (conversation?.activeTargets?.size ?? 0) > 0
+        || (session !== undefined && !session.blank && !session.awaitingFirstTurn)
+        || session?.running === true
+      const shellPhase = active ? 'active' : session?.promptAttempted ? 'engaging' : 'blank'
+      const settling = shellPhase === 'blank' && session?.openState === 'loading' && summaryBlank !== true
+      const hero = shellPhase === 'blank' && (session?.openState === 'open' || summaryBlank === true)
+      const phase = settling ? 'settling' : hero ? 'hero' : 'active'
+      return renderFactorySlot('conversation.content', {
+        variant: 'embedded',
+        phase,
+        hero,
+        onWorkspaceSelected: (workspaceId, adopt) => {
+          try { ctx.uiWorkspace?.openWorkspace?.(workspaceId, adopt) } catch (_) { /* 会话坞不切换主视图 */ }
+        },
+      }, { slots: { views: ChatOnlyView } })
+    }
+
+    function SessionDock({ ctx, kit, state, requirement, onNewSession, onClose, width = 400, onResizeStart, onResizeReset }) {
+      const record = dockSessionOf(requirement, state?.currentUser)
+      const sessionId = record?.sessionId ?? ''
+      const [reference, setReference] = useState(null)
+      const [error, setError] = useState('')
+
+      useEffect(() => {
+        setReference(null)
+        setError('')
+        if (sessionId === '') return undefined
+        let retained = null
+        try {
+          retained = ctx.sessions.retain(sessionId, {
+            source: 'workbenchDock',
+            facets: { conversation: true },
+          })
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+          return undefined
+        }
+        let alive = true
+        setReference(retained)
+        Promise.resolve(retained.ready).catch((reason) => {
+          if (alive) setError(reason instanceof Error ? reason.message : String(reason))
+        })
+        return () => {
+          alive = false
+          try { retained.release() } catch (_) { /* 已释放 */ }
+        }
+      }, [ctx, sessionId])
+
+      const canEmbed = reference !== null && kit !== null && typeof kit.SessionProvider === 'function'
+        && typeof kit.renderSlot === 'function'
+
+      return h('aside', { className: 'dsh-wb-dock', style: { width: `${width}px` } },
+        h('div', {
+          className: 'dsh-wb-dock-resize',
+          role: 'separator',
+          'aria-orientation': 'vertical',
+          'aria-label': '调整会话宽度',
+          title: '拖动调整宽度，双击复位',
+          onPointerDown: onResizeStart,
+          onDoubleClick: onResizeReset,
+        }),
+        h('div', { className: 'dsh-wb-dock-head' },
+          h(Avatar, { name: state?.currentUser?.name ?? '' }),
+          h('div', { className: 'dsh-wb-dock-id' },
+            h('div', { className: 'dsh-wb-dock-name' }, '我的会话'),
+            h('div', { className: 'dsh-wb-dock-sub' },
+              record
+                ? `${sessionTypeLabel(record.type)}会话 · ${requirement.code} · 仅自己可见`
+                : `${requirement.code} · 还没有你的会话`),
+          ),
+          h('button', {
+            className: 'dsh-wb-dock-close',
+            type: 'button',
+            title: '收起会话',
+            'aria-label': '收起会话',
+            onClick: onClose,
+          }, '×'),
+        ),
+        h('div', { className: 'dsh-wb-dock-body' },
+          canEmbed
+            ? h(kit.SessionProvider, { session: reference }, kit.renderSlot('workbench.chat', {}))
+            : h('div', { className: 'dsh-wb-dock-msg' },
+                error !== ''
+                  ? error
+                  : sessionId !== ''
+                    ? '正在打开你的会话…'
+                    : '每人在这条需求上都有自己的会话；创建后，画布和会话会一直并排。',
+                sessionId === ''
+                  ? h('button', {
+                      className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--primary',
+                      type: 'button',
+                      onClick: onNewSession,
+                    }, '创建我的会话')
+                  : null,
+              ),
+        ),
+      )
+    }
+
+    const DOCK_WIDTH_DEFAULT = 400
+    const DOCK_WIDTH_MIN = 300
+    const DOCK_WIDTH_MAX = 760
+    const DOCK_WIDTH_KEY = 'dsh-wb:dock-width'
+
+    function readDockWidth() {
+      try {
+        const value = Number(window.localStorage.getItem(DOCK_WIDTH_KEY))
+        if (Number.isFinite(value) && value > 0) {
+          return Math.min(DOCK_WIDTH_MAX, Math.max(DOCK_WIDTH_MIN, value))
+        }
+      } catch (_) { /* 本地存储不可用时用默认宽度 */ }
+      return DOCK_WIDTH_DEFAULT
+    }
+
+    function WorkbenchGate({ ctx, kit }) {
       const auth = useAuth()
       if (auth.loading) {
         return h('div', { className: 'dsh-wb-design' },
@@ -5911,7 +6085,7 @@ window.__ModuleLoader__.load({
       }
       if (!auth.authenticated || auth.user === null) return h(LoginPage, { auth })
       if (!auth.user.onboarding || !auth.user.onboarding.completedAt) return h(OnboardingPage, { auth })
-      return h(WorkbenchPage, { ctx, auth })
+      return h(WorkbenchPage, { ctx, auth, kit })
     }
 
     const ADMIN_ROLES = ['lead', 'product', 'design', 'dev', 'qa', 'admin']
@@ -7457,9 +7631,10 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function WorkbenchPage({ ctx, auth }) {
+    function WorkbenchPage({ ctx, auth, kit }) {
       const workbench = useWorkbench()
       const [view, setView] = useState('iterations')
+      const [dockOpen, setDockOpen] = useState(true)
       const [selectedRequirementId, setSelectedRequirementId] = useState(null)
       const [iterationQuery, setIterationQuery] = useState('')
       const [iterationFilter, setIterationFilter] = useState('all')
@@ -7475,13 +7650,76 @@ window.__ModuleLoader__.load({
       const [sessionFor, setSessionFor] = useState(null)
       const [toast, setToast] = useState(null)
       const [retrying, setRetrying] = useState('')
+      const [dockWidth, setDockWidth] = useState(readDockWidth)
       const state = workbench.state
+      // 会话坞和画布页共用同一条「本机自己的会话」：右边说话，中间出图。
+      const selectedRequirement = state === null
+        ? null
+        : (state.requirements ?? []).find(item => item.id === selectedRequirementId) ?? null
+      const dockRecord = state === null ? null : dockSessionOf(selectedRequirement, state.currentUser)
+      const dockSessionId = dockRecord?.sessionId ?? ''
+      const dockWidthRef = useRef(dockWidth)
+      const dockDownAt = useRef(0)
 
       useEffect(() => {
         if (toast === null || toast.isError) return undefined
         const timer = setTimeout(() => setToast(null), 3600)
         return () => clearTimeout(timer)
       }, [toast])
+
+      useEffect(() => { dockWidthRef.current = dockWidth }, [dockWidth])
+
+      const beginDockResize = useCallback((event) => {
+        if (event.button !== undefined && event.button !== 0) return
+        // 挡板会盖住第二次 mousedown，原生 dblclick 到不了手柄，双击复位得自己认。
+        const now = Date.now()
+        const double = now - dockDownAt.current < 350
+        dockDownAt.current = now
+        if (double) {
+          setDockWidth(DOCK_WIDTH_DEFAULT)
+          try { window.localStorage.setItem(DOCK_WIDTH_KEY, String(DOCK_WIDTH_DEFAULT)) } catch (_) { /* 本地存储不可用 */ }
+          return
+        }
+        event.preventDefault()
+        const pointerId = event.pointerId
+        // 画布是 iframe：拖动一旦越过它，指针事件会被 iframe 的文档接走，
+        // 父文档既收不到移动也收不到松开。拖动期间铺一层透明挡板，让
+        // 指针始终落在父文档里；挡板同时阻止误点画布。
+        const shield = document.createElement('div')
+        shield.style.cssText = 'position:fixed;inset:0;z-index:2147483647;cursor:col-resize;background:transparent'
+        document.body.appendChild(shield)
+        try { shield.setPointerCapture?.(pointerId) } catch (_) { /* 无指针捕获也能靠挡板 */ }
+        const startX = event.clientX
+        const startWidth = dockWidthRef.current
+        let latest = startWidth
+        const maxWidth = () => Math.min(DOCK_WIDTH_MAX, Math.round(window.innerWidth * 0.62))
+        const onMove = (moveEvent) => {
+          latest = Math.min(maxWidth(), Math.max(DOCK_WIDTH_MIN, startWidth + (startX - moveEvent.clientX)))
+          setDockWidth(latest)
+        }
+        const stop = () => {
+          window.removeEventListener('pointermove', onMove)
+          window.removeEventListener('pointerup', stop)
+          window.removeEventListener('pointercancel', stop)
+          window.removeEventListener('blur', stop)
+          try { shield.releasePointerCapture?.(pointerId) } catch (_) { /* 已释放 */ }
+          shield.remove()
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+          try { window.localStorage.setItem(DOCK_WIDTH_KEY, String(latest)) } catch (_) { /* 本地存储不可用 */ }
+        }
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('pointercancel', stop)
+        window.addEventListener('blur', stop)
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+      }, [])
+
+      const resetDockWidth = useCallback(() => {
+        setDockWidth(DOCK_WIDTH_DEFAULT)
+        try { window.localStorage.setItem(DOCK_WIDTH_KEY, String(DOCK_WIDTH_DEFAULT)) } catch (_) { /* 本地存储不可用 */ }
+      }, [])
 
       const showToast = useCallback((message, isError) => setToast({ message, isError }), [])
 
@@ -7610,7 +7848,6 @@ window.__ModuleLoader__.load({
       const canCreateRequirement = roles.includes('product') || roles.includes('admin')
       const canConfig = canCreateIteration
       const isAdmin = state.currentUser.roles.includes('admin')
-      const selectedRequirement = (state.requirements ?? []).find(item => item.id === selectedRequirementId) ?? null
       const unread = state.unreadNotificationCount ?? (state.notifications ?? []).filter(item => item.read !== true).length
       const navItems = [
         ['iterations', '迭代列表'],
@@ -7627,6 +7864,30 @@ window.__ModuleLoader__.load({
         if (key === 'notifications') { setView('notifications'); return }
       }
       const navActive = view === 'iteration' || view === 'requirement' ? 'iterations' : view
+      // 只要会话坞里有「我自己的会话」，中栏就切成工作画布：产品看原型，设计师看设计稿。
+      const stageActive = view === 'requirement' && selectedRequirement !== null && dockOpen && dockSessionId !== ''
+      // 会话坞里是哪类会话，中栏就画哪类产物；需求/评审会话回到产品原型。
+      const stageKind = dockRecord?.type === 'design'
+        ? 'design'
+        : dockRecord?.type === 'dev'
+          ? 'dev'
+          : dockRecord?.type === 'test'
+            ? 'test'
+            : 'prototype'
+      const requirementMain = selectedRequirement === null
+        ? h('div', { className: 'page' },
+            h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到迭代列表重新选择。')))
+        : h(RequirementPageView, {
+            ctx,
+            state,
+            requirement: selectedRequirement,
+            onBack: () => setView('iteration'),
+            onOpenSession: (sessionId) => openSession(sessionId),
+            onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+            onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
+            onOpenRequirementTab: (requirement) => openSessionFor(requirement, 'requirement'),
+            onNewSession: (requirement) => setSessionFor({ requirement, stay: false }),
+          })
 
       return h('div', { className: 'dsh-wb-design' },
         h('div', { className: 'shell' },
@@ -7646,6 +7907,18 @@ window.__ModuleLoader__.load({
                 : null)),
             ),
             h('div', { className: 'spacer' }),
+            view === 'requirement' && selectedRequirement !== null
+              ? h('button', {
+                  className: `dsh-wb-dock-toggle${dockOpen ? ' is-on' : ''}`,
+                  type: 'button',
+                  title: dockOpen ? '收起会话坞' : '打开会话坞',
+                  'aria-pressed': dockOpen,
+                  onClick: () => setDockOpen(value => !value),
+                },
+                  h(DesignIcon, { name: 'command' }),
+                  '会话',
+                )
+              : null,
             view === 'iterations'
               ? h('div', { className: 'search', style: { width: '220px' } },
                   h(DesignIcon, { name: 'search' }),
@@ -7669,13 +7942,27 @@ window.__ModuleLoader__.load({
               h(DesignIcon, { name: 'chev-down', className: 'chev' }),
             ),
           ),
-          h('div', { className: 'scroll' },
+          h('div', { className: 'dsh-wb-shell-body' },
+            h('div', { className: stageActive ? 'scroll is-stage' : 'scroll' },
             workbench.error !== null && workbench.error !== ''
               ? h('div', { className: 'page', style: { paddingBottom: 0 } },
                   h('div', { className: 'banner banner--mock' }, h(DesignIcon, { name: 'alert' }), h('span', null, workbench.error)),
                 )
               : null,
-            view === 'iterations'
+            stageActive
+              ? h('div', { className: 'dsh-wb-stage' },
+                  // 不再单独做一条阶段栏：画布自己的工具栏就是这一屏的顶栏。
+                  h('div', { className: 'dsh-wb-stage-body' },
+                    stageKind === 'design'
+                      ? h(DesignTab, { sid: dockSessionId, ctx })
+                      : stageKind === 'dev'
+                        ? h(CodeTab, { sid: dockSessionId, ctx })
+                        : stageKind === 'test'
+                          ? h(TestTab, { sid: dockSessionId, ctx })
+                          : h(RequirementTab, { sid: dockSessionId, ctx, briefHidden: true }),
+                  ),
+                )
+              : view === 'iterations'
               ? h(IterationListView, {
                   state,
                   query: iterationQuery,
@@ -7702,20 +7989,7 @@ window.__ModuleLoader__.load({
                     onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
                   })
                 : view === 'requirement'
-                  ? selectedRequirement === null
-                    ? h('div', { className: 'page' },
-                        h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到迭代列表重新选择。')))
-                    : h(RequirementPageView, {
-                        ctx,
-                        state,
-                        requirement: selectedRequirement,
-                        onBack: () => setView('iteration'),
-                        onOpenSession: (sessionId) => openSession(sessionId),
-                        onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
-                        onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
-                        onOpenRequirementTab: (requirement) => openSessionFor(requirement, 'requirement'),
-                        onNewSession: (requirement) => setSessionFor(requirement),
-                      })
+                  ? requirementMain
                   : view === 'my'
                     ? h(MyWorkbenchView, {
                         state,
@@ -7746,6 +8020,20 @@ window.__ModuleLoader__.load({
                             onReload: workbench.reload,
                             onToast: showToast,
                           }),
+            ),
+            view === 'requirement' && selectedRequirement !== null && dockOpen
+              ? h(SessionDock, {
+                  ctx,
+                  kit,
+                  state,
+                  requirement: selectedRequirement,
+                  onNewSession: () => setSessionFor({ requirement: selectedRequirement, stay: true }),
+                  onClose: () => setDockOpen(false),
+                  width: dockWidth,
+                  onResizeStart: beginDockResize,
+                  onResizeReset: resetDockWidth,
+                })
+              : null,
           ),
         ),
         dialogOpen ? h(CreateRequirementDialog, {
@@ -7770,7 +8058,8 @@ window.__ModuleLoader__.load({
         sessionFor !== null ? h(CreateSessionDialog, {
           ctx,
           state,
-          requirement: sessionFor,
+          requirement: sessionFor.requirement,
+          stay: sessionFor.stay === true,
           onClose: () => setSessionFor(null),
           onCreated: handleSessionCreated,
           onToast: showToast,
@@ -8189,6 +8478,8 @@ window.__ModuleLoader__.load({
         `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
         '',
         `请在这个需求里做产品原型：一屏一个 HTML 写进 ${prototypeDir}，先保证信息结构、关键流程和状态完整，不追求最终视觉。`,
+        '每屏是「左原型 + 右需求说明」的双栏文档：右栏写背景与目标、本屏范围、角色与权限、字段与业务规则、验收标准，最后是关键交互标注。',
+        '文件名用中文语义化名字（如 明细列表.html），不要用英文名。',
         '右侧「需求」面板会自动把 prototype/ 里的页面显示成原型画布，不需要开画布。',
       ].join('\n')
     }
@@ -8231,6 +8522,8 @@ window.__ModuleLoader__.load({
         '',
         '需求简报已经写进工作台的活文档，请先调用 workbench_design_context 读取，不要让我再重复描述。',
         '按文档里的页面和验收标准，在这条需求的原型目录 prototype/ 下生成低保真产品原型，一屏一个 HTML；页面清单没写全时按文档目标补全关键状态。',
+        '每屏是「左原型 + 右需求说明」的双栏文档：右栏写背景与目标、本屏范围、角色与权限、字段与业务规则、验收标准，最后是关键交互标注。',
+        '文件名用中文语义化名字（如 明细列表.html），不要用英文名。',
         '只写 prototype/，不要写 design/，不要调用交付工具。右侧「需求」面板会自动显示这些页面。',
       ].join('\n')
     }
@@ -8255,6 +8548,8 @@ window.__ModuleLoader__.load({
         '- 验收标准：',
         '',
         '补全后请按描述做产品原型：一屏一个 HTML 写进这条需求的原型目录 prototype/（不是设计稿目录）。',
+        '每屏是「左原型 + 右需求说明」的双栏文档：右栏写背景与目标、本屏范围、角色与权限、字段与业务规则、验收标准，最后是关键交互标注。',
+        '文件名用中文语义化名字（如 明细列表.html），不要用英文名。',
         '右侧「需求」面板会自动显示 prototype/ 里的页面；原型优先保证信息结构、流程和状态完整，不追求最终视觉。',
       ].join('\n')
     }
@@ -8521,7 +8816,7 @@ window.__ModuleLoader__.load({
           '需求文档还没写。先让产品在需求会话里补全背景、目标和验收标准，开发才能对着原型实现。')
       }
 
-      const quote = () => {
+      const quoteInto = () => {
         const text = [
           `〔需求〕${requirement.code}「${requirement.title}」`,
           summary,
@@ -8544,7 +8839,8 @@ window.__ModuleLoader__.load({
       const countOf = kind => new Set(artifacts
         .filter(artifact => artifact.kind === kind && /\.html?$/i.test(String(artifact.name || '')))
         .map(artifact => String(artifact.name).split('/').pop())).size
-      const navChip = (kind, label, count, tabKind) => h('button', {
+      // 右栏里是跳转入口，原地切到原型 / 设计稿 / 测试证据。
+      const chip = (kind, label, count, tabKind) => h('button', {
         className: 'dsh-wb-brief-nav-btn',
         type: 'button',
         title: `在右栏打开${label}`,
@@ -8552,26 +8848,28 @@ window.__ModuleLoader__.load({
       }, h(DesignIcon, { name: kind, size: 12 }), label, h('span', { className: 'n' }, String(count)))
       const nav = ctx !== undefined && ctx !== null
         ? h('div', { className: 'dsh-wb-brief-nav' },
-            navChip('workbench', '原型', countOf('prototype'), TAB_KIND),
-            navChip('package', '设计稿', countOf('design'), DESIGN_TAB_KIND),
-            navChip('shield', '测试证据', countOf('test-report'), TEST_TAB_KIND),
+            chip('workbench', '原型', countOf('prototype'), TAB_KIND),
+            chip('package', '设计稿', countOf('design'), DESIGN_TAB_KIND),
+            chip('shield', '测试证据', countOf('test-report'), TEST_TAB_KIND),
           )
         : null
+      const quoteBtn = sid !== undefined && sid !== ''
+        ? h('button', {
+            className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-req-brief-quote',
+            type: 'button',
+            title: '把需求说明作为引用放进输入框',
+            onClick: quoteInto,
+          }, '引用到对话')
+        : null
+      const head = h('div', { className: 'dsh-wb-req-brief-head' },
+        h('span', { className: 'dsh-wb-req-brief-title' }, '需求说明'),
+        summary !== '' ? h('span', null, `需求 v${doc.version ?? 1}`) : null,
+        nav,
+        extra,
+        quoteBtn,
+      )
       return h('div', { className: 'dsh-wb-req-brief' },
-        h('div', { className: 'dsh-wb-req-brief-head' },
-          h('span', { className: 'dsh-wb-req-brief-title' }, '需求说明'),
-          summary !== '' ? h('span', null, `需求 v${doc.version ?? 1}`) : null,
-          nav,
-          extra,
-          sid !== undefined && sid !== ''
-            ? h('button', {
-                className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-req-brief-quote',
-                type: 'button',
-                title: '把需求说明作为引用放进输入框',
-                onClick: quote,
-              }, '引用到对话')
-            : null,
-        ),
+        head,
         summary !== '' ? h('div', { className: 'dsh-wb-req-brief-summary' }, h(MarkdownText, { text: summary })) : null,
         !compact && body !== '' ? h('div', { className: 'dsh-wb-req-brief-body' }, h(MarkdownText, { text: body })) : null,
         !compact && criteria !== ''
@@ -9110,7 +9408,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementTab({ sid, ctx, inputActions }) {
+    function RequirementTab({ sid, ctx, inputActions, briefHidden = false }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -9171,24 +9469,25 @@ window.__ModuleLoader__.load({
         body = h('div', { className: 'dsh-wb-design-msg' }, h('span', { className: 'dsh-wb-spinner' }), '正在准备空白画布…')
       }
 
-      // 需求说明在上、原型画布在下：开发/测试读得到需求，也看得到原型。
+      const brief = requirement !== null
+        ? h(RequirementBrief, {
+            requirement,
+            sid,
+            ctx,
+            extra: ownerCanEdit && readonlyPreview
+              ? h('button', {
+                  className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
+                  type: 'button',
+                  title: '切回可编辑画布',
+                  onClick: () => setReadonlyPreview(sid, TAB_KIND, false),
+                }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
+              : null,
+          })
+        : null
+      // 画布页不再挂需求说明的浮层：背景、规则、权限、验收写在每张原型自己的右侧栏里。
       return h('div', { className: 'dsh-wb-design dsh-wb-canvas-pane' },
         claimError !== '' ? h('div', { className: 'dsh-wb-notice is-error' }, claimError) : null,
-        requirement !== null
-          ? h(RequirementBrief, {
-              requirement,
-              sid,
-              ctx,
-              extra: ownerCanEdit && readonlyPreview
-                ? h('button', {
-                    className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
-                    type: 'button',
-                    title: '切回可编辑画布',
-                    onClick: () => setReadonlyPreview(sid, TAB_KIND, false),
-                  }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
-                : null,
-            })
-          : null,
+        briefHidden ? null : brief,
         h('div', { className: 'dsh-wb-canvas-content' }, body),
       )
     }
@@ -9452,7 +9751,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DesignTab({ sid, ctx, inputActions }) {
+    function DesignTab({ sid, ctx, inputActions, briefHidden = false }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -9570,24 +9869,25 @@ window.__ModuleLoader__.load({
       }
 
       // 设计右栏在画布上方保留一条需求摘要，设计师不用切回需求页也能看到要解决的问题。
+      const brief = requirement !== null
+        ? h(RequirementBrief, {
+            requirement,
+            compact: true,
+            sid,
+            ctx,
+            extra: designerCanEdit && readonlyPreview
+              ? h('button', {
+                  className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
+                  type: 'button',
+                  title: '切回可编辑画布',
+                  onClick: () => setReadonlyPreview(sid, DESIGN_TAB_KIND, false),
+                }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
+              : null,
+          })
+        : null
       return h('div', { className: 'dsh-wb-design dsh-wb-canvas-pane' },
         claimError !== '' ? h('div', { className: 'dsh-wb-notice is-error' }, claimError) : null,
-        requirement !== null
-          ? h(RequirementBrief, {
-              requirement,
-              compact: true,
-              sid,
-              ctx,
-              extra: designerCanEdit && readonlyPreview
-                ? h('button', {
-                    className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
-                    type: 'button',
-                    title: '切回可编辑画布',
-                    onClick: () => setReadonlyPreview(sid, DESIGN_TAB_KIND, false),
-                  }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
-                : null,
-            })
-          : null,
+        briefHidden ? null : brief,
         h('div', { className: 'dsh-wb-canvas-content' }, body),
       )
     }
@@ -9742,10 +10042,17 @@ window.__ModuleLoader__.load({
         })
         .catch(() => {})
 
+      // 主面板自带一个会话作用域的子插槽：宿主据此下发 SessionProvider /
+      // renderSlot，页面才能把「我的需求会话」嵌进画布页，而不是另开一栏。
       ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
         name: 'main',
         key: PANEL_ID,
-      }, () => h(MainPage, { ctx }))), 'dsh-workbench: main panel')
+        children: { 'workbench.chat': { kind: 'single', scope: 'session' } },
+      }, (props) => h(SlotKit.Provider, { value: props }, h(MainPage, { ctx })))), 'dsh-workbench: main panel')
+
+      ctx.effect(() => ctx.slots.inject('workbench.chat', () => ctx.slots.register({
+        name: 'workbench.chat',
+      }, (props) => h(WorkbenchChat, { ...props, ctx }))), 'dsh-workbench: embedded session chat')
 
       ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist',

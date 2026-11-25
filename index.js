@@ -438,6 +438,48 @@ function listPrototypeFiles(folderPath, baseDir) {
   return listHtmlFiles(path.join(folderPath, PROTOTYPE_DIR), baseDir, folderPath)
 }
 
+// 设计稿的样式/脚本/小图常和 HTML 放在同一目录；交付时一起上传成附件，
+// 跨角色预览才能把 <link href="tokens.css"> 这类相对引用内联进页面。
+const DESIGN_SUPPORT_EXT = new Set(['.css', '.js', '.mjs', '.json', '.svg', '.md', '.txt'])
+
+function listDesignSupportFiles(folderPath, baseDir) {
+  const files = []
+  let realBase
+  let realFolder
+  try {
+    realBase = fs.realpathSync(baseDir)
+    realFolder = fs.realpathSync(folderPath)
+  } catch {
+    return files
+  }
+  if (!isInside(realBase, realFolder)) return files
+  const collect = (dir, depth) => {
+    let real
+    try { real = fs.realpathSync(dir) } catch { return }
+    if (!isInside(realFolder, real)) return
+    let entries
+    try { entries = fs.readdirSync(real, { withFileTypes: true }) } catch { return }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue
+      const full = path.join(real, entry.name)
+      if (entry.isDirectory()) {
+        if (depth > 0 && !DESIGN_FILE_SKIP.has(entry.name)) collect(full, depth - 1)
+        continue
+      }
+      if (!entry.isFile() || !DESIGN_SUPPORT_EXT.has(path.extname(entry.name).toLowerCase())) continue
+      try {
+        const fileReal = fs.realpathSync(full)
+        if (!isInside(real, fileReal)) continue
+        files.push(path.relative(realFolder, fileReal).split(path.sep).join('/'))
+      } catch { /* 单个文件读不到就跳过 */ }
+    }
+  }
+  collect(path.join(realFolder, DESIGN_DIR), 2)
+  // 兼容旧需求：设计稿直接放在需求根目录，同目录样式也算交付支持文件。
+  collect(realFolder, 0)
+  return [...new Set(files)]
+}
+
 function attachWorkingFolders(requirement, baseDir) {
   if (typeof requirement.folderPath !== 'string' || requirement.folderPath === '') {
     requirement.prototypePath = null
@@ -1625,12 +1667,14 @@ function makeRoute(local, hostCtx = null) {
         if (files.length === 0 && folder) {
           files = listDesignFiles(folder, baseDir).map(file => file.relativePath)
         }
+        // 版本文件列表只记 HTML 屏；样式/脚本等支持文件也上传，供跨角色预览内联相对引用。
+        const supportFiles = folder ? listDesignSupportFiles(folder, baseDir) : []
         const upload = await uploadDesignArtifacts(
           userId,
           folder,
           baseDir,
           id,
-          files,
+          [...new Set([...files, ...supportFiles])],
         )
         const result = await serverJson(`/requirements/${encodeURIComponent(id)}/design-deliver`, {
           method: 'POST',
@@ -2079,6 +2123,13 @@ async function uploadDesignArtifacts(userId, folder, baseDir, requirementId, fil
 const PROTOTYPE_ARTIFACT_KIND = 'prototype'
 const TEST_REPORT_ARTIFACT_KIND = 'test-report'
 
+// listPrototypeFiles 的 relativePath 已经相对需求目录（含 prototype/），
+// 再拼一次 PROTOTYPE_DIR 会得到 prototype/prototype/… 的重复前缀。
+function prototypeArtifactName(relativePath) {
+  const normalized = String(relativePath).split(path.sep).join('/')
+  return normalized.startsWith(`${PROTOTYPE_DIR}/`) ? normalized : `${PROTOTYPE_DIR}/${normalized}`
+}
+
 async function uploadPrototypeArtifacts(userId, folder, baseDir, requirementId, files) {
   const uploaded = []
   const warnings = []
@@ -2109,11 +2160,8 @@ async function uploadPrototypeArtifacts(userId, folder, baseDir, requirementId, 
       if (!stat.isFile()) throw new Error('不是普通文件')
       if (stat.size > DESIGN_UPLOAD_MAX_BYTES) throw new Error('文件超过 1.5 MB')
       const content = fs.readFileSync(real, 'utf8')
-      // listPrototypeFiles 的 relativePath 已经相对需求目录（含 prototype/），
-      // 再拼一次 PROTOTYPE_DIR 会得到 prototype/prototype/… 的重复前缀。
-      const artifactName = relativePath.split(path.sep).join('/')
       const result = await serverAs(userId, `/requirements/${encodeURIComponent(requirementId)}/artifacts`, 'POST', {
-        name: artifactName.startsWith(`${PROTOTYPE_DIR}/`) ? artifactName : `${PROTOTYPE_DIR}/${artifactName}`,
+        name: prototypeArtifactName(relativePath),
         contentType,
         content,
         kind: PROTOTYPE_ARTIFACT_KIND,
@@ -2141,6 +2189,30 @@ async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
     const files = listPrototypeFiles(folder, baseDir)
     if (files.length === 0) continue
     const sync = localState.prototypeSync[requirement.id] ?? {}
+    // 本机删掉或改了名的原型要同步清掉服务端旧附件，否则别的角色还看得到
+    // 已经不存在的屏，需求全量页的屏数也会翻倍。只在本地确实还有原型时才
+    // 清理：目录临时为空/不可读时不能把服务端原型全删了。
+    const localPaths = new Set(files.map(file => file.relativePath))
+    const stale = Object.keys(sync).filter(relativePath => !localPaths.has(relativePath))
+    for (const relativePath of stale) {
+      const name = prototypeArtifactName(relativePath)
+      // 同一个屏每次同步都会追加一份附件，旧名字下面可能压着好几版，全部删掉。
+      const artifacts = (requirement.artifacts ?? []).filter(item => item.kind === PROTOTYPE_ARTIFACT_KIND && item.name === name)
+      if (artifacts.length === 0) { delete sync[relativePath]; dirty = true; continue }
+      try {
+        for (const artifact of artifacts) {
+          await serverAs(userId, `/artifacts/${encodeURIComponent(artifact.id)}`, 'DELETE')
+          if (Array.isArray(requirement.artifacts)) {
+            requirement.artifacts = requirement.artifacts.filter(item => item.id !== artifact.id)
+          }
+        }
+        delete sync[relativePath]
+        dirty = true
+      } catch {
+        // 服务端拒绝了（例如需求已冻结）就留着，下次 /state 再试。
+      }
+    }
+    localState.prototypeSync[requirement.id] = sync
     const pending = files.filter(file => sync[file.relativePath] !== `${file.size}:${file.updatedAt}`)
     if (pending.length === 0) continue
     const result = await uploadPrototypeArtifacts(userId, folder, baseDir, requirement.id, pending)
@@ -2148,6 +2220,21 @@ async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
       sync[item.relativePath] = item.stamp
       if (Array.isArray(requirement.artifacts)) requirement.artifacts.push(item.artifact)
       else requirement.artifacts = [item.artifact]
+    }
+    // 同一屏多次同步会在服务端压出多份同名附件；原型以最新一份为准，
+    // 旧版本删掉，免得附件列表被历史版本撑大。
+    for (const item of result.uploaded) {
+      const name = prototypeArtifactName(item.relativePath)
+      const older = (requirement.artifacts ?? []).filter(artifact =>
+        artifact.kind === PROTOTYPE_ARTIFACT_KIND && artifact.name === name && artifact.id !== item.artifact.id)
+      for (const artifact of older) {
+        try {
+          await serverAs(userId, `/artifacts/${encodeURIComponent(artifact.id)}`, 'DELETE')
+          requirement.artifacts = requirement.artifacts.filter(entry => entry.id !== artifact.id)
+        } catch {
+          // 删除失败不影响本次上传；下次同步会再清理。
+        }
+      }
     }
     localState.prototypeSync[requirement.id] = sync
     dirty = true
@@ -2463,12 +2550,14 @@ function registerTools(ctx, local) {
         if (files.length === 0) {
           files = listDesignFiles(folder, baseDirFor(local, actorId)).map(file => file.relativePath)
         }
+        // 版本文件列表只记 HTML 屏；样式/脚本等支持文件也上传，供跨角色预览内联相对引用。
+        const supportFiles = listDesignSupportFiles(folder, baseDirFor(local, actorId))
         const upload = await uploadDesignArtifacts(
           actorId,
           folder,
           baseDirFor(local, actorId),
           requirement.id,
-          files,
+          [...new Set([...files, ...supportFiles])],
         )
         // 交付前已经上传、但还没归入任何设计版本的设计附件（例如预览图），
         // 默认一并纳入本次交付，避免它们散落在团队文件里。
@@ -2888,17 +2977,20 @@ const SKILLS = [
       '   - 需求会话里描述需求 → 做**产品原型**：一屏一个 HTML 写进 `prototype/`，优先信息结构、关键流程和状态完整，不追求最终视觉。',
       '   - 设计会话里做高保真 → 做**设计稿**：加载 `ui-design` 技能，一屏一个 HTML 写进 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
       '3. 做设计稿且设计未认领、当前身份是设计时，调用 `workbench_claim_design`。',
-      '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名不带序号，一屏一个语义化名字。',
+      '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名用中文语义化名字（如 `明细列表.html`、`筛选面板.html`），不要用 `points-list` 这种英文名，也不带序号。',
       '5. 不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开画布自带的独立预览面板：工作台的「需求」面板会自动把 prototype/ 里的页面显示成原型画布，「设计」面板会自动把 design/ 里的页面显示成设计画布，文件写完自动刷新。ui-design 技能里要求 preview / check 的步骤在本工作台里跳过。',
       '6. 需要视觉自查时按 ui-design 技能的「自查」清单读源文件检查；最多三轮。',
       '7. 只汇报改动文件、取舍和剩余问题；不要编造原型或设计状态。',
       '8. 设计稿完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
       '',
       '## 产品原型（需求会话）的低保真规则',
+      '- 每屏是一份「原型 + 需求说明」的双栏文档：左边是可点的低保真界面，右边是需求说明栏；不能只有界面，也不能只有说明。',
+      '- 右栏固定包含：背景与目标（压成 1-2 行）、本屏范围（入口和本屏要解决的事）、角色与权限、字段与业务规则、验收标准，最后保留 4-5 条「关键交互标注」。只写与本屏相关的条目，不要把整篇需求文档复制到每一屏。',
+      '- 右栏沿用关键交互标注的样式：白底、1px 深灰边框、浅灰标题条、编号方块；章节标题固定为「需求说明」「关键交互标注」，接口字段和规则可直接用两列表格。',
       '- 原型是给团队看信息结构、流程和状态的，不是成品 UI。白底、1px 深灰边框、浅灰填充、系统字体，只用黑白灰。',
       '- 正文优先用灰色占位条或 XXXX，不要写满真实业务长文案；不要品牌色、照片、图标库、阴影、渐变、精致圆角、插画。',
-      '- 每屏顶部标注「需求编号 · 低保真原型 序号/总数」和页面名；页面内用 4-5 个编号标注关键交互。',
-      '- 单文件、内联 CSS/JS，不引用外部资源；桌面按 1440 宽设计；不要写绝对路径。',
+      '- 每屏顶部标注「需求编号 · 低保真原型 序号/总数」和页面名；左侧界面内用编号标注关键交互，编号与右栏「关键交互标注」一一对应。',
+      '- 单文件、内联 CSS/JS，不引用外部资源；桌面按 1440 宽设计；不要写绝对路径。文件名用中文语义化名字（如「明细列表.html」），不用英文名。',
       '- 只写 prototype/，不要写 design/，不要调用交付工具。',
       '',
       '## 高保真设计（设计会话）',

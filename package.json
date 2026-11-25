@@ -42,6 +42,9 @@
   "scripts": {
     "check": "node --check index.js && node --check client.js && node --check client.canvas.js",
     "test:bff": "node tests/host-bff.mjs",
+    "test:desktop-s13": "node e2e/desktop-s13.mjs",
+    "test:desktop-s13:preflight": "node e2e/desktop-s13.mjs --preflight",
+    "reset:test-data": "bash tools/reset-workbench-test-data.sh",
     "pack:dry": "npm pack --dry-run"
   }
 }

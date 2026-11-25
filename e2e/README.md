@@ -26,6 +26,39 @@ DSH_URL='http://127.0.0.1:3199/?token=...' npx playwright test
 
 截图输出到 `screenshots/`，失败时的 trace 在 `test-results/`。CI 默认只跑服务端 API 与集成回归；设置仓库变量 `DSH_E2E_ENABLED=1` 并提供 `DSH_URL` secret 后才会跑 UI 用例。
 
+## 桌面端真实绘制回归（2026-S13）
+
+`desktop-s13.mjs` 在 DSH 桌面端（Electron CDP）里跑「一个迭代、两个需求、原型 +
+设计稿」全链路。它只发提示词和点击，**不写任何 `prototype/`、`design/` 产物**；
+产物必须由会话里的模型生成，脚本只读文件并截图取证。
+
+```bash
+# 1. 清空测试数据并重启服务端 + 桌面端（会退出桌面端，破坏性操作）
+bash tools/reset-workbench-test-data.sh
+
+# 2. 只做预检：服务端、登录、基线是否为 2 迭代 / 9 需求
+node e2e/desktop-s13.mjs --preflight
+
+# 3.（可选）只建迭代和两个需求，停在提示词，不调用模型
+node e2e/desktop-s13.mjs --prepare
+
+# 4. （可选）只验证已有交付：跨角色预览、我的作品、缩略图，不调用模型
+node e2e/desktop-s13.mjs --verify
+
+# 5. 跑全流程（约 30–50 分钟，取决于模型）
+node e2e/desktop-s13.mjs
+
+# 或者一条命令：先重置再跑
+node e2e/desktop-s13.mjs --reset
+```
+
+- 桌面端必须带 `--remote-debugging-port=9222` 启动；重置脚本会负责重开。
+- 证据（截图、草稿、会话记录、文件清单、`report.md` / `report.json`）写到
+  `runtime/test-evidence/2026-S13-<时间>/`。
+- 失败时不补产物、不重试模型；报告里会保留失败截图和会话尾部。
+- 可选参数：`--allow-dirty`（跳过基线断言）、`--no-launch`（不自动启动桌面端）、
+  `--timeout=<秒>`（单轮模型超时，默认 900）、`--evidence=<目录>`。
+
 ## 脚本分层
 
 - 根目录的 `check-*.mjs`、`container-*.mjs`、`open-design-tab.mjs`、`see-*.mjs`、
