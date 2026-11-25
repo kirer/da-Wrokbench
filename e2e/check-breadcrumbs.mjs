@@ -201,6 +201,7 @@ const target = (state.requirements ?? []).find(requirement =>
     && requirement.sessionId)
 if (!target) throw new Error(`迭代 ${iterationCode} 里没有带原型文件的需求，无法验证画布层`)
 const isOwner = target.ownerId === state.currentUser.id
+const isDesigner = Boolean(target.designerId) && target.designerId === state.currentUser.id
 console.log(`身份：${state.currentUser.name}；画布用例需求：${target.code} ${target.title}（${isOwner ? '负责人' : '非负责人'}）`)
 
 // 1. 迭代详情：迭代列表 › 2026-S13
@@ -226,7 +227,30 @@ const overviewCrumbs = await expectCrumb({ steps: ['迭代列表', iterationCode
 if (!overviewCrumbs.dock) throw new Error('需求总述右侧会话坞应该常驻')
 if (overviewCrumbs.dockHead) throw new Error('会话坞不应该再有头部')
 await assertBarTop('需求总述')
+// 参与者卡片墙：产品/设计/测试各一张卡，卡底是各自的工作面入口。
+const wallRoles = await page.evaluate(() => [...document.querySelectorAll('.cardwall .pcard .prole')]
+  .map(el => el.innerText.trim()))
+for (const role of ['产品', '设计', '测试']) {
+  if (!wallRoles.some(text => text.startsWith(role))) throw new Error(`卡片墙缺少「${role}」卡（现有：${wallRoles.join(' / ')}）`)
+}
+console.log('参与者卡片：', wallRoles.join(' / '))
 await page.screenshot({ path: SHOT('crumb-overview') })
+
+// 3b. 设计卡的工作面：产品/其他角色看设计画布只读，设计负责人可编辑。
+const designButton = page.getByRole('button', { name: '打开设计画布' })
+if (await designButton.count() > 0 && !(await designButton.isDisabled())) {
+  await designButton.click()
+  await page.locator('.dsh-wb-stage').waitFor({ state: 'visible', timeout: 25000 })
+  await expectCrumb({ steps: ['迭代列表', iterationCode, target.code], cur: '设计' }, '设计画布层级')
+  const designCanvas = await canvasState()
+  if (designCanvas.readonly !== !isDesigner) {
+    throw new Error(`设计画布只读状态不对：readonly=${designCanvas.readonly}，设计负责人=${isDesigner}`)
+  }
+  await clickCrumb(target.code)
+  await waitFor(async () => (await crumbState())?.stage === false, '退出设计画布')
+} else {
+  console.log('设计画布未启用（还没有设计会话/设计稿），跳过')
+}
 
 // 4. 原型「打开」→ 同一张画布；产品可编辑
 await openPrototypeCanvas()

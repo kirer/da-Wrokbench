@@ -969,6 +969,21 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .aside-col { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; }
 /* 需求总览是一面扁平的卡片墙：所有卡片同样小，不按区块分组。 */
 .dsh-wb-design .cardwall { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; grid-auto-rows: 1fr; }
+/* 参与者卡：一人一张（开发按端一张），卡头是角色和人，卡底是他的工作面入口。 */
+.dsh-wb-design .pcard { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dsh-wb-design .pcard .phead { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.dsh-wb-design .pcard .prole { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.dsh-wb-design .pcard .prole svg { width: 13px; height: 13px; flex: none; color: var(--text-3); }
+.dsh-wb-design .pcard .assignee { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.dsh-wb-design .pcard .pchip { margin-left: auto; flex: none; }
+.dsh-wb-design .pcard .pbody { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dsh-wb-design .pcard .pstat { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--text-2); }
+.dsh-wb-design .pcard .pstat b { font-size: 15px; font-weight: 600; color: var(--text); }
+.dsh-wb-design .pcard .pfoot { display: flex; align-items: center; gap: 6px; border-top: 1px dashed var(--line); padding-top: 9px; margin-top: auto; }
+.dsh-wb-design .pcard .pfoot .btn { flex: none; }
+.dsh-wb-design .pcard .kv2 { display: grid; grid-template-columns: 52px 1fr; gap: 4px 6px; font-size: 11.5px; }
+.dsh-wb-design .pcard .kv2 dt { color: var(--text-3); }
+.dsh-wb-design .pcard .kv2 dd { margin: 0; color: var(--text-2); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 /* 小卡片头只留图标、标题和徽标；长说明和右侧提示收起来，别把标题挤成两行。 */
 .dsh-wb-design .cardwall .dcard2 .ch .t { white-space: nowrap; }
 .dsh-wb-design .cardwall .dcard2:not(.span2) .ch .r .tiny,
@@ -6859,7 +6874,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementPageView({ ctx, state, requirement, onOpenPrototype, onOpenSession, onOpenDesign, onOpenTest }) {
+    function RequirementPageView({ ctx, state, requirement, onOpenPrototype, onOpenSession, onOpenDesignCanvas, onOpenTest }) {
       usePreviewTickets([requirement.id])
       // 需求页的缩略图直接在弹层里放大看，不再依赖会话右栏。
       const [shotPreview, setShotPreview] = useState(null)
@@ -6868,7 +6883,6 @@ window.__ModuleLoader__.load({
       const designArtifacts = artifacts.filter(artifact => artifact.kind === 'design')
       // 需求全量页是「已沉淀」视图：设计稿只统计服务端交付附件。
       // 本机 design/ 文件仍可在设计画布预览，但不能在这里冒充已交付版本。
-      const screens = designArtifacts.filter(artifact => /\.html?$/i.test(String(artifact.name || ''))).length
       const designDelivered = requirement.designStatus === 'delivered'
         || (requirement.designVersions ?? []).length > 0
       // 原型和设计稿是两条独立轨道：prototype/ 是产品原型，design/ 与
@@ -7036,18 +7050,51 @@ window.__ModuleLoader__.load({
         .filter(event => typeof event.at === 'string' && !Number.isNaN(Date.parse(event.at)))
         .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
         .slice(0, 6)
-      const platformCard = (platform) => {
+      // 参与者卡片：一人一张卡（开发按端一张），卡里装这个人的会话状态和工作面入口。
+      // 会话记录可能属于别人（sessionId 为空，代表本机打不开他的会话）；
+      // 卡片仍要把这条记录显示出来，只有「进入会话」需要有可用的 sessionId。
+      const sessionFor = (types, personId) => (requirement.sessions ?? [])
+        .filter(session => types.includes(session.type)
+          && (personId === undefined || session.createdBy === personId))
+        .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0] ?? null
+      const productSession = sessionFor(['requirement'], requirement.ownerId)
+      const designSession = sessionFor(['design'])
+      const roleButton = (label, onClick, primary = false, disabled = false) => h('button', {
+        className: `btn btn-sm${primary ? ' btn-primary' : ' btn-ghost'}`,
+        type: 'button',
+        disabled,
+        onClick,
+      }, label)
+      const rolePerson = (person, fallback = '待认领') => person
+        ? h('span', { className: 'assignee' }, h(Avatar, { name: person.name }), person.name)
+        : h('span', { className: 'muted' }, fallback)
+      const roleCard = ({ key, icon, role, person, fallback = '待认领', chip = null, body, actions = [] }) => h('div', { className: 'pcard', key },
+        h('div', { className: 'phead' },
+          h('span', { className: 'prole' }, h(DesignIcon, { name: icon, size: 13 }), role),
+          rolePerson(person, fallback),
+          chip !== null ? h('span', { className: 'pchip' }, chip) : null,
+        ),
+        h('div', { className: 'pbody' }, body),
+        actions.length > 0 ? h('div', { className: 'pfoot' }, actions) : null,
+      )
+      const devCard = (platform) => {
         const task = devTasks.find(candidate => candidate.platformId === platform.id)
         const meta = devTaskChipMeta(task)
         const assignee = task?.assigneeId ? state.users.find(user => user.id === task.assigneeId) : null
-        return h('div', { className: 'endcard2', key: platform.id },
-          h('div', { className: 'eh' },
-            h('span', { className: 'nm' }, `${platform.name}`),
-            h(DesignChip, { tone: meta.tone, glyph: meta.glyph, className: 'st' }, meta.label),
-          ),
-          h('dl', { className: 'kv2' },
+        const session = task?.assigneeId ? sessionFor(['dev'], task.assigneeId) : null
+        const openDev = () => onOpenSession(session?.sessionId ?? requirement.sessionId)
+        return roleCard({
+          key: `dev-${platform.id}`,
+          icon: 'branch',
+          role: `开发 · ${platform.name}`,
+          person: assignee,
+          fallback: '待认领',
+          chip: h(DesignChip, { tone: meta.tone, glyph: meta.glyph }, meta.label),
+          body: h('dl', { className: 'kv2' },
             h('dt', null, '负责人'),
-            h('dd', null, assignee ? h('span', { className: 'assignee' }, h(Avatar, { name: assignee.name }), assignee.name) : h('span', { className: 'muted' }, task ? '未指派 · 进入会话认领' : '待认领 · 进入会话认领')),
+            h('dd', null, assignee
+              ? h('span', { className: 'assignee' }, h(Avatar, { name: assignee.name }), assignee.name)
+              : h('span', { className: 'muted' }, task ? '未指派 · 进入会话认领' : '待认领 · 进入会话认领')),
             h('dt', null, '时间'),
             h('dd', null, task?.startedAt || task?.finishedAt ? `${relativeTime(task.startedAt ?? task.finishedAt)}` : '未排期'),
             h('dt', null, '关键产物'),
@@ -7075,11 +7122,10 @@ window.__ModuleLoader__.load({
             h('dt', null, '依赖/阻塞'),
             h('dd', null, task?.pipelineStatus === 'failed' ? h(DesignChip, { tone: 'block', glyph: '!' }, '流水线失败') : task ? '无' : '等待认领'),
           ),
-          h('div', { className: 'foot' },
-            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenSession(requirement.sessionId) }, task ? '进入会话' : '进入会话认领') : null,
-            h('span', { className: 'upd' }, assignee ? `${assignee.name} · ${relativeTime(task?.finishedAt ?? task?.startedAt ?? requirement.updatedAt)}` : '—'),
-          ),
-        )
+          actions: requirement.sessionId
+            ? [roleButton(task ? '进入开发会话' : '进入会话认领', openDev)]
+            : [],
+        })
       }
       return h('div', { className: 'page' },
         h('div', { className: 'rf-head' },
@@ -7135,120 +7181,114 @@ window.__ModuleLoader__.load({
                   )),
             ),
           ),
-          h('div', { className: 'dcard2' },
-            h('div', { className: 'ch' },
-              h(DesignIcon, { name: 'workbench' }),
-              h('span', { className: 't' }, '原型'),
-              h('span', { className: 'r' },
-                h('span', { className: 'assignee', title: '原型负责人' },
-                  h(Avatar, { name: owner?.name ?? requirement.ownerId }),
-                  owner?.name ?? requirement.ownerId),
-                h('span', { className: 'badge' }, `原型 ${prototypeScreens} 屏`),
+          // 产品：自己的会话 + 原型画布。
+          roleCard({
+            key: 'role-product',
+            icon: 'file',
+            role: '产品',
+            person: owner,
+            fallback: '—',
+            chip: h(StatusChip, { kind: 'req', value: requirement.status }),
+            body: [
+              h('div', { className: 'pstat' },
+                h('b', null, `原型 ${prototypeScreens} 屏`),
+                h('span', { className: 'tiny muted' }, prototypeItems[0] ? `更新 ${relativeTime(prototypeItems[0].updatedAt)}` : '还没开始'),
               ),
-            ),
-            docSummary !== ''
-              ? h('div', { className: 'tiny muted', style: { margin: '0 0 8px', lineHeight: 1.55 } }, docSummary)
-              : null,
-            prototypeScreens === 0
-              ? h('div', { className: 'narep', style: { margin: '2px 0 0' } }, h(DesignIcon, { name: 'workbench' }), h('span', null, '原型尚未生成，产品在会话里出原型后显示预览。'))
-              : h('div', { className: 'shot3' },
-                  prototypeItems.slice(0, 3).map(item => shotTile({
-                    key: item.key,
-                    name: item.name,
-                    src: item.src,
-                    kind: item.kind,
-                    note: item.note,
-                    // 原型「打开」直接进画布：产品可编辑，其他角色同一张画布只读。
-                    onActivate: item.path !== '' && typeof onOpenPrototype === 'function'
-                      ? () => onOpenPrototype({ path: item.path, name: item.name })
-                      : undefined,
-                  })),
-                ),
-            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '原型文件'),
-            h('div', null,
-              prototypeItems.length === 0
-                ? h('div', { className: 'tiny muted' }, '产品原型保存到 prototype/ 后显示在这里。')
-                : [...prototypeItems].slice(-3).reverse().map(item => h('div', { className: 'vline', key: item.key },
-                    h('span', { className: 'v' }, 'HTML'),
-                    h('span', { className: 'd' }, item.name),
-                    h('span', { className: 'tiny muted', style: { marginLeft: 'auto' } }, relativeTime(item.updatedAt)),
-                  )),
-            ),
-          ),
-          h('div', { className: 'dcard2' },
-            h('div', { className: 'ch' },
-              h(DesignIcon, { name: 'package' }),
-              h('span', { className: 't' }, '设计稿'),
-              h('span', { className: 'r' },
-                designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), designer.name) : null,
-                h(StatusChip, { kind: 'design', value: requirement.designStatus }),
+              prototypeScreens === 0
+                ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'workbench' }), '原型还没开始，在会话里让 AI 出第一版。')
+                : h('div', { className: 'shot3' },
+                    prototypeItems.slice(0, 3).map(item => shotTile({
+                      key: item.key,
+                      name: item.name,
+                      src: item.src,
+                      kind: item.kind,
+                      note: item.note,
+                      // 原型「打开」直接进画布：产品可编辑，其他角色同一张画布只读。
+                      onActivate: item.path !== '' && typeof onOpenPrototype === 'function'
+                        ? () => onOpenPrototype({ path: item.path, name: item.name })
+                        : undefined,
+                    })),
+                  ),
+            ],
+            actions: [
+              roleButton('打开原型画布', () => {
+                const first = prototypeItems.find(item => item.path !== '')
+                if (first) onOpenPrototype({ path: first.path, name: first.name })
+              }, true, prototypeItems.every(item => item.path === '')),
+              requirement.sessionId !== '' || productSession !== null
+                ? roleButton('进入会话', () => onOpenSession(productSession?.sessionId ?? requirement.sessionId))
+                : null,
+            ].filter(Boolean),
+          }),
+          // 设计：自己的会话 + 设计画布；设计稿「打开」也进设计画布。
+          roleCard({
+            key: 'role-design',
+            icon: 'package',
+            role: '设计',
+            person: designer,
+            fallback: requirement.designStatus === 'not_needed' ? '无需设计' : '待认领',
+            chip: h(StatusChip, { kind: 'design', value: requirement.designStatus }),
+            body: [
+              h('div', { className: 'pstat' },
+                h('b', null, `${designPreviewable} 个可预览`),
+                h('span', { className: 'tiny muted' }, `交付版本 ${designVersions.length}`),
               ),
-            ),
-            designPreviewArtifacts.length === 0
-              ? h('div', { className: 'narep', style: { margin: '2px 0 0' } },
-                  h(DesignIcon, { name: 'package' }),
-                  h('span', null, designDelivered ? '已交付设计稿，但还没有可预览的文件。' : '设计尚未交付，交付后这里显示设计稿预览。'),
-                )
-              : h('div', { className: 'shot3' },
-                  designPreviewArtifacts.map(artifact => shotTile({
-                    key: artifact.id,
-                    name: shortName(artifact.name),
-                    src: designPreviewUrlFor(artifact),
-                    kind: /^image\//i.test(String(artifact.contentType || '')) ? 'image' : 'html',
-                    note: designNotes.get(shortName(artifact.name)) ?? '',
-                  })),
-                ),
-            h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'tag', size: 13 }), `设计组件 · ${screens} 屏 · ${designPreviewable} 个可预览`),
-            h('div', { className: 'row gap-2 wrap' },
-              h(DesignChip, { tone: 'plain' }, '部门设计系统'),
-              h(DesignChip, { tone: 'plain' }, `${(requirement.designVersions ?? []).length} 个交付版本`),
-            ),
-            requirement.designUpdatedAt ? h('div', { className: 'tiny', style: { color: 'var(--amber)' } }, '设计晚于开发更新，需评估返工。') : null,
-            h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' } },
-              h('span', { className: 'tiny muted' }, '设计版本历史见设计会话'),
-              h('span', { style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'workbench' }), '进入设计会话') : null,
-              ),
-            ),
-          ),
-          endPlatforms.map(platformCard),
+              designPreviewArtifacts.length === 0
+                ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'package' }), designDelivered ? '已交付，但还没有可预览文件。' : '设计还没开始，在会话里梳理页面后开始做。')
+                : h('div', { className: 'shot3' },
+                    designPreviewArtifacts.map(artifact => {
+                      const path = localPathOf(artifact.name)
+                      return shotTile({
+                        key: artifact.id,
+                        name: shortName(artifact.name),
+                        src: designPreviewUrlFor(artifact),
+                        kind: /^image\//i.test(String(artifact.contentType || '')) ? 'image' : 'html',
+                        note: designNotes.get(shortName(artifact.name)) ?? '',
+                        onActivate: path !== '' && typeof onOpenDesignCanvas === 'function'
+                          ? () => onOpenDesignCanvas({ path, name: shortName(artifact.name) })
+                          : undefined,
+                      })
+                    }),
+                  ),
+              requirement.designUpdatedAt ? h('div', { className: 'tiny', style: { color: 'var(--amber)' } }, '设计晚于开发更新，需评估返工。') : null,
+            ],
+            actions: [
+              typeof onOpenDesignCanvas === 'function'
+                ? roleButton('打开设计画布', () => onOpenDesignCanvas(null), true, designSession === null && designPreviewable === 0 && !designDelivered)
+                : null,
+              typeof designSession?.sessionId === 'string' && designSession.sessionId !== ''
+                ? roleButton('进入设计会话', () => onOpenSession(designSession.sessionId))
+                : null,
+            ].filter(Boolean),
+          }),
+          endPlatforms.map(devCard),
           endPlatforms.length === 0
             ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'minus' }), '未设置涉及平台。')
             : null,
-          h('div', { className: 'dcard2', key: 'test-card' },
-          h('div', { className: 'ch' },
-            h(DesignIcon, { name: 'shield' }),
-            h('span', { className: 't' }, '测试'),
-            h('span', { className: 'r' },
-              latestTest ? h('span', { className: 'assignee' }, h(Avatar, { name: state.users.find(user => user.id === latestTest.by)?.name ?? latestTest.by }), state.users.find(user => user.id === latestTest.by)?.name ?? latestTest.by) : null,
-              latestTest
-                ? h(DesignChip, { tone: latestTest.status === 'passed' ? 'done' : latestTest.status === 'failed' ? 'block' : 'warn', glyph: latestTest.status === 'passed' ? '✓' : latestTest.status === 'failed' ? '!' : '◷' }, `测试${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status}`)
-                : h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始测试'),
-            ),
-          ),
-          latestTest === null
-            ? h('div', { className: 'narep', style: { margin: '2px 0 0' } }, h(DesignIcon, { name: 'shield' }), h('span', null, '还没有测试记录。QA 在测试会话里开始一轮后，这里显示结论和证据。'))
-            : h('div', { className: 'spec-line' },
-                h('div', { className: 'spec-item' }, h('b', null, '最新一轮：'), h(MarkdownText, { text: `${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status} · ${relativeTime(latestTest.finishedAt ?? latestTest.startedAt)}${latestTest.note ? `\n\n${latestTest.note}` : ''}` })),
-                testRuns.length > 1 ? h('div', { className: 'spec-item' }, h('b', null, '测试轮次：'), `${testRuns.length} 轮`) : null,
+          // 测试：测试会话 + 测试轮次/证据，后续再加测试列表工作面。
+          roleCard({
+            key: 'role-test',
+            icon: 'shield',
+            role: '测试',
+            person: latestTest ? state.users.find(user => user.id === latestTest.by) ?? null : null,
+            fallback: '未开始',
+            chip: latestTest
+              ? h(DesignChip, { tone: latestTest.status === 'passed' ? 'done' : latestTest.status === 'failed' ? 'block' : 'warn', glyph: latestTest.status === 'passed' ? '✓' : latestTest.status === 'failed' ? '!' : '◷' }, `测试${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status}`)
+              : h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始测试'),
+            body: [
+              h('div', { className: 'pstat' },
+                h('b', null, `${testRuns.length} 轮测试`),
+                h('span', { className: 'tiny muted' }, `证据 ${testReportArtifacts.length} 份`),
               ),
-          h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'file', size: 13 }), `测试证据 · ${testReportArtifacts.length} 份`),
-          h('div', null,
-            testReportArtifacts.length === 0
-              ? h('div', { className: 'tiny muted' }, '测试报告同步到服务端后显示在这里。')
-              : [...testReportArtifacts].slice(-3).reverse().map(artifact => h('div', { className: 'vline', key: artifact.id },
-                  h('span', { className: 'v' }, 'HTML'),
-                  h('span', { className: 'd' }, shortName(artifact.name)),
-                  h('span', { className: 'tiny muted', style: { marginLeft: 'auto' } }, relativeTime(artifact.createdAt)),
-                )),
-          ),
-          h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' } },
-            h('span', { className: 'tiny muted' }, '验收标准与逐轮记录在测试会话里'),
-            h('span', { style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-              testSession ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenTest(requirement) }, h(DesignIcon, { name: 'shield' }), '进入测试会话') : null,
-            ),
-          ),
-        ),
+              latestTest === null
+                ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'shield' }), '还没有测试记录。QA 在测试会话里开始一轮后，这里显示结论和证据。')
+                : h('div', { className: 'spec-line' },
+                    h('div', { className: 'spec-item' }, h('b', null, '最新一轮：'), h(MarkdownText, { text: `${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status} · ${relativeTime(latestTest.finishedAt ?? latestTest.startedAt)}${latestTest.note ? `\n\n${latestTest.note}` : ''}` })),
+                    testRuns.length > 1 ? h('div', { className: 'spec-item' }, h('b', null, '测试轮次：'), `${testRuns.length} 轮`) : null,
+                  ),
+            ],
+            actions: testSession ? [roleButton('进入测试会话', () => onOpenTest(requirement))] : [],
+          }),
         h('div', { className: 'dcard2' },
           h('div', { className: 'ch' },
             h(DesignIcon, { name: 'history' }),
@@ -7515,6 +7555,8 @@ window.__ModuleLoader__.load({
       // 右侧会话坞常驻；中间画布只有从原型「打开」时才覆盖上来，并记住打开的是哪个文件。
       const [canvasOpen, setCanvasOpen] = useState(false)
       const [canvasTarget, setCanvasTarget] = useState(null)
+      // 中间画布可以是产品原型，也可以是设计画布；两种卡片各自打开自己的工作面。
+      const [canvasKind, setCanvasKind] = useState('prototype')
       const [shellNode, setShellNode] = useState(null)
       const [flushLeft, setFlushLeft] = useState(false)
       const [selectedRequirementId, setSelectedRequirementId] = useState(null)
@@ -7762,8 +7804,18 @@ window.__ModuleLoader__.load({
 
       const openPrototypeCanvas = useCallback((target) => {
         if (target === null || typeof target.path !== 'string' || target.path === '') return
+        setCanvasKind('prototype')
         setCanvasOpen(true)
         setCanvasTarget(target)
+        setView('requirement')
+        setWorkspaceView('requirement')
+      }, [])
+
+      // 设计卡片的工作面：设计画布。打开到具体设计稿或画布首页都走这里。
+      const openDesignCanvas = useCallback((target) => {
+        setCanvasKind('design')
+        setCanvasOpen(true)
+        setCanvasTarget(target !== null && typeof target?.path === 'string' && target.path !== '' ? target : null)
         setView('requirement')
         setWorkspaceView('requirement')
       }, [])
@@ -7861,11 +7913,20 @@ window.__ModuleLoader__.load({
         if (key === 'notifications') { setView('notifications'); return }
       }
       const navActive = view === 'iteration' || view === 'requirement' ? 'iterations' : view
-      // 右侧会话坞常驻；只有从原型「打开」时，中间才切成画布。没有自己的会话时借用需求主会话
-      // 来承载画布，非产品负责人一律只读。
-      const canvasSid = dockSessionId !== '' ? dockSessionId : (selectedRequirement?.sessionId ?? '')
-      const canvasEditable = selectedRequirement !== null && state.currentUser.id === selectedRequirement.ownerId
-      const stageActive = view === 'requirement' && selectedRequirement !== null && canvasOpen && canvasTarget !== null
+      // 右侧会话坞常驻；卡片的工作面在中间打开：产品是原型画布，设计是设计画布。
+      // 没有自己的会话时借用对应会话承载画布，不是负责人/设计负责人一律只读。
+      const designSessionId = (selectedRequirement?.sessions ?? [])
+        .find(session => session.type === 'design' && typeof session.sessionId === 'string' && session.sessionId !== '')?.sessionId ?? ''
+      // 设计会话在别人机器上时 sessionId 为空，借用当前用户的会话来承载只读画布。
+      const canvasSid = canvasKind === 'design'
+        ? (designSessionId !== ''
+            ? designSessionId
+            : (dockSessionId !== '' ? dockSessionId : (selectedRequirement?.sessionId ?? '')))
+        : (dockSessionId !== '' ? dockSessionId : (selectedRequirement?.sessionId ?? ''))
+      const canvasEditable = selectedRequirement !== null
+        && state.currentUser.id === (canvasKind === 'design' ? selectedRequirement.designerId : selectedRequirement.ownerId)
+      const stageActive = view === 'requirement' && selectedRequirement !== null && canvasOpen
+        && (canvasKind === 'design' || canvasTarget !== null)
       const iterationCrumbs = [
         { key: 'list', label: '迭代列表', onClick: goIterationList },
         activeIteration === null
@@ -7885,7 +7946,7 @@ window.__ModuleLoader__.load({
         },
       ]
       if (stageActive) {
-        requirementCrumbs.push({ key: 'canvas', label: '原型' })
+        requirementCrumbs.push({ key: 'canvas', label: canvasKind === 'design' ? '设计' : '原型' })
       }
       // 顶层页只有当前层，保证这条导航栏在所有页面都占同一个位置。
       const sectionCrumbs = {
@@ -7909,7 +7970,7 @@ window.__ModuleLoader__.load({
             requirement: selectedRequirement,
             onOpenPrototype: openPrototypeCanvas,
             onOpenSession: (sessionId) => openSession(sessionId),
-            onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+            onOpenDesignCanvas: openDesignCanvas,
             onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
           })
 
@@ -8019,15 +8080,17 @@ window.__ModuleLoader__.load({
                   h('div', { className: 'dsh-wb-stage-body' },
                     canvasSid === ''
                       ? h('div', { className: 'dsh-wb-design-msg' },
-                          h('b', null, '还没有可用的会话'),
-                          '右侧先创建你的会话，再打开原型画布。')
+                          h('b', null, canvasKind === 'design' ? '还没有设计会话' : '还没有可用的会话'),
+                          canvasKind === 'design'
+                            ? '设计先在设计会话里开始，画布会显示这一版的设计稿。'
+                            : '右侧先创建你的会话，再打开原型画布。')
                       : h(DesignStudioCanvas, {
                           sid: canvasSid,
                           ctx,
-                          targetPath: canvasTarget.path,
-                          kind: 'prototype',
+                          targetPath: canvasTarget?.path ?? '',
+                          kind: canvasKind,
                           currentWorkId: selectedRequirement.id,
-                          // 产品负责人可编辑；其他角色看同一张画布，但只读。
+                          // 产品负责人可编辑原型；设计负责人可编辑设计画布，其他人只读。
                           readOnly: !canvasEditable,
                         }),
                   ),
