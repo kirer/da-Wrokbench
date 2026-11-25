@@ -111,7 +111,10 @@ impl User {
 
     pub fn owns_platform(&self, platform_id: &str) -> bool {
         self.platforms.iter().any(|item| item == platform_id)
-            || self.active_platform_ids.iter().any(|item| item == platform_id)
+            || self
+                .active_platform_ids
+                .iter()
+                .any(|item| item == platform_id)
     }
 
     pub fn public_json(&self) -> Value {
@@ -287,6 +290,25 @@ pub struct ArtifactMeta {
     pub design_version: Option<String>,
 }
 
+/// 原型版本里的一屏：名字跟着需求文件夹里的相对路径走，正文留在附件表。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrototypeVersionFile {
+    pub name: String,
+    pub artifact_id: String,
+}
+
+/// 提交需求时固化的原型快照。原型平时随文件改动自动更新，只有提交那一刻
+/// 才记版本；这样评审、开发看到的原型能和需求版本对得上，历史版本也留得住。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrototypeVersion {
+    pub version: u32,
+    pub files: Vec<PrototypeVersionFile>,
+    pub created_at: String,
+    pub created_by: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactContent {
@@ -396,6 +418,9 @@ pub struct Requirement {
     pub owner_id: String,
     #[serde(default)]
     pub designer_id: Option<String>,
+    /// 测试负责人：提交时指定或测试同学认领；空 = 待认领。
+    #[serde(default)]
+    pub tester_id: Option<String>,
     #[serde(default)]
     pub in_scope: bool,
     #[serde(default)]
@@ -434,6 +459,9 @@ pub struct Requirement {
     pub document: RequirementDocument,
     #[serde(default)]
     pub artifacts: Vec<ArtifactMeta>,
+    /// 提交时固化的原型版本；平时改原型不会新增版本。
+    #[serde(default)]
+    pub prototype_versions: Vec<PrototypeVersion>,
     #[serde(default)]
     pub create_error: Option<String>,
     pub created_at: String,
@@ -455,7 +483,11 @@ impl Requirement {
 
     pub fn ensure_dev_tasks(&mut self) {
         for platform_id in &self.platform_ids {
-            if !self.dev_tasks.iter().any(|task| &task.platform_id == platform_id) {
+            if !self
+                .dev_tasks
+                .iter()
+                .any(|task| &task.platform_id == platform_id)
+            {
                 self.dev_tasks.push(DevTask {
                     id: format!("dev-{}", uuid::Uuid::new_v4()),
                     platform_id: platform_id.clone(),
@@ -471,11 +503,14 @@ impl Requirement {
                 });
             }
         }
-        self.dev_tasks.retain(|task| self.platform_ids.iter().any(|id| id == &task.platform_id));
+        self.dev_tasks
+            .retain(|task| self.platform_ids.iter().any(|id| id == &task.platform_id));
     }
 
     pub fn dev_task_mut(&mut self, platform_id: &str) -> Option<&mut DevTask> {
-        self.dev_tasks.iter_mut().find(|task| task.platform_id == platform_id)
+        self.dev_tasks
+            .iter_mut()
+            .find(|task| task.platform_id == platform_id)
     }
 }
 

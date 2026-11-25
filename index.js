@@ -51,6 +51,71 @@ function envFlag(value) {
   return ['1', 'true', 'yes'].includes(String(value ?? '').trim().toLowerCase())
 }
 
+// 会话开场白 / 引导消息的正文。输入框不再预填，需求编号、平台和描述要点
+// 都放在这条 assistant 消息里，产品直接照着描述即可。
+function greetingMessageText(body) {
+  const clean = (value, max) => typeof value === 'string'
+    ? value.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
+    : ''
+  const kind = body.kind === 'design' ? 'design' : 'requirement'
+  const code = clean(body.code, 40)
+  const title = clean(body.title, 120)
+  const platforms = clean(body.platforms, 200)
+  const prototypes = Number.isInteger(body.prototypes) ? Math.min(Math.max(body.prototypes, 0), 999) : 0
+  const briefed = body.briefed === true
+  // 平台在数据里是「服务端组 · 交易服务端；前端组 · Web」这种分组写法，
+  // 说话时只留端名：交易服务端、Web。
+  const platformPhrase = platforms
+    .split(/[；;]/)
+    .map(part => part.split('·').pop().trim())
+    .filter(Boolean)
+    .join('、')
+  const subject = title !== ''
+    ? (code !== '' ? `「${title}」（${code}）` : `「${title}」`)
+    : (code !== '' ? code : '这条需求')
+  const lines = []
+  if (kind === 'design') {
+    const scope = platformPhrase === '' ? '' : `要做的端有${platformPhrase}，`
+    const prototypeLine = prototypes > 0
+      ? `产品原型已经出了 ${prototypes} 屏。`
+      : '产品原型还没出，这次直接按需求描述来设计。'
+    lines.push(
+      `这是${subject}的设计会话。${scope}${prototypeLine}`,
+      '',
+      '说说你想要的样子：给谁看、什么感觉、有没有可以参考的，或者直接指哪一屏哪里要改。想到哪写到哪。',
+      '',
+      '比如可以这样说：',
+      '',
+      '「整体清爽一点，主色用品牌蓝，课程卡片把适龄和剩余名额放在显眼位置，移动端优先。」',
+      '',
+      '说清楚后，我按 /design-start 的做法一屏一个 HTML 写进这条需求的 design/，写完点设计卡右上角「打开设计画布」就能看。',
+    )
+  } else if (briefed) {
+    lines.push(
+      platformPhrase === '' ? `这是${subject}。` : `这是${subject}，要做的端有${platformPhrase}。`,
+      '',
+      '需求简报在活文档里，我能读到，不用再重复一遍。想补什么、改什么直接说，比如“名额满了报名按钮置灰”“没登录点报名先跳登录”。',
+      '',
+      '确认文档没问题后，回一句“开始做原型”，这是第二步：我按 /req-design 一屏一个 HTML 写进这条需求的 prototype/，写完点产品卡右上角「打开原型画布」就能看。',
+    )
+  } else {
+    lines.push(
+      platformPhrase === '' ? `这是${subject}。` : `这是${subject}，要做的端有${platformPhrase}。`,
+      '',
+      '我们分两步：第一步把需求聊清楚，我整理成需求文档；你确认文档后，第二步再出原型。先不用急着想页面。',
+      '',
+      '像平时跟同事讲需求那样说就行：谁在用、现在哪儿不顺手、你希望他们能做成什么。想到哪写到哪，不用凑格式，也不用一次说完。',
+      '',
+      '比如可以这样说：',
+      '',
+      '「家长选课时看不到适龄、上课形式和剩余名额，只能一个个点进去问客服。希望列表能按年龄和班型筛选，点进详情就能直接报名。」',
+      '',
+      '页面、状态、异常一时想不到没关系，我会顺着问。讲完后我先写进需求文档、复述一遍和你对齐，确认后再说原型。',
+    )
+  }
+  return lines.join('\n')
+}
+
 let baseDirOverride = null
 
 function httpError(status, message) {
@@ -138,6 +203,8 @@ function normalizeLocal(raw) {
   const data = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
   data.version = LOCAL_VERSION
   if (!data.users || typeof data.users !== 'object') data.users = {}
+  if (typeof data.lastUserId !== 'string') data.lastUserId = ''
+  if (typeof data.lastRole !== 'string') data.lastRole = ''
   for (const userId of Object.keys(data.users)) {
     const user = data.users[userId]
     if (!user || typeof user !== 'object') data.users[userId] = emptyLocalUser()
@@ -976,10 +1043,12 @@ function decorateRequirement(localState, baseDir, state, requirement) {
   })
   let primary = null
   if (requirement.primarySessionId) {
-    primary = sessions.find(item => item.id === requirement.primarySessionId && item.sessionId) || null
+    primary = sessions.find(item => (
+      item.id === requirement.primarySessionId && item.sessionId && item.archived !== true
+    )) || null
   }
-  if (primary === null) primary = sessions.find(item => item.own && item.sessionId) || null
-  if (primary === null) primary = sessions.find(item => item.sessionId) || null
+  if (primary === null) primary = sessions.find(item => item.own && item.sessionId && item.archived !== true) || null
+  if (primary === null) primary = sessions.find(item => item.sessionId && item.archived !== true) || null
   const decorated = {
     ...requirement,
     folderPath,
@@ -1031,6 +1100,35 @@ function findSessionOwner(local, dshSessionId) {
     if (user?.dshSessions?.[dshSessionId]) return userId
   }
   return null
+}
+
+// 需求删除后清掉本机保存的会话映射和资料目录映射。DSH 会话本身由调用方
+// 删除；这里只返回需要删除的 DSH 会话 ID，不碰任何会话日志文件。
+function forgetRequirementLocalState(local, requirement) {
+  const recordIds = new Set((requirement.sessions ?? []).map(record => record.id))
+  const dshSessionIds = new Set()
+  for (const user of Object.values(local.users)) {
+    if (user === null || typeof user !== 'object') continue
+    for (const recordId of recordIds) {
+      const mapping = user.sessions?.[recordId]
+      if (mapping?.dshSessionId) dshSessionIds.add(mapping.dshSessionId)
+      if (user.sessions) delete user.sessions[recordId]
+    }
+    if (user.folders) delete user.folders[requirement.id]
+    if (user.prototypeSync) delete user.prototypeSync[requirement.id]
+    if (user.testSync) delete user.testSync[requirement.id]
+  }
+  for (const user of Object.values(local.users)) {
+    if (user === null || typeof user !== 'object') continue
+    for (const dshSessionId of dshSessionIds) {
+      if (user.dshSessions) delete user.dshSessions[dshSessionId]
+      if (user.sessionOwners) delete user.sessionOwners[dshSessionId]
+      if (user.sessionUsers) delete user.sessionUsers[dshSessionId]
+      if (user.greetedSessions) delete user.greetedSessions[dshSessionId]
+    }
+  }
+  saveLocal(local)
+  return [...dshSessionIds]
 }
 
 // ---------------------------------------------------------------------------
@@ -1168,6 +1266,9 @@ function makeRoute(local, hostCtx = null) {
         return json(res, 401, { error: '请先在工作台登录', code: 'unauthorized' })
       }
       const userId = previewTicket === null ? session.user.id : previewTicket.userId
+      // 技能和斜杠命令跟着“当前使用工作台的账号 + 当前身份”走；预览票据
+      // 没有登录身份，不参与切换。
+      if (previewTicket === null) noteActiveWorkbenchUser(local, session.user)
 
       // 页面里的缩略图 iframe 先来换预览票据：短时、绑定用户与需求，只能读 design-preview。
       // 一次最多换 50 条需求（开始页一屏的作品数远小于这个量）。
@@ -1343,12 +1444,10 @@ function makeRoute(local, hostCtx = null) {
         return json(res, 200, { ok: true, userId })
       }
 
-      // 需求会话的开场白：写进会话日志，成为一条真实的 assistant 消息。
-      // 不用输入框上方的浮层，也不发模型请求。只在会话还没有真正开始（没有
-      // 任何 turn）时写一次；写成 self-contained 的 turn 1 并当场收尾。
-      // 会话日志要求第一个 turn/start 必须是 turn 1（DSH 重放时会校验），所以
-      // 不能写 turn 0。写完把仍空转的 Agent 的 lastTurn 一起推到 1，用户真正
-      // 发出的第一条消息才会接在 turn 2，而不是和开场白抢 turn 1。
+      // 需求会话的开场白 / 引导消息：写进会话日志，成为一条真实的 assistant
+      // 消息。输入框不再预填，编号、平台和描述要点都放在这条消息里。
+      // 新会话写成 self-contained 的 turn 1 并当场收尾；老会话（开场白还是
+      // 1.0 的一句话）在用户还没真正用过时补一条 turn 2 的引导消息。
       if (req.method === 'POST' && route === '/session-greeting') {
         const GREETING_TURN = 1
         const body = await readJson(req)
@@ -1365,7 +1464,10 @@ function makeRoute(local, hostCtx = null) {
         if (typeof localState.dshSessions?.[dshSessionId] !== 'string') {
           return json(res, 403, { error: '会话没有绑定工作台需求' })
         }
-        if (localState.greetedSessions[dshSessionId] === true) {
+        const greeted = localState.greetedSessions[dshSessionId]
+        const upgrade = body.upgrade === true
+        // 2 表示已经写过带需求信息的引导；true 是旧版的一句话开场白。
+        if (greeted === 2 || (greeted === true && !upgrade)) {
           return json(res, 200, { ok: true, skipped: 'greeted' })
         }
         const live = typeof hostCtx?.get === 'function' ? hostCtx.get('sessions')?.get?.(dshSessionId) : undefined
@@ -1374,10 +1476,58 @@ function makeRoute(local, hostCtx = null) {
         }
         const agents = typeof hostCtx?.get === 'function' ? hostCtx.get('agents') : undefined
         const agent = agents?.get?.(dshSessionId)
-        // 已经有真实轮次的会话不再补开场白（用户已经发过消息了）。
         let boundary = null
         try { boundary = agents?.turnBoundaryOf?.(live) ?? null } catch { boundary = null }
-        if (boundary !== null && (boundary.openTurnStartSeq !== null || boundary.lastTurn !== 0)) {
+        // 正在跑或还有没结束的轮次时不动日志，等下次打开再试。
+        if (boundary !== null && boundary.openTurnStartSeq !== null) {
+          return json(res, 200, { ok: true, skipped: 'started' })
+        }
+        const message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: [{ type: 'text', text: greetingMessageText(body) }],
+          source: { kind: 'model', provider: 'dsh-workbench', model: 'workbench-greeting' },
+        }
+        if (greeted === true) {
+          // 老版开场白只有“请描述你的需求”：会话还没被用户用过（lastTurn 仍是
+          // 开场白那 1 轮）时，补一条带需求信息和描述要点的引导消息。
+          if (!agent || agent.phase?.kind !== 'idle') {
+            return json(res, 409, { error: '会话的 Agent 还没准备好' })
+          }
+          const previousTurn = Number.isInteger(agent.phase.lastTurn) ? agent.phase.lastTurn : 0
+          if (previousTurn > 1) {
+            localState.greetedSessions[dshSessionId] = 2
+            try { saveLocal(local) } catch { /* 下次打开再判断，不写坏日志 */ }
+            return json(res, 200, { ok: true, skipped: 'started' })
+          }
+          const nextTurn = Math.max(2, previousTurn + 1)
+          // 先落盘标记，避免并发请求重复补同一条消息。
+          localState.greetedSessions[dshSessionId] = 2
+          try {
+            saveLocal(local)
+          } catch (reason) {
+            localState.greetedSessions[dshSessionId] = greeted
+            return json(res, 500, { error: `引导消息标记保存失败：${reason instanceof Error ? reason.message : String(reason)}` })
+          }
+          try {
+            live.append([
+              ['turn/start', { turn: nextTurn }],
+              ['step/start', { turn: nextTurn, step: 1 }],
+              ['assistant/message', { turn: nextTurn, step: 1, message, stream: [] }, { surfaceOp: 'append' }],
+              ['step/end', { turn: nextTurn, step: 1 }],
+              ['turn/end', { turn: nextTurn, reason: { kind: 'completed' } }],
+            ])
+            agent.phase.lastTurn = nextTurn
+          } catch (reason) {
+            return json(res, 500, {
+              error: `引导消息写入失败：${reason instanceof Error ? reason.message : String(reason)}`,
+              retryable: false,
+            })
+          }
+          return json(res, 200, { ok: true, upgraded: true })
+        }
+        // 新会话：已经有真实轮次的不再补开场白（用户已经发过消息了）。
+        if (boundary !== null && boundary.lastTurn !== 0) {
           return json(res, 200, { ok: true, skipped: 'started' })
         }
         let blank = null
@@ -1399,16 +1549,6 @@ function makeRoute(local, hostCtx = null) {
           try { agent.phase.lastTurn = previousTurn } catch { /* ignore */ }
         }
         if (!canBump) return json(res, 501, { error: '当前 DSH 版本不支持写入开场白' })
-        const kind = body.kind === 'design' ? 'design' : 'requirement'
-        const text = kind === 'design'
-          ? '请描述这次要做的设计稿：页面、关键状态和参考风格。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的设计目录 design/，画布直接出图。'
-          : '请描述你的需求。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的原型目录 prototype/，画布直接出图。'
-        const message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: [{ type: 'text', text }],
-          source: { kind: 'model', provider: 'dsh-workbench', model: 'workbench-greeting' },
-        }
         // DSH 的会话重放要求 surface 的第一条是受保护的 system/message，否则
         // 用户第一条消息触发的 system/message 会让整份日志被判为损坏
         // （SessionFormatError: system/message requires a protected first surface head）。
@@ -1422,7 +1562,7 @@ function makeRoute(local, hostCtx = null) {
         }
         // 先落盘“尝试过”标记：如果 append 只写进去一半，宁可这次没有开场白，
         // 也不能重试再写一个 turn 1（DSH 重放校验会直接判定会话日志损坏）。
-        localState.greetedSessions[dshSessionId] = true
+        localState.greetedSessions[dshSessionId] = 2
         try {
           saveLocal(local)
         } catch (reason) {
@@ -1536,7 +1676,7 @@ function makeRoute(local, hostCtx = null) {
         const baseRequirement = (stateData.requirements || []).find(item => item.id === requirementId)
         if (!baseRequirement) return json(res, 404, { error: '需求不存在或无权访问' })
         const baseDir = baseDirFor(local, userId)
-        const folder = folderPathFor(localUser(local, userId), baseDir, stateData, baseRequirement)
+        const folder = ensureRequirementFolderFor(local, userId, stateData, baseRequirement)
         if (folder === '') return json(res, 403, { error: '需求目录不在工作台内' })
         try {
           assertLocalFolderInside(baseDir, folder, '需求目录')
@@ -1568,6 +1708,37 @@ function makeRoute(local, hostCtx = null) {
         const body = await readJson(req)
         const result = await serverRaw('/requirements', { method: 'POST', token: session.token, body })
         return json(res, result.status, result.data)
+      }
+
+      // 删除需求：服务端负责权限和级联数据；本机再清掉会话映射，并尽力把
+      // 相关 DSH 会话一起删除。删除会话失败不回滚需求，返回失败数供前端提示。
+      const requirementDeleteMatch = /^\/requirements\/([^/]+)$/.exec(route)
+      if (req.method === 'DELETE' && requirementDeleteMatch) {
+        const id = decodeRoutePart(requirementDeleteMatch[1])
+        const result = await serverAs(userId, `/requirements/${encodeURIComponent(id)}`, 'DELETE')
+        const deleted = result?.requirement ?? { id, sessions: [] }
+        const dshSessionIds = forgetRequirementLocalState(local, deleted)
+        const sessionDeleteFailures = []
+        const registry = typeof hostCtx?.get === 'function' ? hostCtx.get('workspaceRegistry') : undefined
+        if (registry && typeof registry.deleteSession === 'function') {
+          for (const dshSessionId of dshSessionIds) {
+            try {
+              await registry.deleteSession(dshSessionId)
+            } catch (reason) {
+              sessionDeleteFailures.push({
+                sessionId: dshSessionId,
+                error: reason instanceof Error ? reason.message : String(reason),
+              })
+            }
+          }
+        } else if (dshSessionIds.length > 0) {
+          sessionDeleteFailures.push({ sessionId: '', error: '没有找到可用的会话删除服务' })
+        }
+        return json(res, 200, {
+          ...result,
+          deletedSessions: Math.max(0, dshSessionIds.length - sessionDeleteFailures.length),
+          sessionDeleteFailures,
+        })
       }
 
       const sessionMatch = /^\/requirements\/([^/]+)\/sessions$/.exec(route)
@@ -1841,6 +2012,36 @@ function requirementSummaryLine(state, requirement) {
 
 function requirementFolder(local, actorId, state, requirement) {
   return folderPathFor(localUser(local, actorId), baseDirFor(local, actorId), state, requirement)
+}
+
+// 需求会话的工作目录是迭代目录，原型/设计资料放在同名的需求子目录里。旧数据
+// 没有 folders 映射时按需创建并记下；同名需求用「 (2)」这类目录名区分，避免
+// 两条需求把原型写到同一个目录。
+function ensureRequirementFolderFor(local, actorId, state, requirement) {
+  const baseDir = baseDirFor(local, actorId)
+  const localState = localUser(local, actorId)
+  try {
+    const existing = requirementFolder(local, actorId, state, requirement)
+    const ownedByOther = existing !== '' && Object.entries(localState.folders).some(([id, pathValue]) => (
+      id !== requirement.id && typeof pathValue === 'string' && path.resolve(pathValue) === path.resolve(existing)
+    ))
+    if (existing !== '' && !ownedByOther && fs.existsSync(existing)) {
+      assertLocalFolderInside(baseDir, existing, '需求目录')
+      if (localState.folders[requirement.id] !== existing) {
+        localState.folders[requirement.id] = existing
+        saveLocal(local)
+      }
+      return existing
+    }
+  } catch { /* 坏映射或路径越界时按规范目录重建 */ }
+  const iteration = iterationOf(state, requirement)
+  const parent = iteration === null || iteration === undefined
+    ? baseDir
+    : path.join(baseDir, safeSegment(iteration.code, '未命名迭代'))
+  const folder = ensureRequirementFolder(parent, slugTitle(requirement.title), local, actorId, true)
+  localState.folders[requirement.id] = folder
+  saveLocal(local)
+  return folder
 }
 
 // 设计稿以团队服务端保存的交付产物为准：设计师本机文件只在本人界面上补充，
@@ -2189,6 +2390,11 @@ async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
     const files = listPrototypeFiles(folder, baseDir)
     if (files.length === 0) continue
     const sync = localState.prototypeSync[requirement.id] ?? {}
+    // 提交时固化过的原型版本要留着，本机删文件/改名字都不能把它清掉。
+    const versionedArtifacts = new Set(
+      (Array.isArray(requirement.prototypeVersions) ? requirement.prototypeVersions : [])
+        .flatMap(version => (Array.isArray(version.files) ? version.files : []).map(file => file.artifactId)),
+    )
     // 本机删掉或改了名的原型要同步清掉服务端旧附件，否则别的角色还看得到
     // 已经不存在的屏，需求全量页的屏数也会翻倍。只在本地确实还有原型时才
     // 清理：目录临时为空/不可读时不能把服务端原型全删了。
@@ -2197,7 +2403,8 @@ async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
     for (const relativePath of stale) {
       const name = prototypeArtifactName(relativePath)
       // 同一个屏每次同步都会追加一份附件，旧名字下面可能压着好几版，全部删掉。
-      const artifacts = (requirement.artifacts ?? []).filter(item => item.kind === PROTOTYPE_ARTIFACT_KIND && item.name === name)
+      const artifacts = (requirement.artifacts ?? []).filter(item =>
+        item.kind === PROTOTYPE_ARTIFACT_KIND && item.name === name && !versionedArtifacts.has(item.id))
       if (artifacts.length === 0) { delete sync[relativePath]; dirty = true; continue }
       try {
         for (const artifact of artifacts) {
@@ -2226,7 +2433,7 @@ async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
     for (const item of result.uploaded) {
       const name = prototypeArtifactName(item.relativePath)
       const older = (requirement.artifacts ?? []).filter(artifact =>
-        artifact.kind === PROTOTYPE_ARTIFACT_KIND && artifact.name === name && artifact.id !== item.artifact.id)
+        artifact.kind === PROTOTYPE_ARTIFACT_KIND && artifact.name === name && artifact.id !== item.artifact.id && !versionedArtifacts.has(artifact.id))
       for (const artifact of older) {
         try {
           await serverAs(userId, `/artifacts/${encodeURIComponent(artifact.id)}`, 'DELETE')
@@ -2240,6 +2447,37 @@ async function syncOwnPrototypes(userId, data, local, localState, baseDir) {
     dirty = true
   }
   if (dirty) saveLocal(local)
+}
+
+// 提交时把当前原型固化成版本：先同步产品本机的 prototype/，再把每个屏的
+// 最新附件 ID 传给服务端；服务端按提交版本号记一份快照。
+function prototypeSubmitFiles(requirement) {
+  const latest = new Map()
+  for (const artifact of requirement.artifacts ?? []) {
+    if (artifact.kind !== PROTOTYPE_ARTIFACT_KIND) continue
+    if (typeof artifact.name !== 'string' || artifact.name === '') continue
+    latest.set(artifact.name, artifact.id)
+  }
+  return [...latest.entries()].map(([name, artifactId]) => ({ name, artifactId }))
+}
+
+async function submitRequirementNow(local, actorId, state, requirement, summary, assignments) {
+  try {
+    await syncOwnPrototypes(actorId, state, local, localUser(local, actorId), baseDirFor(local, actorId))
+  } catch {
+    // 原型同步失败不阻断提交：先把需求送上评审，下一次 /state 还会重试同步。
+  }
+  let latest = requirement
+  try {
+    const fresh = await stateFor(actorId)
+    latest = fresh.requirements.find(item => item.id === requirement.id) ?? requirement
+  } catch { /* 用当前快照 */ }
+  return serverAs(actorId, `/requirements/${encodeURIComponent(requirement.id)}/submit`, 'POST', {
+    summary: typeof summary === 'string' && summary.trim() !== '' ? summary.trim() : undefined,
+    prototype: prototypeSubmitFiles(latest),
+    // 分工只在用户明确选了人时才传；不传就是都留待认领。
+    assignments: assignments && typeof assignments === 'object' ? assignments : undefined,
+  })
 }
 
 // 测试报告和原型一样只存在测试同学本机。测试右栏要把报告给产品和负责人看，
@@ -2401,19 +2639,106 @@ function registerTools(ctx, local) {
   ctx.inject(['tools'], (sub) => {
     sub.tools.register(defineTool(
       'workbench_submit_requirement',
-      '提交研发工作台中的需求，进入待评审。参数 requirement 可省略：当前会话已绑定需求时自动取会话对应的需求。仅在用户明确要求提交需求/送评审时调用。',
+      '提交研发工作台中的需求，进入待评审；待评审中也能再提交（相当于变更，生成 v2、v3…，评审按最新一版重新开始）。提交前先用 workbench_assignment_options 给出设计/开发/测试分工建议并让用户选择，assignments 只放用户明确选的人；用户说不用指定就省略。参数 requirement 可省略：当前会话已绑定需求时自动取会话对应的需求。仅在用户明确要求提交需求/送评审时调用。',
       {
         type: 'object',
         additionalProperties: false,
         properties: {
           requirement: { type: 'string', description: '需求编号，例如 S11-008；省略则取当前会话绑定的需求' },
           summary: { type: 'string', description: '本次提交摘要' },
+          assignments: {
+            type: 'object',
+            description: '提交时定下的分工，都省略就留待认领',
+            additionalProperties: false,
+            properties: {
+              designerId: { type: 'string', description: '设计负责人用户 id' },
+              testerId: { type: 'string', description: '测试负责人用户 id' },
+              dev: {
+                type: 'array',
+                description: '各端开发负责人',
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    platformId: { type: 'string', description: '平台 id，例如 trade-server / web' },
+                    assigneeId: { type: 'string', description: '开发负责人用户 id' },
+                  },
+                  required: ['platformId', 'assigneeId'],
+                },
+              },
+            },
+          },
         },
       },
       async (args, exec) => {
         const actorId = actorIdFromExec(local, exec)
-        const result = await actionOnRequirement(local, actorId, args, exec, 'submit', { summary: args?.summary })
-        return toolOutput(`已提交 ${result.requirement.code}「${result.requirement.title}」，当前状态：${statusLabel(result.requirement.status)}（v${result.requirement.versions.length}）。`)
+        const { state, requirement } = await requirementForExec(local, actorId, args, exec)
+        const result = await submitRequirementNow(local, actorId, state, requirement, args?.summary, args?.assignments)
+        const saved = result.requirement
+        const prototypeVersions = saved.prototypeVersions ?? []
+        const frozen = prototypeVersions.length > 0
+          ? `，原型固化为 v${prototypeVersions[prototypeVersions.length - 1].version}`
+          : ''
+        const assigned = []
+        if (saved.designerId) assigned.push(`设计 ${state.users.find(user => user.id === saved.designerId)?.name ?? saved.designerId}`)
+        for (const task of saved.devTasks ?? []) {
+          if (!task.assigneeId) continue
+          const platform = state.platforms.find(item => item.id === task.platformId)?.shortName ?? task.platformId
+          assigned.push(`${platform} ${state.users.find(user => user.id === task.assigneeId)?.name ?? task.assigneeId}`)
+        }
+        if (saved.testerId) assigned.push(`测试 ${state.users.find(user => user.id === saved.testerId)?.name ?? saved.testerId}`)
+        return toolOutput(
+          `已提交 ${saved.code}「${saved.title}」，当前状态：${statusLabel(saved.status)}（v${saved.versions.length}${frozen}）。`
+          + `分工：${assigned.length > 0 ? assigned.join('、') : '未指定，留给团队认领'}。`,
+        )
+      },
+    ))
+
+    sub.tools.register(defineTool(
+      'workbench_assignment_options',
+      '提交需求前给分工建议用：列出这条需求可以指派的设计、各端开发、测试人员（带用户 id）。只读；用户说不用指定任何人时就不要传给提交工具。',
+      {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          requirement: { type: 'string', description: '需求编号；省略则取当前会话绑定的需求' },
+        },
+      },
+      async (args, exec) => {
+        const actorId = actorIdFromExec(local, exec)
+        const { state, requirement } = await requirementForExec(local, actorId, args, exec)
+        const rolesOf = user => (Array.isArray(user.roles) ? user.roles : [])
+        const canPlan = user => rolesOf(user).some(role => role === 'lead' || role === 'admin')
+        const active = (state.users ?? []).filter(user => user.active !== false)
+        const line = user => `${user.name}（id ${user.id}${canPlan(user) ? '，负责人' : ''}）`
+        const design = active.filter(user => rolesOf(user).includes('design') || canPlan(user))
+        const test = active.filter(user => rolesOf(user).includes('qa') || canPlan(user))
+        const nameOf = id => state.users.find(user => user.id === id)?.name ?? id
+        const current = []
+        if (requirement.designerId) current.push(`设计 ${nameOf(requirement.designerId)}`)
+        for (const task of requirement.devTasks ?? []) {
+          if (!task.assigneeId) continue
+          const platform = state.platforms.find(item => item.id === task.platformId)?.shortName ?? task.platformId
+          current.push(`${platform} ${nameOf(task.assigneeId)}`)
+        }
+        if (requirement.testerId) current.push(`测试 ${nameOf(requirement.testerId)}`)
+        const devLines = (requirement.platformIds ?? []).map(platformId => {
+          const platform = state.platforms.find(item => item.id === platformId)
+          const users = active.filter(user => {
+            if (!(rolesOf(user).includes('dev') || canPlan(user))) return false
+            if (canPlan(user)) return true
+            const owned = Array.isArray(user.platforms) ? user.platforms : []
+            return owned.length === 0 || owned.includes(platformId)
+          })
+          return `开发 · ${platform?.name ?? platformId}：${users.length > 0 ? users.map(line).join('、') : '暂无可指派的人'}`
+        })
+        return toolOutput(
+          `${requirement.code}「${requirement.title}」可指派的人（提交时把 id 放进 assignments）：\n`
+          + `设计：${design.length > 0 ? design.map(line).join('、') : '暂无可指派的人'}\n`
+          + `${devLines.join('\n')}\n`
+          + `测试：${test.length > 0 ? test.map(line).join('、') : '暂无可指派的人'}\n`
+          + `当前分工：${current.length > 0 ? current.join('、') : '未指定，留给团队认领'}。`,
+        )
       },
     ))
 
@@ -2484,7 +2809,7 @@ function registerTools(ctx, local) {
         return toolOutput(
           `${requirementSummaryLine(state, requirement)}。\n`
           + `需求版本 v${requirement.versions.length}，设计版本 d${requirement.designVersions.length}，`
-          + `设计人员 ${requirement.designerId ?? '未认领'}，会话 ${requirement.sessions.length} 个。\n`
+          + `设计人员 ${requirement.designerId ?? '未认领'}，测试人员 ${requirement.testerId ?? '未认领'}，会话 ${requirement.sessions.length} 个。\n`
           + `开发：${dev}\n`
           + `测试：${latestTest === '无' ? '无' : `${latestTest.status}${latestTest.note ? `（${latestTest.note}）` : ''}`}\n`
           + (requirement.release ? `发布：${requirement.release.version}（${requirement.release.at}）` : '发布：未发布'),
@@ -2494,7 +2819,7 @@ function registerTools(ctx, local) {
 
     sub.tools.register(defineTool(
       'workbench_design_context',
-      '开始或继续一个需求的设计前调用：返回需求状态、设计状态、平台、需求文件夹和已有 HTML 设计文件。只读取，不修改。',
+      '开始或继续一个需求的设计前调用：返回需求状态、设计状态、平台、需求文件夹（不存在时按需求名创建）和已有 HTML 文件。',
       {
         type: 'object',
         additionalProperties: false,
@@ -2506,7 +2831,7 @@ function registerTools(ctx, local) {
         const actorId = actorIdFromExec(local, exec)
         const { state, requirement } = await requirementForExec(local, actorId, args, exec)
         const baseDir = baseDirFor(local, actorId)
-        const folder = requirementFolder(local, actorId, state, requirement)
+        const folder = ensureRequirementFolderFor(local, actorId, state, requirement)
         const files = listDesignFiles(folder, baseDir)
         const fileText = files.length === 0
           ? '无'
@@ -2515,16 +2840,36 @@ function registerTools(ctx, local) {
         const prototypeText = prototypes.length === 0
           ? '无'
           : prototypes.slice(0, 12).map(file => file.relativePath).join('、')
+        // 只说相对会话工作目录的位置，不把本机绝对路径送进模型上下文；模型按这个
+        // 相对路径就能写文件，不用再翻源码或猜目录。
+        const dshSessionId = exec?.agent?.session?.id
+        const recordId = typeof dshSessionId === 'string' && dshSessionId !== ''
+          ? findMappedRecord(local, actorId, dshSessionId)
+          : null
+        const sessionRecord = recordId === null
+          ? null
+          : (requirement.sessions ?? []).find(item => item.id === recordId) ?? null
+        const sessionFolder = recordId === null
+          ? ''
+          : localUser(local, actorId).sessions?.[recordId]?.folderPath ?? ''
+        const relative = sessionFolder === '' ? '' : path.relative(sessionFolder, folder)
+        const folderHint = relative !== '' && !path.isAbsolute(relative)
+          ? `「${relative}」（相对当前会话工作目录）`
+          : `「${path.basename(folder)}」`
+        const isDesign = sessionRecord?.type === 'design'
         return toolOutput(
           `${requirement.code}「${requirement.title}」：需求状态 ${statusLabel(requirement.status)}，设计状态 ${requirement.designStatus}，`
           + `设计人员 ${requirement.designerId ?? '未认领'}，平台 ${platformNames(state, requirement.platformIds)}。\n`
-          + `需求文件夹：${folder ? '已创建（本机，路径不进入模型上下文）' : '尚未创建'}。\n`
-          + `已有原型（${prototypes.length}，prototype/ 只作为需求参考，不参与设计交付）：${prototypeText}。\n`
+          + `需求文件夹：${folderHint}，已在本机创建。\n`
+          + `已有原型（${prototypes.length}${isDesign ? '，prototype/ 只作为需求参考，不参与设计交付' : ''}）：${prototypeText}。\n`
           + `已有设计文件（${files.length}）：${fileText}。\n`
-          + '开始设计：先加载 ui-design 技能；设计稿写进这条需求的 design/ 目录（一屏一个 HTML 文件），'
-          + '不要覆盖 prototype/ 里的需求原型。右侧「设计」面板会自动跟随 design/ 的文件刷新；'
-          + '不要调用 wb_preview_page / wb_check_design / wb_look_design，也不要打开画布自带的独立预览面板。'
-          + '交付时调用 workbench_deliver_design。',
+          + (isDesign
+            ? '这是设计会话：先加载 ui-design 技能；设计稿写进该需求文件夹的 design/（一屏一个 HTML），'
+              + '不要覆盖 prototype/ 里的需求原型。右侧「设计」面板会自动跟随 design/ 的文件刷新；'
+              + '不要调用 wb_preview_page / wb_check_design / wb_look_design，也不要打开画布自带的独立预览面板。'
+              + '交付时调用 workbench_deliver_design。'
+            : '这是需求会话：做产品原型，一屏一个 HTML 写进该需求文件夹的 prototype/（相对路径见上），'
+              + '不要写 design/，不要调用交付工具。写完后由用户在需求页产品卡右上角「打开原型画布」查看。'),
         )
       },
     ))
@@ -2738,13 +3083,13 @@ function registerTools(ctx, local) {
 
     sub.tools.register(defineTool(
       'workbench_test_action',
-      '测试阶段操作：start 开始测试；pass 测试通过；fail 测试不通过并记录缺陷。仅测试/负责人/管理员可调用。',
+      '测试阶段操作：claim 认领测试负责人；start 开始测试；pass 测试通过；fail 测试不通过并记录缺陷。仅测试/负责人/管理员可调用。',
       {
         type: 'object',
         additionalProperties: false,
         properties: {
           requirement: { type: 'string', description: '需求编号；省略则取当前会话绑定的需求' },
-          action: { type: 'string', enum: ['start', 'pass', 'fail'], description: '测试操作' },
+          action: { type: 'string', enum: ['claim', 'start', 'pass', 'fail'], description: '测试操作' },
           note: { type: 'string', description: '测试结论说明' },
           bugUrl: { type: 'string', description: '测试不通过时的缺陷链接' },
         },
@@ -2755,7 +3100,10 @@ function registerTools(ctx, local) {
         const action = String(args?.action ?? '')
         let path = ''
         let body = { note: args?.note, bugUrl: args?.bugUrl }
-        if (action === 'start') {
+        if (action === 'claim') {
+          path = 'test-claim'
+          body = {}
+        } else if (action === 'start') {
           path = 'test-start'
           body = {}
         } else if (action === 'pass') {
@@ -2763,7 +3111,7 @@ function registerTools(ctx, local) {
         } else if (action === 'fail') {
           path = 'test-fail'
         } else {
-          throw httpError(400, 'action 只能是 start / pass / fail')
+          throw httpError(400, 'action 只能是 claim / start / pass / fail')
         }
         const result = await actionOnRequirement(local, actorId, args, exec, path, body)
         return toolOutput(
@@ -2920,39 +3268,85 @@ function registerTools(ctx, local) {
 // ---------------------------------------------------------------------------
 
 const SKILLS = [
+  // 每个身份只加载自己前缀的技能；管理员看全部。技能名和斜杠命令同名，
+  // 用户在产品/设计/开发/测试/负责人会话里看到的是一套干净的动作集合。
   {
-    name: 'req-submit',
-    description: '提交研发工作台需求，进入待评审；调用 workbench_submit_requirement 工具。',
-    whenToUse: '用户要求提交需求、送评审、发起需求评审时',
+    name: 'req-start',
+    roles: ['product'],
+    description: '开始一条需求或提出变更：把产品口述的背景、目标、范围、用户故事和验收标准整理成需求活文档；调用 workbench_update_document。',
+    whenToUse: '产品描述新需求、改需求、补充验收标准，或评审退回后要改需求时',
     content: [
-      '# 提交需求',
+      '# 开始需求 / 提出变更',
       '',
-      '1. 从用户消息或当前会话标题中确定需求编号（如 S11-008）。',
-      '2. 调用 `workbench_submit_requirement`，`summary` 写一句本次提交摘要。',
-      '3. 只汇报工具返回的结果；不要自己编造状态。',
+      '1. 先调用 `workbench_requirement_status` 确认需求编号、状态和已有文档；当前会话已绑定需求时不用传编号。',
+      '2. 把用户口述的内容整理成需求文档，调用 `workbench_update_document`：',
+      '   - `summary`：一句话说明这次要解决的问题和范围。',
+      '   - `body`：背景、目标、范围（做什么 / 不做什么）、用户故事、交互流程、数据与接口说明。',
+      '   - `acceptanceCriteria`：逐条编号的验收标准，开发和测试直接引用。',
+      '3. 变更时只改受影响的部分，保留其余内容；文档版本会自动递增。',
+      '4. 这一步只整理文档，不出原型。即使用户在一条消息里把需求和“出原型”一起说了，也先停在文档确认：复述文档要点、列出待确认项，等用户确认后再进入 `/req-design`。',
+      '5. 确认后提示下一步：原型用 `/req-design`，发布用 `/req-submit`。不要替用户提交。',
+      '6. 只汇报工具返回的文档版本号；不要编造未保存的内容。',
       '',
-      '权限：产品/负责人/管理员可以提交。',
+      '权限：产品/负责人/管理员可以编辑；创建中的需求要等创建完成。',
     ].join('\n'),
   },
   {
-    name: 'req-document',
-    description: '编写或更新研发工作台需求活文档（摘要、正文、验收标准）；调用 workbench_update_document。',
-    whenToUse: '用户要求补需求文档、写验收标准、更新需求说明时',
+    name: 'req-design',
+    roles: ['product'],
+    description: '为需求做或改产品原型（低保真）：按屏写进需求文件夹的 prototype/；原型的版本在提交需求时固化。',
+    whenToUse: '产品要求做原型、改原型、补一屏界面，或在需求会话里讨论页面结构时',
     content: [
-      '# 编写需求文档',
+      '# 做 / 改产品原型',
       '',
-      '1. 确定需求编号；需要时先调用 `workbench_requirement_status` 确认当前状态。',
-      '2. 调用 `workbench_update_document`：',
-      '   - `summary`：一句话说明这次要解决的问题和范围。',
-      '   - `body`：背景、目标、范围/不做、用户故事、交互流程、数据与接口说明。',
-      '   - `acceptanceCriteria`：逐条编号的验收标准，开发与测试直接引用。',
-      '3. 只汇报工具返回的文档版本号；不要编造未保存的内容。',
+      '这是需求流程的第二步：先确认需求文档已经和用户对齐。文档还是空的、用户刚提了新变更、或你还没向用户复述过文档要点时，先用 `/req-start` 整理并等确认，不要直接出原型。',
       '',
-      '权限：产品/负责人/管理员可以编辑；已创建中的需求需先完成创建。',
+      '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹的相对位置和已有原型文件。',
+      '2. 一屏一个 HTML，写进需求文件夹的 `prototype/`（用工具输出里的那个相对目录，不是会话工作目录下的 `prototype/`）。',
+      '3. 先看已有文件再改，避免覆盖用户手改的内容；文件名用中文语义化名字（如 `明细列表.html`、`筛选面板.html`），不要用 `points-list` 这种英文名，也不带序号。不要用本机绝对路径去猜需求文件夹。',
+      '4. 写完不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开独立预览面板：工作台会自动把 prototype/ 里的页面显示在需求页的产品卡片上，点「打开原型画布」就能看。',
+      '5. 只写 prototype/，不要写 design/，不要调用交付工具。',
+      '6. 只汇报改动文件、取舍和剩余问题；不要编造原型状态。',
+      '',
+      '## 低保真规则',
+      '- 每屏是一份「原型 + 需求说明」的双栏文档：左边是可点的低保真界面，右边是需求说明栏；不能只有界面，也不能只有说明。',
+      '- 右栏固定包含：背景与目标（压成 1-2 行）、本屏范围（入口和本屏要解决的事）、角色与权限、字段与业务规则、验收标准，最后保留 4-5 条「关键交互标注」。只写与本屏相关的条目，不要把整篇需求文档复制到每一屏。',
+      '- 右栏沿用关键交互标注的样式：白底、1px 深灰边框、浅灰标题条、编号方块；章节标题固定为「需求说明」「关键交互标注」，接口字段和规则可直接用两列表格。',
+      '- 原型是给团队看信息结构、流程和状态的，不是成品 UI。白底、1px 深灰边框、浅灰填充、系统字体，只用黑白灰。',
+      '- 正文优先用灰色占位条或 XXXX，不要写满真实业务长文案；不要品牌色、照片、图标库、阴影、渐变、精致圆角、插画。',
+      '- 每屏顶部标注「需求编号 · 低保真原型 序号/总数」和页面名；左侧界面内用编号标注关键交互，编号与右栏「关键交互标注」一一对应。',
+      '- 单文件、内联 CSS/JS，不引用外部资源；桌面按 1440 宽设计；不要写绝对路径。',
+      '',
+      '## 版本',
+      '原型平时随文件改动自动刷新，不单独记版本；用户用 `/req-submit` 提交需求时，工作台会把当前 prototype/ 固化成和需求同号的版本（v1、v2…），历史版本保留。所以先改完再提交。',
+      '',
+      '权限：产品/负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'req-submit',
+    roles: ['product'],
+    description: '提交需求进入评审，并把当前原型固化成对应版本；待评审中也能再提交成新版本。调用 workbench_submit_requirement。',
+    whenToUse: '用户要求提交需求、发布给团队评审、在已提交的需求上做变更再出一版、重新提交修改后的需求时',
+    content: [
+      '# 提交需求 / 提交变更',
+      '',
+      '1. 从用户消息或当前会话里确定需求编号和状态；当前会话已绑定需求时不用传。',
+      '   待评审中也能再提交：相当于在这版需求上做变更，会生成下一个版本（如 v2），评审按最新一版重新开始，上一版的会签记录保留但不再计数。',
+      '2. 分工建议（每次提交前都要问一次，不要直接提交）：调用 `workbench_assignment_options`，按设计、各端开发、测试各给一个建议，一句话说明理由（角色、平台、现有分工）。明确问用户：按建议指派、换人、还是都不指定。',
+      '3. 用户确认后调用 `workbench_submit_requirement`：',
+      '   - `summary` 写一句本次提交/变更摘要。',
+      '   - `assignments` 只放用户明确选的人：`designerId`、`testerId`、`dev: [{ platformId, assigneeId }]`。用户说不用指定任何人时整个省略，不要替用户决定。',
+      '4. 提交会把当前 `prototype/` 原型固化成和需求同号的版本（v1、v2…），历史版本保留；原型还没做过也可以提交，只是没有原型版本。',
+      '5. 提交后需求进入待评审，会签人会收到提醒。只汇报工具返回的编号、状态、版本号和分工。',
+      '6. 评审退回后：先 `/req-start` 改文档、`/req-design` 改原型，再 `/req-submit` 重新提交 vN。',
+      '',
+      '权限：产品/负责人/管理员可以提交；变更中的需求需要创建人或有排期权限的人提交。',
     ].join('\n'),
   },
   {
     name: 'design-claim',
+    roles: ['design'],
     description: '认领研发工作台中的设计任务；调用 workbench_claim_design 工具。',
     whenToUse: '设计人员要求认领某条需求的设计时',
     content: [
@@ -2967,41 +3361,32 @@ const SKILLS = [
   },
   {
     name: 'design-start',
-    description: '为当前需求开始或继续做产品原型 / 设计稿：读取需求上下文，按会话类型写入 prototype/ 或 design/，并打开右侧画布。',
-    whenToUse: '用户要求为某个需求做原型、开始/继续设计、改原型或改设计稿时',
+    roles: ['design'],
+    description: '开始或继续高保真设计：读取需求和产品原型，一屏一个 HTML 写进需求文件夹的 design/；写完在设计卡片上打开画布。',
+    whenToUse: '用户要求做高保真设计稿、继续设计、改设计稿时',
     content: [
-      '# 开始需求的原型 / 设计',
+      '# 开始 / 继续高保真设计',
       '',
-      '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹和已有文件。',
-      '2. 先判断这次要产出什么：',
-      '   - 需求会话里描述需求 → 做**产品原型**：一屏一个 HTML 写进 `prototype/`，优先信息结构、关键流程和状态完整，不追求最终视觉。',
-      '   - 设计会话里做高保真 → 做**设计稿**：加载 `ui-design` 技能，一屏一个 HTML 写进 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
-      '3. 做设计稿且设计未认领、当前身份是设计时，调用 `workbench_claim_design`。',
-      '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名用中文语义化名字（如 `明细列表.html`、`筛选面板.html`），不要用 `points-list` 这种英文名，也不带序号。',
-      '5. 不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开画布自带的独立预览面板：工作台的「需求」面板会自动把 prototype/ 里的页面显示成原型画布，「设计」面板会自动把 design/ 里的页面显示成设计画布，文件写完自动刷新。ui-design 技能里要求 preview / check 的步骤在本工作台里跳过。',
+      '1. 调用 `workbench_design_context`（当前会话已绑定需求时不用传编号），拿到需求状态、平台、需求文件夹的相对位置和已有文件。',
+      '2. 加载 `ui-design` 技能，按需求文档和 `prototype/` 的信息结构做设计：一屏一个 HTML 写进需求文件夹的 `design/`（需求文件夹里已有设计文件时就放它旁边）。',
+      '3. 设计未认领且当前身份是设计时，调用 `workbench_claim_design`。',
+      '4. 先看已有文件再改，避免覆盖用户手改的内容；文件名用中文语义化名字（如 `明细列表.html`、`筛选面板.html`），不要用英文名，也不带序号。不要用本机绝对路径去猜需求文件夹，以工具给的相对位置为准。',
+      '5. 不要调用 `wb_preview_page`、`wb_check_design`、`wb_look_design`，也不要打开画布自带的独立预览面板：design/ 里的页面会自动显示在设计卡片上，点「打开设计画布」就能看。ui-design 技能里要求 preview / check 的步骤在本工作台里跳过。',
       '6. 需要视觉自查时按 ui-design 技能的「自查」清单读源文件检查；最多三轮。',
-      '7. 只汇报改动文件、取舍和剩余问题；不要编造原型或设计状态。',
-      '8. 设计稿完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
+      '7. 设计稿完成后提示用户在会话里用 `/design-deliver` 交付；不要自行调用交付工具，除非用户明确要求交付。',
+      '8. 只汇报改动文件、取舍和剩余问题；不要编造设计状态。',
       '',
-      '## 产品原型（需求会话）的低保真规则',
-      '- 每屏是一份「原型 + 需求说明」的双栏文档：左边是可点的低保真界面，右边是需求说明栏；不能只有界面，也不能只有说明。',
-      '- 右栏固定包含：背景与目标（压成 1-2 行）、本屏范围（入口和本屏要解决的事）、角色与权限、字段与业务规则、验收标准，最后保留 4-5 条「关键交互标注」。只写与本屏相关的条目，不要把整篇需求文档复制到每一屏。',
-      '- 右栏沿用关键交互标注的样式：白底、1px 深灰边框、浅灰标题条、编号方块；章节标题固定为「需求说明」「关键交互标注」，接口字段和规则可直接用两列表格。',
-      '- 原型是给团队看信息结构、流程和状态的，不是成品 UI。白底、1px 深灰边框、浅灰填充、系统字体，只用黑白灰。',
-      '- 正文优先用灰色占位条或 XXXX，不要写满真实业务长文案；不要品牌色、照片、图标库、阴影、渐变、精致圆角、插画。',
-      '- 每屏顶部标注「需求编号 · 低保真原型 序号/总数」和页面名；左侧界面内用编号标注关键交互，编号与右栏「关键交互标注」一一对应。',
-      '- 单文件、内联 CSS/JS，不引用外部资源；桌面按 1440 宽设计；不要写绝对路径。文件名用中文语义化名字（如「明细列表.html」），不用英文名。',
-      '- 只写 prototype/，不要写 design/，不要调用交付工具。',
-      '',
-      '## 高保真设计（设计会话）',
-      '- 按需求文档和 prototype/ 的信息结构做 design/，一屏一个 HTML；使用真实中文文案、贴近业务的数据、明确的层级/留白/状态/操作。',
+      '## 高保真规则',
+      '- 使用真实中文文案、贴近业务的数据、明确的层级/留白/状态/操作。',
       '- 不引用外部图片、字体或图标库；需要图片时用内联 SVG 或 data URL。',
+      '- 单文件、内联 CSS/JS；桌面按 1440 宽设计。',
       '',
-      '页面文案用中文（除非需求明确是海外业务）；内容紧扣需求范围和平台。',
+      '权限：设计/负责人/管理员。',
     ].join('\n'),
   },
   {
     name: 'design-deliver',
+    roles: ['design'],
     description: '交付当前需求的设计：记录设计版本与文件，把设计状态改为已交付；调用 workbench_deliver_design。',
     whenToUse: '设计人员或负责人要求交付设计、设计完成、提交设计稿时',
     content: [
@@ -3012,111 +3397,13 @@ const SKILLS = [
       '3. 只汇报工具返回的结果；不要自己编造设计版本或交付状态。',
       '',
       '开发开始后交付或二次交付会自动标记“设计已更新”，并通知开发负责人。',
-    ].join('\n'),
-  },
-  {
-    name: 'req-review',
-    description: '评审一个待评审需求：通过后进入已通过，退回后进入待修改；支持多人会签。调用 workbench_review_requirement。',
-    whenToUse: '用户要求评审需求、通过/退回需求、给需求提评审意见时',
-    content: [
-      '# 评审需求',
       '',
-      '1. 确定需求编号；需要时先调用 `workbench_requirement_status` 确认是否为「待评审」。',
-      '2. 向用户确认评审结论（通过 / 退回）和评审意见；不要替用户做决定。',
-      '3. 调用 `workbench_review_requirement`，`decision` 传 `approve` 或 `reject`。',
-      '4. 多人会签时，提示还有哪些会签人未确认；全部通过后才进入已通过。',
-      '5. 通过后提示可以继续排期（`/req-schedule`）；退回后提示产品修改并重新 `/req-submit`。',
-    ].join('\n'),
-  },
-  {
-    name: 'req-reviewers',
-    description: '设置需求会签人；调用 workbench_set_reviewers。',
-    whenToUse: '用户要求设置会签人、增加评审人、改成多人评审时',
-    content: [
-      '# 设置会签人',
-      '',
-      '1. 确定需求编号和会签人用户 id 列表。',
-      '2. 调用 `workbench_set_reviewers`。',
-      '3. 只有待评审阶段可以设置；所有人通过后需求才进入已通过。',
-    ].join('\n'),
-  },
-  {
-    name: 'req-schedule',
-    description: '给已通过评审的需求排期：设置计划开始/结束日期；调用 workbench_schedule_requirement。',
-    whenToUse: '用户要求排期、调整需求计划时间、定开始/结束日期时',
-    content: [
-      '# 需求排期',
-      '',
-      '1. 确定需求编号；需要时先调用 `workbench_requirement_status` 确认已通过、在本期范围内。',
-      '2. 向用户确认计划开始和结束日期（YYYY-MM-DD）；可以只改一端。',
-      '3. 调用 `workbench_schedule_requirement`。',
-      '4. 只汇报工具返回的计划日期和状态。',
-    ].join('\n'),
-  },
-  {
-    name: 'req-scope',
-    description: '调整需求的本期范围：纳入本期或移出到暂缓；调用 workbench_scope_requirement。',
-    whenToUse: '用户要求把需求纳入/移出本期、调整迭代范围、暂缓需求时',
-    content: [
-      '# 调整需求范围',
-      '',
-      '1. 确定需求编号，向用户确认纳入还是移出，以及原因。',
-      '2. 调用 `workbench_scope_requirement`。',
-      '3. 范围调整会记录在需求变更历史里。',
-    ].join('\n'),
-  },
-  {
-    name: 'req-move',
-    description: '把需求移动到另一个迭代并重新编号；调用 workbench_move_requirement。',
-    whenToUse: '用户要求把需求挪到别的迭代、下期再做、跨迭代调整时',
-    content: [
-      '# 跨迭代移动',
-      '',
-      '1. 确认需求编号和目标迭代。',
-      '2. 调用 `workbench_move_requirement`。',
-      '3. 服务端会按目标迭代短码重新编号，并通知需求负责人。',
-      '4. 已发布需求不允许移动。',
-    ].join('\n'),
-  },
-  {
-    name: 'iteration-plan',
-    description: '查看当前迭代的需求排期概览，并协助做评审、排期、范围调整和会签设置。',
-    whenToUse: '用户要求看迭代排期、过一遍本期需求、调整迭代计划时',
-    content: [
-      '# 迭代排期',
-      '',
-      '1. 调用 `workbench_iteration_status`（不传参数时取当前迭代）。',
-      '2. 先给用户简短概览：待评审、未排期、范围外、设计未认领、设计已更新、测试不通过。',
-      '3. 询问用户要调整哪些需求；不要一次性批量改动，也不要替用户做评审结论。',
-      '4. 按用户确认逐条调用评审、排期、范围、会签工具。',
-    ].join('\n'),
-  },
-  {
-    name: 'iteration-edit',
-    description: '修改迭代名称/阶段/状态/日期/会签人，或归档恢复迭代；调用 workbench_iteration_update。',
-    whenToUse: '用户要求编辑迭代、结束迭代、归档迭代、恢复迭代、调整默认会签人时',
-    content: [
-      '# 迭代管理',
-      '',
-      '1. 确认目标迭代。',
-      '2. 调用 `workbench_iteration_update`，按用户要求传名称、阶段、状态、日期、会签人或 `archived`。',
-      '3. 归档前提醒用户：归档后迭代从切换列表隐藏，历史需求保留。',
-    ].join('\n'),
-  },
-  {
-    name: 'dev-assign',
-    description: '按平台指派开发负责人；调用 workbench_dev_action(action=assign)。',
-    whenToUse: '用户要求分配开发、指定某端负责人时',
-    content: [
-      '# 指派开发',
-      '',
-      '1. 确定需求、平台和开发负责人用户 id。',
-      '2. 调用 `workbench_dev_action`，`action` 传 `assign`，传 `platformId` 和 `assigneeId`。',
-      '3. 负责人在会话里可用 `/dev-start` 自行认领并开始开发。',
+      '权限：设计/负责人/管理员。',
     ].join('\n'),
   },
   {
     name: 'dev-start',
+    roles: ['dev'],
     description: '认领并开始某个平台的开发，记录真实开发开始时间；调用 workbench_dev_action(action=claim/start)。',
     whenToUse: '用户要求开始开发、认领开发任务、继续开发时',
     content: [
@@ -3126,10 +3413,13 @@ const SKILLS = [
       '2. 未指派时先调用 `workbench_dev_action` 的 `claim`；已指派时直接 `start`。',
       '3. `start` 会记录真实开发开始时间，之后交付的设计会标记“设计已更新”。',
       '4. 开始前提醒用户确认设计是否已交付。',
+      '',
+      '权限：开发/负责人/管理员。',
     ].join('\n'),
   },
   {
     name: 'dev-finish',
+    roles: ['dev'],
     description: '完成某个平台的开发，生成 Mock MR 与流水线状态；调用 workbench_dev_action(action=finish)。',
     whenToUse: '用户要求完成开发、提测、提交 MR 时',
     content: [
@@ -3139,23 +3429,154 @@ const SKILLS = [
       '2. 调用 `workbench_dev_action`，`action` 传 `finish`。',
       '3. 所有平台完成后需求进入「待测试」，并通知测试人员。',
       '4. 测试不通过需要重新开发时，用 `/dev-start` 或 `reopen` 重新打开。',
+      '',
+      '权限：开发/负责人/管理员。',
     ].join('\n'),
   },
   {
     name: 'test-verify',
+    roles: ['qa'],
     description: '测试开始、通过或不通过；调用 workbench_test_action。',
     whenToUse: '用户要求开始测试、提交测试结论、记录测试缺陷时',
     content: [
       '# 测试验证',
       '',
-      '1. 确认需求已进入待测试。',
+      '1. 确认需求已进入待测试；测试负责人还没人认领时，先 `claim` 认领。',
       '2. `start` 开始测试；`pass` 记录通过；`fail` 记录不通过和缺陷链接。',
       '3. 不通过会通知开发负责人和需求负责人；修复后重新 `start`。',
       '4. 全部通过后才能冻结。',
+      '',
+      '权限：测试/负责人/管理员。',
     ].join('\n'),
   },
   {
-    name: 'release-freeze',
+    name: 'lead-review',
+    roles: ['lead'],
+    description: '评审一个待评审需求：通过后进入已通过，退回后进入待修改；支持多人会签。调用 workbench_review_requirement。',
+    whenToUse: '用户要求评审需求、通过/退回需求、给需求提评审意见时',
+    content: [
+      '# 评审需求',
+      '',
+      '1. 确定需求编号；需要时先调用 `workbench_requirement_status` 确认是否为「待评审」。',
+      '2. 向用户确认评审结论（通过 / 退回）和评审意见；不要替用户做决定。',
+      '3. 调用 `workbench_review_requirement`，`decision` 传 `approve` 或 `reject`。',
+      '4. 多人会签时，提示还有哪些会签人未确认；全部通过后才进入已通过。',
+      '5. 通过后提示可以继续排期（`/lead-schedule`）；退回后提示产品修改并重新 `/req-submit`。',
+      '',
+      '权限：会签人/负责人/管理员；不能评审自己提交的需求。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-reviewers',
+    roles: ['lead'],
+    description: '设置需求会签人；调用 workbench_set_reviewers。',
+    whenToUse: '用户要求设置会签人、增加评审人、改成多人评审时',
+    content: [
+      '# 设置会签人',
+      '',
+      '1. 确定需求编号和会签人用户 id 列表。',
+      '2. 调用 `workbench_set_reviewers`。',
+      '3. 只有待评审阶段可以设置；所有人通过后需求才进入已通过。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-schedule',
+    roles: ['lead'],
+    description: '给已通过评审的需求排期：设置计划开始/结束日期；调用 workbench_schedule_requirement。',
+    whenToUse: '用户要求排期、调整需求计划时间、定开始/结束日期时',
+    content: [
+      '# 需求排期',
+      '',
+      '1. 确定需求编号；需要时先调用 `workbench_requirement_status` 确认已通过、在本期范围内。',
+      '2. 向用户确认计划开始和结束日期（YYYY-MM-DD）；可以只改一端。',
+      '3. 调用 `workbench_schedule_requirement`。',
+      '4. 只汇报工具返回的计划日期和状态。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-scope',
+    roles: ['lead'],
+    description: '调整需求的本期范围：纳入本期或移出到暂缓；调用 workbench_scope_requirement。',
+    whenToUse: '用户要求把需求纳入/移出本期、调整迭代范围、暂缓需求时',
+    content: [
+      '# 调整需求范围',
+      '',
+      '1. 确定需求编号，向用户确认纳入还是移出，以及原因。',
+      '2. 调用 `workbench_scope_requirement`。',
+      '3. 范围调整会记录在需求变更历史里。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-move',
+    roles: ['lead'],
+    description: '把需求移动到另一个迭代并重新编号；调用 workbench_move_requirement。',
+    whenToUse: '用户要求把需求挪到别的迭代、下期再做、跨迭代调整时',
+    content: [
+      '# 跨迭代移动',
+      '',
+      '1. 确认需求编号和目标迭代。',
+      '2. 调用 `workbench_move_requirement`。',
+      '3. 服务端会按目标迭代短码重新编号，并通知需求负责人。',
+      '4. 已发布需求不允许移动。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-assign-dev',
+    roles: ['lead'],
+    description: '按平台指派开发负责人；调用 workbench_dev_action(action=assign)。',
+    whenToUse: '用户要求分配开发、指定某端负责人时',
+    content: [
+      '# 指派开发',
+      '',
+      '1. 确定需求、平台和开发负责人用户 id。',
+      '2. 调用 `workbench_dev_action`，`action` 传 `assign`，传 `platformId` 和 `assigneeId`。',
+      '3. 负责人在会话里可用 `/dev-start` 自行认领并开始开发。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-iteration-plan',
+    roles: ['lead'],
+    description: '查看当前迭代的需求排期概览，并协助做评审、排期、范围调整和会签设置。',
+    whenToUse: '用户要求看迭代排期、过一遍本期需求、调整迭代计划时',
+    content: [
+      '# 迭代排期',
+      '',
+      '1. 调用 `workbench_iteration_status`（不传参数时取当前迭代）。',
+      '2. 先给用户简短概览：待评审、未排期、范围外、设计未认领、设计已更新、测试不通过。',
+      '3. 询问用户要调整哪些需求；不要一次性批量改动，也不要替用户做评审结论。',
+      '4. 按用户确认逐条调用评审、排期、范围、会签工具。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-iteration-edit',
+    roles: ['lead'],
+    description: '修改迭代名称/阶段/状态/日期/会签人，或归档恢复迭代；调用 workbench_iteration_update。',
+    whenToUse: '用户要求编辑迭代、结束迭代、归档迭代、恢复迭代、调整默认会签人时',
+    content: [
+      '# 迭代管理',
+      '',
+      '1. 确认目标迭代。',
+      '2. 调用 `workbench_iteration_update`，按用户要求传名称、阶段、状态、日期、会签人或 `archived`。',
+      '3. 归档前提醒用户：归档后迭代从切换列表隐藏，历史需求保留。',
+      '',
+      '权限：负责人/管理员。',
+    ].join('\n'),
+  },
+  {
+    name: 'lead-release',
+    roles: ['lead'],
     description: '测试通过后冻结、解冻和发布；调用 workbench_release_action。',
     whenToUse: '用户要求冻结需求、发布上线、解冻需求时',
     content: [
@@ -3164,52 +3585,166 @@ const SKILLS = [
       '1. 确认需求已测试通过。',
       '2. `freeze` 冻结；`release` 发布并传版本号；`unfreeze` 解冻回到测试通过。',
       '3. 只汇报服务端返回的状态和版本号。',
+      '',
+      '权限：负责人/管理员。',
     ].join('\n'),
   },
 ]
 
 const BUILTIN_SKILL_NAMES = new Set(SKILLS.map(skill => skill.name))
+const WORKBENCH_SKILL_PROVIDER = 'dsh-workbench-roles'
 
-function registerSkills(ctx) {
-  ctx.inject(['skills'], (sub) => {
-    for (const skill of SKILLS) {
-      try {
-        sub.skills.register({
-          name: skill.name,
-          description: skill.description,
-          whenToUse: skill.whenToUse,
-          source: 'runtime',
-          invocation: { modelInvocable: true, userInvocable: true },
-          content: skill.content,
-        })
-      } catch (reason) {
-        ctx.logger?.warn?.(`[dsh-workbench] 注册技能 ${skill.name} 失败：${reason instanceof Error ? reason.message : String(reason)}`)
-      }
-    }
-  })
+// 团队技能库里已发布的技能；syncPublishedSkills 启动时拉一次，按 rolePacks
+// 过滤后一起出现在技能目录里。空 rolePacks 表示所有身份都能用。
+const publishedSkills = new Map()
+
+// 当前使用这个 DSH 的工作台身份。桌面端通常一人一号；身份和当前角色由
+// makeRoute 在每个已登录请求上更新，角色一变就刷新技能目录和斜杠命令。
+let activeWorkbenchUser = { userId: null, role: '' }
+const workbenchRoleListeners = new Set()
+let workbenchSkillsControl = null
+
+function roleFromWorkbenchUser(user) {
+  const roles = Array.isArray(user?.roles)
+    ? user.roles.filter(role => typeof role === 'string' && role !== '')
+    : []
+  const active = typeof user?.activeRole === 'string' ? user.activeRole : ''
+  if (active !== '' && roles.includes(active)) return active
+  return roles[0] ?? ''
 }
 
-async function syncPublishedSkills(ctx) {
+function currentWorkbenchRole(local) {
+  if (activeWorkbenchUser.role !== '') return activeWorkbenchUser.role
+  return typeof local?.lastRole === 'string' ? local.lastRole : ''
+}
+
+function onWorkbenchRoleChange(listener) {
+  workbenchRoleListeners.add(listener)
+  return () => workbenchRoleListeners.delete(listener)
+}
+
+function noteActiveWorkbenchUser(local, user) {
+  if (!user || typeof user.id !== 'string' || user.id === '') return
+  const role = roleFromWorkbenchUser(user)
+  const changed = activeWorkbenchUser.userId !== user.id || activeWorkbenchUser.role !== role
+  activeWorkbenchUser = { userId: user.id, role }
+  if (local.lastUserId !== user.id || local.lastRole !== role) {
+    local.lastUserId = user.id
+    local.lastRole = role
+    try { saveLocal(local) } catch { /* 持久化失败不影响请求 */ }
+  }
+  if (!changed) return
+  for (const listener of workbenchRoleListeners) {
+    try { listener(role) } catch { /* 单个监听失败不影响其它监听 */ }
+  }
+}
+
+// 管理员可以用全部身份的技能和命令；其他人只看到自己当前身份的那一套。
+function roleCanUse(role, roles) {
+  return role === 'admin' || (Array.isArray(roles) && roles.includes(role))
+}
+
+function publishedSkillVisible(skill, role) {
+  if (role === 'admin') return true
+  if (!Array.isArray(skill.rolePacks) || skill.rolePacks.length === 0) return true
+  return skill.rolePacks.includes(role)
+}
+
+function skillCandidate(skill, locator) {
+  return {
+    name: skill.name,
+    description: skill.description,
+    whenToUse: skill.whenToUse,
+    invocation: { modelInvocable: true, userInvocable: true },
+    source: 'runtime',
+    provider: WORKBENCH_SKILL_PROVIDER,
+    rank: 250,
+    locator,
+  }
+}
+
+function roleSkillCandidates(role) {
+  const candidates = []
+  for (const skill of SKILLS) {
+    if (!roleCanUse(role, skill.roles)) continue
+    candidates.push(skillCandidate(skill, { kind: 'builtin', name: skill.name }))
+  }
+  for (const skill of publishedSkills.values()) {
+    if (!publishedSkillVisible(skill, role)) continue
+    candidates.push(skillCandidate(skill, { kind: 'published', name: skill.name }))
+  }
+  return candidates
+}
+
+function skillDefinitionFor(candidate) {
+  const name = typeof candidate?.name === 'string' ? candidate.name : ''
+  const locator = candidate?.locator
+  if (locator?.kind === 'builtin') {
+    const skill = SKILLS.find(item => item.name === name)
+    if (!skill) return undefined
+    return {
+      name: skill.name,
+      description: skill.description,
+      whenToUse: skill.whenToUse,
+      invocation: { modelInvocable: true, userInvocable: true },
+      source: 'runtime',
+      provider: WORKBENCH_SKILL_PROVIDER,
+      content: skill.content,
+    }
+  }
+  const skill = publishedSkills.get(name)
+  if (!skill) return undefined
+  return {
+    name: skill.name,
+    description: skill.description,
+    whenToUse: '团队技能库中已审核发布的技能',
+    invocation: { modelInvocable: true, userInvocable: true },
+    source: 'runtime',
+    provider: WORKBENCH_SKILL_PROVIDER,
+    content: skill.content,
+  }
+}
+
+function invalidateWorkbenchSkills() {
+  try { workbenchSkillsControl?.invalidate?.() } catch { /* 目录失效失败不影响请求 */ }
+}
+
+function registerSkills(ctx, local) {
+  ctx.inject(['skills'], (sub) => {
+    try {
+      sub.skills.registerProvider((control) => {
+        workbenchSkillsControl = control
+        return {
+          name: WORKBENCH_SKILL_PROVIDER,
+          list: async () => roleSkillCandidates(currentWorkbenchRole(local)),
+          get: async (candidate) => skillDefinitionFor(candidate),
+        }
+      })
+    } catch (reason) {
+      ctx.logger?.warn?.(`[dsh-workbench] 注册角色技能提供方失败：${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  })
+  const offRoleChange = onWorkbenchRoleChange(() => invalidateWorkbenchSkills())
+  if (typeof ctx.effect === 'function') {
+    ctx.effect(() => offRoleChange, 'dsh-workbench: 身份变化时刷新技能目录')
+  }
+}
+
+async function syncPublishedSkills(ctx, local) {
   try {
     const data = await serverAs('admin', '/skills/published')
-    const extras = (data.skills || []).filter(skill => !BUILTIN_SKILL_NAMES.has(skill.name))
-    if (extras.length === 0) return
-    ctx.inject(['skills'], (sub) => {
-      for (const skill of extras) {
-        try {
-          sub.skills.register({
-            name: skill.name,
-            description: skill.description,
-            whenToUse: '团队技能库中已审核发布的技能',
-            source: 'runtime',
-            invocation: { modelInvocable: true, userInvocable: true },
-            content: skill.content,
-          })
-        } catch (reason) {
-          ctx.logger?.warn?.(`[dsh-workbench] 同步团队技能 ${skill.name} 失败：${reason instanceof Error ? reason.message : String(reason)}`)
-        }
-      }
-    })
+    publishedSkills.clear()
+    for (const skill of data.skills || []) {
+      if (!skill || typeof skill.name !== 'string' || skill.name === '') continue
+      if (BUILTIN_SKILL_NAMES.has(skill.name)) continue
+      publishedSkills.set(skill.name, {
+        name: skill.name,
+        description: String(skill.description ?? ''),
+        rolePacks: Array.isArray(skill.rolePacks) ? skill.rolePacks : [],
+        content: String(skill.content ?? ''),
+      })
+    }
+    invalidateWorkbenchSkills()
   } catch (reason) {
     ctx.logger?.warn?.(`[dsh-workbench] 团队技能同步失败：${reason instanceof Error ? reason.message : String(reason)}`)
   }
@@ -3237,260 +3772,256 @@ async function commandRequirementRef(local, actorId, agent, explicit) {
   return data.requirement.id
 }
 
+// 斜杠命令也按身份隔离：每个身份只出现一个 *-now 直达命令，动作和同名
+// 技能一一对应，但不经过模型。技能负责“帮我把事做了”，命令负责“立刻做”。
+const COMMANDS = [
+  {
+    name: 'req-now',
+    roles: ['product'],
+    description: '产品直达：submit 提交需求（固化当前原型版本）/ status 查看需求状态',
+    hint: 'submit|status [需求编号]',
+    async run(local, { agent, rawInput }) {
+      const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
+      const action = parts.shift() ?? ''
+      const actorId = actorIdFromExec(local, { agent })
+      if (action === 'submit') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        const result = await submitRequirementNow(local, actorId, state, requirement)
+        const versions = result.requirement.prototypeVersions ?? []
+        const version = versions.length > 0 ? `，原型已固化为 v${versions[versions.length - 1].version}` : ''
+        return { kind: 'success', text: `已提交 ${result.requirement.code}「${result.requirement.title}」（v${result.requirement.versions.length}）${version}。` }
+      }
+      if (action === 'status') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        return { kind: 'success', text: commandStatusText(state, requirement) }
+      }
+      return { kind: 'error', text: '用法：/req-now submit|status [需求编号]' }
+    },
+  },
+  {
+    name: 'design-now',
+    roles: ['design'],
+    description: '设计直达：claim 认领 / deliver 交付 / status 查看状态',
+    hint: 'claim|deliver|status [需求编号]',
+    async run(local, { agent, rawInput }) {
+      const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
+      const action = parts.shift() ?? ''
+      const actorId = actorIdFromExec(local, { agent })
+      if (action === 'claim') {
+        const { requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(requirement.id)}/design-claim`, 'POST', {})
+        return { kind: 'success', text: `已认领 ${result.requirement.code} 的设计。` }
+      }
+      if (action === 'deliver') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        const folder = requirementFolder(local, actorId, state, requirement)
+        const files = listDesignFiles(folder, baseDirFor(local, actorId)).map(file => file.relativePath)
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(requirement.id)}/design-deliver`, 'POST', { files })
+        return { kind: 'success', text: `已交付 ${result.requirement.code} 的设计（d${result.requirement.designVersions.length}）。` }
+      }
+      if (action === 'status') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        return { kind: 'success', text: commandStatusText(state, requirement) }
+      }
+      return { kind: 'error', text: '用法：/design-now claim|deliver|status [需求编号]' }
+    },
+  },
+  {
+    name: 'dev-now',
+    roles: ['dev'],
+    description: '开发直达：claim|start|finish|reopen 平台 [说明] / status 查看状态',
+    hint: 'claim|start|finish|reopen 平台 [说明]',
+    async run(local, { agent, rawInput }) {
+      const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
+      const action = parts.shift() ?? ''
+      const actorId = actorIdFromExec(local, { agent })
+      if (action === 'status') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        return { kind: 'success', text: commandStatusText(state, requirement) }
+      }
+      const platformId = parts.shift() ?? ''
+      if (!['claim', 'start', 'finish', 'reopen'].includes(action) || platformId === '') {
+        return { kind: 'error', text: '用法：/dev-now claim|start|finish|reopen 平台 [说明]' }
+      }
+      const ref = await commandRequirementRef(local, actorId, agent, '')
+      const body = action === 'finish' ? { platformId, note: parts.join(' ') } : { platformId }
+      const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/dev-${action}`, 'POST', body)
+      return { kind: 'success', text: `已对 ${result.requirement.code} 的 ${platformId} 执行 ${action}，需求状态 ${statusLabel(result.requirement.status)}。` }
+    },
+  },
+  {
+    name: 'test-now',
+    roles: ['qa'],
+    description: '测试直达：claim|start|pass|fail [说明] / status 查看状态',
+    hint: 'claim|start|pass|fail [说明]',
+    async run(local, { agent, rawInput }) {
+      const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
+      const action = parts.shift() ?? ''
+      const actorId = actorIdFromExec(local, { agent })
+      if (action === 'status') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        return { kind: 'success', text: commandStatusText(state, requirement) }
+      }
+      if (!['claim', 'start', 'pass', 'fail'].includes(action)) {
+        return { kind: 'error', text: '用法：/test-now claim|start|pass|fail [说明]' }
+      }
+      const ref = await commandRequirementRef(local, actorId, agent, '')
+      const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/test-${action}`, 'POST', {
+        note: parts.join(' '),
+      })
+      return { kind: 'success', text: `已执行测试 ${action}，${result.requirement.code} 当前状态 ${statusLabel(result.requirement.status)}。` }
+    },
+  },
+  {
+    name: 'lead-now',
+    roles: ['lead'],
+    description: '负责人直达：review / schedule / scope / release / assign-dev / iteration / status',
+    hint: 'review|schedule|scope|release|assign-dev|iteration|status ...',
+    async run(local, { agent, rawInput }) {
+      const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
+      const action = parts.shift() ?? ''
+      const actorId = actorIdFromExec(local, { agent })
+      if (action === 'iteration') {
+        const state = await stateFor(actorId)
+        const iteration = iterationFromState(state, parts.shift() ?? '')
+        if (!iteration) return { kind: 'error', text: `找不到迭代「${parts.shift() ?? ''}」` }
+        const requirements = state.requirements.filter(item => item.iterationId === iteration.id)
+        const inScope = requirements.filter(item => item.inScope).length
+        const pending = requirements.filter(item => item.status === 'pending_review').length
+        return {
+          kind: 'success',
+          text: `迭代 ${iteration.code}「${iteration.name}」：需求 ${requirements.length} 个，本期 ${inScope} 个，待评审 ${pending} 个。\n`
+            + [...requirements].sort((a, b) => a.code.localeCompare(b.code))
+              .map(item => `- ${requirementSummaryLine(state, item)}`)
+              .join('\n'),
+        }
+      }
+      if (action === 'review') {
+        let explicit = ''
+        if (parts.length > 0 && !['approve', 'reject', '通过', '退回'].includes(parts[0])) explicit = parts.shift()
+        const ref = await commandRequirementRef(local, actorId, agent, explicit)
+        const decisionText = parts.shift() ?? ''
+        const decision = ['approve', '通过'].includes(decisionText)
+          ? 'approve'
+          : ['reject', '退回'].includes(decisionText)
+            ? 'reject'
+            : ''
+        if (decision === '') return { kind: 'error', text: '用法：/lead-now review [需求编号] approve|reject [评审意见]' }
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/review`, 'POST', {
+          decision,
+          comment: parts.join(' '),
+        })
+        return { kind: 'success', text: `已${result.review.decision === 'approved' ? '通过' : '退回'} ${result.requirement.code}，当前状态：${statusLabel(result.requirement.status)}。` }
+      }
+      if (action === 'schedule') {
+        let explicit = ''
+        if (parts.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(parts[0])) explicit = parts.shift()
+        const ref = await commandRequirementRef(local, actorId, agent, explicit)
+        const startDate = parts.shift() ?? ''
+        const endDate = parts.shift() ?? ''
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/schedule`, 'POST', { startDate, endDate })
+        return { kind: 'success', text: `已排期 ${result.requirement.code}：${result.requirement.plannedStartDate ?? '待定'} ~ ${result.requirement.plannedEndDate ?? '待定'}。` }
+      }
+      if (action === 'scope') {
+        let explicit = ''
+        if (parts.length > 0 && !['in', 'out', '纳入', '移出'].includes(parts[0])) explicit = parts.shift()
+        const ref = await commandRequirementRef(local, actorId, agent, explicit)
+        const scopeText = parts.shift() ?? ''
+        const inScope = ['in', '纳入'].includes(scopeText)
+          ? true
+          : ['out', '移出'].includes(scopeText)
+            ? false
+            : null
+        if (inScope === null) return { kind: 'error', text: '用法：/lead-now scope [需求编号] in|out [原因]' }
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/scope`, 'POST', {
+          inScope,
+          reason: parts.join(' '),
+        })
+        return { kind: 'success', text: `已把 ${result.requirement.code} ${result.requirement.inScope ? '纳入本期范围' : '移出本期范围（暂缓）'}。` }
+      }
+      if (action === 'release') {
+        const sub = parts.shift() ?? ''
+        if (!['freeze', 'unfreeze', 'release'].includes(sub)) {
+          return { kind: 'error', text: '用法：/lead-now release freeze|unfreeze|release [版本号]' }
+        }
+        const ref = await commandRequirementRef(local, actorId, agent, '')
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/${sub}`, 'POST', {
+          version: parts.join(' '),
+        })
+        return { kind: 'success', text: `已执行 ${sub}，${result.requirement.code} 当前状态 ${statusLabel(result.requirement.status)}。` }
+      }
+      if (action === 'assign-dev') {
+        const platformId = parts.shift() ?? ''
+        const assigneeId = parts.shift() ?? ''
+        if (platformId === '' || assigneeId === '') {
+          return { kind: 'error', text: '用法：/lead-now assign-dev 平台 开发用户' }
+        }
+        const ref = await commandRequirementRef(local, actorId, agent, '')
+        const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/dev-assign`, 'POST', { platformId, assigneeId })
+        return { kind: 'success', text: `已把 ${result.requirement.code} 的 ${platformId} 指派给 ${assigneeId}。` }
+      }
+      if (action === 'status') {
+        const { state, requirement } = await commandStateAndRequirement(local, actorId, agent, parts.shift() ?? '')
+        return { kind: 'success', text: commandStatusText(state, requirement) }
+      }
+      return { kind: 'error', text: '用法：/lead-now review|schedule|scope|release|assign-dev|iteration|status ...' }
+    },
+  },
+]
+
+async function commandStateAndRequirement(local, actorId, agent, explicit) {
+  const ref = await commandRequirementRef(local, actorId, agent, explicit)
+  const state = await stateFor(actorId)
+  const requirement = state.requirements.find(item => item.code.toLowerCase() === ref.toLowerCase() || item.id === ref)
+  if (!requirement) throw httpError(404, `找不到需求「${ref}」`)
+  return { state, requirement }
+}
+
+function commandStatusText(state, requirement) {
+  return `${requirementSummaryLine(state, requirement)}。\n`
+    + `需求 v${requirement.versions.length}，原型版本 ${(requirement.prototypeVersions ?? []).length}，设计 d${requirement.designVersions.length}，`
+    + `开发 ${requirement.devTasks.filter(task => task.status === 'done').length}/${requirement.devTasks.length}，`
+    + `会话 ${requirement.sessions.length} 个。`
+}
+
 function registerCommands(ctx, local) {
   ctx.inject(['commands'], (sub) => {
-    sub.commands.register({
-      name: 'wb-submit',
-      description: '提交需求（与 /req-submit 技能走同一服务端逻辑）',
-      input: { hint: '[需求编号]' },
-      handler: async ({ agent, rawInput }) => {
+    let disposers = []
+    const sync = () => {
+      for (const dispose of disposers) {
+        try { dispose() } catch { /* 已卸载 */ }
+      }
+      disposers = []
+      const role = currentWorkbenchRole(local)
+      for (const definition of COMMANDS) {
+        if (!roleCanUse(role, definition.roles)) continue
         try {
-          const actorId = actorIdFromExec(local, { agent })
-          const ref = await commandRequirementRef(local, actorId, agent, rawInput)
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/submit`, 'POST', {})
-          return { kind: 'success', text: `已提交 ${result.requirement.code}「${result.requirement.title}」，当前状态：${statusLabel(result.requirement.status)}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
+          disposers.push(sub.commands.register({
+            name: definition.name,
+            description: definition.description,
+            input: { hint: definition.hint },
+            handler: async (invocation) => {
+              try {
+                // 命令面板可能停留在旧身份上：执行前再按当前身份挡一次。
+                if (!roleCanUse(currentWorkbenchRole(local), definition.roles)) {
+                  return { kind: 'error', text: `当前身份没有 /${definition.name}，请先切换到对应身份。` }
+                }
+                return await definition.run(local, invocation)
+              } catch (reason) {
+                return { kind: 'error', text: reason instanceof Error ? reason.message : String(reason) }
+              }
+            },
+          }))
+        } catch (reason) {
+          ctx.logger?.warn?.(`[dsh-workbench] 注册命令 /${definition.name} 失败：${reason instanceof Error ? reason.message : String(reason)}`)
         }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-claim',
-      description: '认领设计（与 /design-claim 技能走同一服务端逻辑）',
-      input: { hint: '[需求编号]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const ref = await commandRequirementRef(local, actorId, agent, rawInput)
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/design-claim`, 'POST', {})
-          return { kind: 'success', text: `已认领 ${result.requirement.code} 的设计。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-deliver',
-      description: '交付设计（与 /design-deliver 技能走同一服务端逻辑）',
-      input: { hint: '[需求编号]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const ref = await commandRequirementRef(local, actorId, agent, rawInput)
-          const state = await stateFor(actorId)
-          const requirement = state.requirements.find(item => item.code.toLowerCase() === ref.toLowerCase() || item.id === ref)
-          if (!requirement) return { kind: 'error', text: `找不到需求「${ref}」` }
-          const folder = requirementFolder(local, actorId, state, requirement)
-          const files = listDesignFiles(folder, baseDirFor(local, actorId)).map(file => file.relativePath)
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(requirement.id)}/design-deliver`, 'POST', { files })
-          return { kind: 'success', text: `已交付 ${result.requirement.code} 的设计（d${result.requirement.designVersions.length}）。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-review',
-      description: '评审需求，通过/退回（与 /req-review 技能走同一服务端逻辑）',
-      input: { hint: '[需求编号] approve|reject [评审意见]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
-          let explicit = ''
-          if (parts.length > 0 && !['approve', 'reject', '通过', '退回'].includes(parts[0])) explicit = parts.shift()
-          const ref = await commandRequirementRef(local, actorId, agent, explicit)
-          const decisionText = parts.shift() ?? ''
-          const decision = ['approve', '通过'].includes(decisionText)
-            ? 'approve'
-            : ['reject', '退回'].includes(decisionText)
-              ? 'reject'
-              : ''
-          if (decision === '') return { kind: 'error', text: '请给出评审结论：approve（通过）或 reject（退回）' }
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/review`, 'POST', {
-            decision,
-            comment: parts.join(' '),
-          })
-          return { kind: 'success', text: `已${result.review.decision === 'approved' ? '通过' : '退回'} ${result.requirement.code}，当前状态：${statusLabel(result.requirement.status)}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-schedule',
-      description: '排期（与 /req-schedule 技能走同一服务端逻辑）',
-      input: { hint: '[需求编号] 开始日期 结束日期' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
-          let explicit = ''
-          if (parts.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(parts[0])) explicit = parts.shift()
-          const ref = await commandRequirementRef(local, actorId, agent, explicit)
-          const startDate = parts.shift() ?? ''
-          const endDate = parts.shift() ?? ''
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/schedule`, 'POST', { startDate, endDate })
-          return { kind: 'success', text: `已排期 ${result.requirement.code}：${result.requirement.plannedStartDate ?? '待定'} ~ ${result.requirement.plannedEndDate ?? '待定'}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-scope',
-      description: '调整需求本期范围（与 /req-scope 技能走同一服务端逻辑）',
-      input: { hint: '[需求编号] in|out [原因]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
-          let explicit = ''
-          if (parts.length > 0 && !['in', 'out', '纳入', '移出'].includes(parts[0])) explicit = parts.shift()
-          const ref = await commandRequirementRef(local, actorId, agent, explicit)
-          const scopeText = parts.shift() ?? ''
-          const inScope = ['in', '纳入'].includes(scopeText)
-            ? true
-            : ['out', '移出'].includes(scopeText)
-              ? false
-              : null
-          if (inScope === null) return { kind: 'error', text: '请给出范围：in（纳入）或 out（移出）' }
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/scope`, 'POST', {
-            inScope,
-            reason: parts.join(' '),
-          })
-          return { kind: 'success', text: `已把 ${result.requirement.code} ${result.requirement.inScope ? '纳入本期范围' : '移出本期范围（暂缓）'}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-dev',
-      description: '开发操作：assign|claim|start|finish|reopen 平台 [开发用户]',
-      input: { hint: 'assign|claim|start|finish|reopen 平台 [开发用户]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
-          const action = parts.shift() ?? ''
-          const platformId = parts.shift() ?? ''
-          if (!['assign', 'claim', 'start', 'finish', 'reopen'].includes(action) || platformId === '') {
-            return { kind: 'error', text: '用法：/wb-dev assign|claim|start|finish|reopen 平台 [开发用户]' }
-          }
-          let body = { platformId }
-          if (action === 'assign') body = { platformId, assigneeId: parts.shift() ?? '' }
-          if (action === 'finish') body = { platformId, note: parts.join(' ') }
-          const ref = await commandRequirementRef(local, actorId, agent, '')
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/dev-${action}`, 'POST', body)
-          return { kind: 'success', text: `已对 ${result.requirement.code} 的 ${platformId} 执行 ${action}，需求状态 ${statusLabel(result.requirement.status)}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-test',
-      description: '测试操作：start|pass|fail [说明]',
-      input: { hint: 'start|pass|fail [说明]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
-          const action = parts.shift() ?? ''
-          if (!['start', 'pass', 'fail'].includes(action)) {
-            return { kind: 'error', text: '用法：/wb-test start|pass|fail [说明]' }
-          }
-          const ref = await commandRequirementRef(local, actorId, agent, '')
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/test-${action}`, 'POST', {
-            note: parts.join(' '),
-          })
-          return { kind: 'success', text: `已执行测试 ${action}，${result.requirement.code} 当前状态 ${statusLabel(result.requirement.status)}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-release',
-      description: '发布操作：freeze|unfreeze|release [版本号]',
-      input: { hint: 'freeze|unfreeze|release [版本号]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const parts = String(rawInput || '').trim().split(/\s+/).filter(Boolean)
-          const action = parts.shift() ?? ''
-          if (!['freeze', 'unfreeze', 'release'].includes(action)) {
-            return { kind: 'error', text: '用法：/wb-release freeze|unfreeze|release [版本号]' }
-          }
-          const ref = await commandRequirementRef(local, actorId, agent, '')
-          const result = await serverAs(actorId, `/requirements/${encodeURIComponent(ref)}/${action}`, 'POST', {
-            version: parts.join(' '),
-          })
-          return { kind: 'success', text: `已执行 ${action}，${result.requirement.code} 当前状态 ${statusLabel(result.requirement.status)}。` }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-iteration',
-      description: '查看当前或指定迭代概览',
-      input: { hint: '[迭代编码]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const state = await stateFor(actorId)
-          const iteration = iterationFromState(state, String(rawInput || '').trim())
-          if (!iteration) return { kind: 'error', text: `找不到迭代「${String(rawInput || '').trim()}」` }
-          const requirements = state.requirements.filter(item => item.iterationId === iteration.id)
-          const inScope = requirements.filter(item => item.inScope).length
-          const pending = requirements.filter(item => item.status === 'pending_review').length
-          return {
-            kind: 'success',
-            text: `迭代 ${iteration.code}「${iteration.name}」：需求 ${requirements.length} 个，本期 ${inScope} 个，待评审 ${pending} 个。\n`
-              + [...requirements].sort((a, b) => a.code.localeCompare(b.code))
-                .map(item => `- ${requirementSummaryLine(state, item)}`)
-                .join('\n'),
-          }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
-
-    sub.commands.register({
-      name: 'wb-status',
-      description: '查看需求完整状态',
-      input: { hint: '[需求编号]' },
-      handler: async ({ agent, rawInput }) => {
-        try {
-          const actorId = actorIdFromExec(local, { agent })
-          const ref = await commandRequirementRef(local, actorId, agent, rawInput)
-          const state = await stateFor(actorId)
-          const requirement = state.requirements.find(item => item.code.toLowerCase() === ref.toLowerCase() || item.id === ref)
-          if (!requirement) return { kind: 'error', text: `找不到需求「${ref}」` }
-          return {
-            kind: 'success',
-            text: `${requirementSummaryLine(state, requirement)}。\n`
-              + `需求 v${requirement.versions.length}，设计 d${requirement.designVersions.length}，`
-              + `开发 ${requirement.devTasks.filter(task => task.status === 'done').length}/${requirement.devTasks.length}，`
-              + `会话 ${requirement.sessions.length} 个。`,
-          }
-        } catch (error) {
-          return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
-        }
-      },
-    })
+      }
+    }
+    sync()
+    const offRoleChange = onWorkbenchRoleChange(sync)
+    if (typeof sub.effect === 'function') {
+      sub.effect(() => offRoleChange, 'dsh-workbench: 身份变化时切换斜杠命令')
+    }
   })
 }
 
@@ -3562,9 +4093,9 @@ export function apply(ctx, config = {}) {
   })
 
   registerTools(ctx, local)
-  registerSkills(ctx)
+  registerSkills(ctx, local)
   registerCommands(ctx, local)
-  void syncPublishedSkills(ctx)
+  void syncPublishedSkills(ctx, local)
 
   ctx.logger?.info?.(`[dsh-workbench] team server: ${SERVER_URL}`)
   ctx.logger?.info?.(`[dsh-workbench] local state: ${localFile()}`)

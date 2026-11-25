@@ -86,11 +86,22 @@ impl Snapshot {
 
     /// 老数据库没有 projects 表数据：内存里补一个默认项目，把没有归属的迭代挂上去。
     /// 下一次 save_snapshot 会把这个归属写回数据库。
+    /// 项目和迭代都被主动清空时保持为空，不自动塞回默认项目；只清掉用户指向已删除项目的选择。
     pub fn ensure_projects(&mut self) {
+        if self.projects.is_empty() && self.iterations.is_empty() && self.requirements.is_empty() {
+            for user in &mut self.users {
+                user.current_project_id = None;
+            }
+            return;
+        }
         if self.projects.is_empty() {
             self.projects.push(seed::default_project());
         }
-        let ids: Vec<String> = self.projects.iter().map(|project| project.id.clone()).collect();
+        let ids: Vec<String> = self
+            .projects
+            .iter()
+            .map(|project| project.id.clone())
+            .collect();
         let fallback = self.projects[0].id.clone();
         for iteration in &mut self.iterations {
             let known = iteration
@@ -196,12 +207,7 @@ pub fn demo_seed_enabled() -> bool {
     let development = matches!(env.as_str(), "development" | "dev" | "test");
     let explicit = std::env::var("WORKBENCH_SEED_DEMO")
         .ok()
-        .map(|value| {
-            matches!(
-                value.trim().to_lowercase().as_str(),
-                "1" | "true" | "yes"
-            )
-        });
+        .map(|value| matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes"));
     explicit.unwrap_or(development)
 }
 
@@ -309,13 +315,15 @@ pub fn seed_snapshot() -> Snapshot {
         notifications: Vec::new(),
         pending_events: seed::events_seed()
             .into_iter()
-            .map(|(actor_id, kind, requirement_id, iteration_id, payload)| EventDraft {
-                actor_id,
-                kind,
-                requirement_id,
-                iteration_id,
-                payload,
-            })
+            .map(
+                |(actor_id, kind, requirement_id, iteration_id, payload)| EventDraft {
+                    actor_id,
+                    kind,
+                    requirement_id,
+                    iteration_id,
+                    payload,
+                },
+            )
             .collect(),
         pending_notifications: seed::notifications()
             .into_iter()
@@ -351,7 +359,13 @@ fn seed_if_empty(conn: &Connection) -> rusqlite::Result<()> {
 
 // Postgres 使用单个 JSONB 快照；把本轮变更追加到历史数组并分配自增 id。
 pub fn append_pending(snapshot: &mut Snapshot) {
-    let mut next_event = snapshot.events.iter().map(|item| item.id).max().unwrap_or(0) + 1;
+    let mut next_event = snapshot
+        .events
+        .iter()
+        .map(|item| item.id)
+        .max()
+        .unwrap_or(0)
+        + 1;
     for draft in snapshot.pending_events.drain(..) {
         snapshot.events.push(Event {
             id: next_event,
@@ -388,11 +402,7 @@ pub fn append_pending(snapshot: &mut Snapshot) {
 
 fn parse<T: DeserializeOwned>(raw: String) -> rusqlite::Result<T> {
     serde_json::from_str(&raw).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            0,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
     })
 }
 
@@ -425,7 +435,46 @@ pub fn load_snapshot(conn: &Connection) -> rusqlite::Result<Snapshot> {
     Ok(snapshot)
 }
 
+// SQLite 后端按快照重建数据，但增量保存不会自动删除已经不在快照里的行。
+// 需求删除后要把需求行、通知和附件正文一起删掉，否则重启后会被重新加载回来。
+fn delete_removed_requirements(conn: &Connection, snapshot: &Snapshot) -> rusqlite::Result<()> {
+    let keep: std::collections::HashSet<&str> = snapshot
+        .requirements
+        .iter()
+        .map(|requirement| requirement.id.as_str())
+        .collect();
+    let mut statement = conn.prepare("SELECT id, data FROM requirements")?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut removed = Vec::new();
+    for row in rows {
+        let (id, data) = row?;
+        if !keep.contains(id.as_str()) {
+            removed.push((id, data));
+        }
+    }
+    drop(statement);
+    for (id, data) in removed {
+        if let Ok(requirement) = serde_json::from_str::<Requirement>(&data) {
+            for artifact in &requirement.artifacts {
+                conn.execute(
+                    "DELETE FROM artifact_contents WHERE id = ?1",
+                    params![&artifact.id],
+                )?;
+            }
+        }
+        conn.execute("DELETE FROM requirements WHERE id = ?1", params![&id])?;
+        conn.execute(
+            "DELETE FROM notifications WHERE requirement_id = ?1",
+            params![&id],
+        )?;
+    }
+    Ok(())
+}
+
 pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Result<()> {
+    delete_removed_requirements(conn, snapshot)?;
     for user in &snapshot.users {
         let data = serde_json::to_string(user).unwrap_or_default();
         conn.execute(

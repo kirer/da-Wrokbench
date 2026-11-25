@@ -24,14 +24,14 @@ async function openWorkbench(page, identity) {
 
   await expect(page.locator('.dsh-wb-design .plugnac')).toBeVisible()
   const identityButton = page.locator('.dsh-wb-design .topbar > button.dropdown-trigger')
-  await expect(identityButton).toContainText('当前身份')
+  await expect(identityButton).toContainText('产品')
   const avatar = identityButton.locator('.avatar').first()
   if (await avatar.isVisible().catch(() => false)) {
     await expect(avatar).toHaveText(identity.slice(0, 1))
   }
 }
 
-test('迭代列表、需求详情与活文档', async ({ page }) => {
+test('首页、需求详情与活文档', async ({ page }) => {
   await openWorkbench(page, '李四')
   await expect(page.locator('.table tbody tr').first()).toBeVisible()
   await page.screenshot({ path: 'screenshots/workbench-iterations.png', fullPage: false })
@@ -44,27 +44,27 @@ test('迭代列表、需求详情与活文档', async ({ page }) => {
   const requirement = page.locator('.rc-title').filter({ hasText: '会员积分改版' }).first()
   await requirement.click()
   await expect(page.locator('.rf-head')).toContainText('会员积分改版')
-  await expect(page.locator('.cardwall')).toContainText('总述')
+  await expect(page.locator('.req-top')).toContainText('总述')
   await expect(page.locator('.endsec').first()).toContainText('负责人')
   await page.screenshot({ path: 'screenshots/workbench-requirement.png', fullPage: true })
 })
 
 test('我的工作台与通知中心', async ({ page }) => {
   await openWorkbench(page, '李四')
-  await page.locator('.plugnac a').filter({ hasText: '我的工作台' }).click()
+  await page.locator('.home-link').filter({ hasText: '我的工作台' }).click()
   await expect(page.locator('.statbar')).toContainText('本月完成')
   await expect(page.locator('.worklist .witem').first()).toBeVisible()
   await page.screenshot({ path: 'screenshots/workbench-my.png', fullPage: false })
 
-  await page.locator('.plugnac a').filter({ hasText: '通知' }).click()
-  await expect(page.locator('.notif').first()).toBeVisible()
-  await expect(page.locator('.page-title')).toContainText('通知中心')
+  await page.locator('.topbar button[aria-label^="通知"]').click()
+  await expect(page.locator('.dsh-wb-crumbs .cur')).toHaveText('通知')
+  await expect(page.locator('.page')).toContainText(/没有通知|全部标为已读/)
   await page.screenshot({ path: 'screenshots/workbench-notifications.png', fullPage: false })
 })
 
 test('技能库筛选、详情与新建表单', async ({ page }) => {
   await openWorkbench(page, '李四')
-  await page.locator('.plugnac a').filter({ hasText: '技能库' }).click()
+  await page.locator('.home-link').filter({ hasText: '技能' }).click()
   await expect(page.locator('.skill-layout')).toBeVisible()
   await expect(page.locator('.skill-list .srow').first()).toBeVisible()
   const first = page.locator('.skill-list .srow').first()
@@ -81,7 +81,7 @@ test('技能库筛选、详情与新建表单', async ({ page }) => {
 
 test('设置页与管理员后台', async ({ page }) => {
   await openWorkbench(page, '管理员')
-  await page.locator('.plugnac a').filter({ hasText: '设置' }).click()
+  await page.getByRole('button', { name: '设置', exact: true }).click()
   await expect(page.locator('.settings-layout')).toBeVisible()
   await expect(page.locator('.set-sec').first()).toContainText('身份与平台')
   await page.screenshot({ path: 'screenshots/workbench-settings.png', fullPage: false })

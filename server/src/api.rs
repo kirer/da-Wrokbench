@@ -5,7 +5,7 @@ use crate::models::*;
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
@@ -66,7 +66,12 @@ pub struct RateBucket {
 
 impl RateBucket {
     fn new(capacity: f64, refill_secs: f64, now: i64) -> Self {
-        Self { tokens: capacity, last: now, capacity, refill_secs }
+        Self {
+            tokens: capacity,
+            last: now,
+            capacity,
+            refill_secs,
+        }
     }
 
     fn take(&mut self, now: i64) -> bool {
@@ -135,7 +140,9 @@ impl AppState {
     }
 
     fn is_revoked(&self, jti: &str, now: i64) -> bool {
-        let Ok(mut revoked) = self.revoked.lock() else { return false };
+        let Ok(mut revoked) = self.revoked.lock() else {
+            return false;
+        };
         revoked.retain(|_, expires_at| *expires_at > now);
         revoked.contains_key(jti)
     }
@@ -191,9 +198,9 @@ fn lock_sqlite(
 async fn read_snapshot(state: &AppState) -> Result<Snapshot, ApiError> {
     match &state.store {
         Store::Sqlite(db) => {
-            let conn = db
-                .lock()
-                .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效"))?;
+            let conn = db.lock().map_err(|_| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")
+            })?;
             Ok(db::load_snapshot(&conn)?)
         }
         Store::Postgres(pool) => {
@@ -210,9 +217,9 @@ where
 {
     match &state.store {
         Store::Sqlite(db) => {
-            let mut conn = db
-                .lock()
-                .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效"))?;
+            let mut conn = db.lock().map_err(|_| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")
+            })?;
             let mut snapshot = db::load_snapshot(&conn)?;
             let result = action(&mut snapshot)?;
             let tx = conn.transaction()?;
@@ -318,9 +325,10 @@ impl FromRequestParts<AppState> for AuthUser {
                 .map(|addr| {
                     addr.ip().is_loopback()
                         || match addr.ip() {
-                            std::net::IpAddr::V6(ip) => {
-                                ip.to_ipv4_mapped().map(|v4| v4.is_loopback()).unwrap_or(false)
-                            }
+                            std::net::IpAddr::V6(ip) => ip
+                                .to_ipv4_mapped()
+                                .map(|v4| v4.is_loopback())
+                                .unwrap_or(false),
                             std::net::IpAddr::V4(_) => false,
                         }
                 })
@@ -550,7 +558,10 @@ async fn auth_logout(
     Ok(Json(json!({ "ok": true })))
 }
 
-async fn auth_session(State(state): State<AppState>, AuthUser(user): AuthUser) -> Result<Json<Value>, ApiError> {
+async fn auth_session(
+    State(state): State<AppState>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<Value>, ApiError> {
     let snapshot = read_snapshot(&state).await?;
     let mut payload = auth_payload(&state.config, &user);
     payload["platformGroups"] = json!(snapshot.groups);
@@ -614,16 +625,15 @@ async fn dingtalk_exchange_inner(
     state: &AppState,
     input: DingTalkExchange,
 ) -> Result<Json<Value>, ApiError> {
-    let client_id = state
-        .config
-        .dingtalk_client_id
-        .clone()
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "缺少 DINGTALK_CLIENT_ID"))?;
-    let client_secret = state
-        .config
-        .dingtalk_client_secret
-        .clone()
-        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "缺少 DINGTALK_CLIENT_SECRET"))?;
+    let client_id = state.config.dingtalk_client_id.clone().ok_or_else(|| {
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "缺少 DINGTALK_CLIENT_ID")
+    })?;
+    let client_secret = state.config.dingtalk_client_secret.clone().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "缺少 DINGTALK_CLIENT_SECRET",
+        )
+    })?;
     if input.code.trim().is_empty() {
         return Err(ApiError::bad("缺少钉钉授权码"));
     }
@@ -641,7 +651,12 @@ async fn dingtalk_exchange_inner(
         }))
         .send()
         .await
-        .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, format!("钉钉 token 请求失败：{error}")))?;
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                format!("钉钉 token 请求失败：{error}"),
+            )
+        })?;
     if !token_response.status().is_success() {
         return Err(ApiError::unauthorized(format!(
             "钉钉换取 token 失败（{}）",
@@ -649,7 +664,10 @@ async fn dingtalk_exchange_inner(
         )));
     }
     let token_body: DingTalkTokenBody = token_response.json().await.map_err(|error| {
-        ApiError::new(StatusCode::BAD_GATEWAY, format!("钉钉 token 响应不合法：{error}"))
+        ApiError::new(
+            StatusCode::BAD_GATEWAY,
+            format!("钉钉 token 响应不合法：{error}"),
+        )
     })?;
     if token_body.access_token.is_empty() {
         return Err(ApiError::unauthorized("钉钉没有返回 accessToken"));
@@ -662,7 +680,12 @@ async fn dingtalk_exchange_inner(
         .header("x-acs-dingtalk-access-token", &token_body.access_token)
         .send()
         .await
-        .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, format!("读取钉钉用户失败：{error}")))?;
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::BAD_GATEWAY,
+                format!("读取钉钉用户失败：{error}"),
+            )
+        })?;
     if !profile_response.status().is_success() {
         return Err(ApiError::unauthorized(format!(
             "读取钉钉用户信息失败（{}）",
@@ -670,7 +693,10 @@ async fn dingtalk_exchange_inner(
         )));
     }
     let profile: DingTalkProfile = profile_response.json().await.map_err(|error| {
-        ApiError::new(StatusCode::BAD_GATEWAY, format!("钉钉用户响应不合法：{error}"))
+        ApiError::new(
+            StatusCode::BAD_GATEWAY,
+            format!("钉钉用户响应不合法：{error}"),
+        )
     })?;
     let user = mutate(state, |snapshot| {
         let user = snapshot
@@ -695,7 +721,8 @@ async fn dingtalk_exchange_inner(
             user.avatar_url = profile.avatar_url.clone();
         }
         Ok(user.clone())
-    }).await?;
+    })
+    .await?;
     let (token, expires_in) = issue_token(&state.config, &user)?;
     let mut payload = auth_payload(&state.config, &user);
     payload["token"] = json!(token);
@@ -729,7 +756,8 @@ async fn onboarding_complete(
                 folder_configured: input.folder_configured,
             },
         )
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({
         "authenticated": true,
         "user": user.private_json(),
@@ -762,7 +790,13 @@ async fn get_state(
         .filter(|project| !project.archived)
         .cloned()
         .collect::<Vec<_>>();
-    let mut requirements = snapshot.requirements.clone();
+    // 草稿只回给创建人：未发布的需求不进别人的列表，也就不会露出产品是谁。
+    let mut requirements = snapshot
+        .requirements
+        .iter()
+        .filter(|requirement| domain::requirement_visible_to(requirement, &actor))
+        .cloned()
+        .collect::<Vec<_>>();
     requirements.sort_by(|a, b| a.code.cmp(&b.code));
     Ok(Json(json!({
         "version": 5,
@@ -786,7 +820,7 @@ async fn get_state(
 
 async fn requirement_by_session(
     State(state): State<AppState>,
-    AuthUser(_actor): AuthUser,
+    AuthUser(actor): AuthUser,
     Path(record_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = read_snapshot(&state).await?;
@@ -794,11 +828,12 @@ async fn requirement_by_session(
         .requirements
         .iter()
         .find(|requirement| {
-            requirement
-                .sessions
-                .iter()
-                .any(|session| session.id == record_id)
-                || requirement.primary_session_id.as_deref() == Some(record_id.as_str())
+            domain::requirement_visible_to(requirement, &actor)
+                && (requirement
+                    .sessions
+                    .iter()
+                    .any(|session| session.id == record_id)
+                    || requirement.primary_session_id.as_deref() == Some(record_id.as_str()))
         })
         .cloned();
     Ok(Json(json!({ "requirement": requirement })))
@@ -856,7 +891,8 @@ async fn create_iteration(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let iteration = mutate(&state, |snapshot| {
         domain::create_iteration(snapshot, &actor, input)
-    }).await?;
+    })
+    .await?;
     Ok((StatusCode::CREATED, Json(json!({ "iteration": iteration }))))
 }
 
@@ -868,7 +904,8 @@ async fn update_iteration(
 ) -> Result<Json<Value>, ApiError> {
     let iteration = mutate(&state, |snapshot| {
         domain::update_iteration(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "iteration": iteration })))
 }
 
@@ -879,7 +916,8 @@ async fn select_iteration(
 ) -> Result<Json<Value>, ApiError> {
     let iteration = mutate(&state, |snapshot| {
         domain::select_iteration(snapshot, &actor, &id)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "iteration": iteration })))
 }
 
@@ -890,7 +928,8 @@ async fn archive_iteration(
 ) -> Result<Json<Value>, ApiError> {
     let iteration = mutate(&state, |snapshot| {
         domain::archive_iteration(snapshot, &actor, &id, true)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "iteration": iteration })))
 }
 
@@ -901,7 +940,8 @@ async fn restore_iteration(
 ) -> Result<Json<Value>, ApiError> {
     let iteration = mutate(&state, |snapshot| {
         domain::archive_iteration(snapshot, &actor, &id, false)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "iteration": iteration })))
 }
 
@@ -918,7 +958,8 @@ async fn move_requirement(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::move_requirement(snapshot, &actor, &input.requirement, &id)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -938,11 +979,24 @@ async fn create_requirement(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let (requirement, iteration) = mutate(&state, |snapshot| {
         domain::create_requirement(snapshot, &actor, &input.title)
-    }).await?;
+    })
+    .await?;
     Ok((
         StatusCode::CREATED,
         Json(json!({ "requirement": requirement, "iteration": iteration })),
     ))
+}
+
+async fn delete_requirement(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let requirement = mutate(&state, |snapshot| {
+        domain::delete_requirement(snapshot, &actor, &id)
+    })
+    .await?;
+    Ok(Json(json!({ "requirement": requirement })))
 }
 
 #[derive(Debug, Deserialize)]
@@ -960,7 +1014,8 @@ async fn bind_requirement(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::bind_requirement(snapshot, &actor, &id, input.session_record_id.as_deref())
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -978,7 +1033,8 @@ async fn create_failed(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::mark_create_failed(snapshot, &actor, &id, &input.error)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -998,7 +1054,8 @@ async fn record_session(
 ) -> Result<Json<Value>, ApiError> {
     let (requirement, session) = mutate(&state, |snapshot| {
         domain::record_session(snapshot, &actor, &id, &input.kind, &input.label)
-    }).await?;
+    })
+    .await?;
     Ok(Json(
         json!({ "requirement": requirement, "session": session }),
     ))
@@ -1029,9 +1086,17 @@ async fn restore_session(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SubmitBody {
     #[serde(default)]
     summary: Option<String>,
+    /// 提交时固化的原型：宿主先把产品本机的 prototype/ 同步成附件，再把
+    /// 当前每个屏的附件 ID 传上来。
+    #[serde(default)]
+    prototype: Vec<crate::models::PrototypeVersionFile>,
+    /// 提交时定下的分工（设计 / 各端开发 / 测试），都可省略。
+    #[serde(default)]
+    assignments: Option<domain::SubmitAssignments>,
 }
 
 async fn submit_requirement(
@@ -1041,8 +1106,16 @@ async fn submit_requirement(
     Json(input): Json<SubmitBody>,
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
-        domain::submit_requirement(snapshot, &actor, &id, input.summary.as_deref())
-    }).await?;
+        domain::submit_requirement(
+            snapshot,
+            &actor,
+            &id,
+            input.summary.as_deref(),
+            input.prototype,
+            input.assignments.unwrap_or_default(),
+        )
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1054,7 +1127,8 @@ async fn review_requirement(
 ) -> Result<Json<Value>, ApiError> {
     let (requirement, review) = mutate(&state, |snapshot| {
         domain::review_requirement(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(
         json!({ "requirement": requirement, "review": review }),
     ))
@@ -1074,7 +1148,8 @@ async fn set_reviewers(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::set_reviewers(snapshot, &actor, &id, input.user_ids)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1086,7 +1161,8 @@ async fn schedule_requirement(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::schedule_requirement(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1098,7 +1174,8 @@ async fn set_scope(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::set_scope(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1109,7 +1186,8 @@ async fn design_claim(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::claim_design(snapshot, &actor, &id)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1121,7 +1199,8 @@ async fn design_deliver(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::deliver_design(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1166,8 +1245,10 @@ async fn delete_artifact(
     AuthUser(actor): AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let deleted =
-        mutate(&state, |snapshot| domain::delete_artifact(snapshot, &actor, &id)).await?;
+    let deleted = mutate(&state, |snapshot| {
+        domain::delete_artifact(snapshot, &actor, &id)
+    })
+    .await?;
     Ok(Json(json!({ "deleted": deleted })))
 }
 
@@ -1179,7 +1260,8 @@ async fn dev_assign(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::dev_assign(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1197,7 +1279,8 @@ async fn dev_claim(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::dev_claim(snapshot, &actor, &id, &input.platform_id)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1230,8 +1313,8 @@ async fn dev_start(
                             .iter()
                             .position(|item| item.id == requirement.id)
                         {
-                            if let Some(task) = snapshot.requirements[index]
-                                .dev_task_mut(&input.platform_id)
+                            if let Some(task) =
+                                snapshot.requirements[index].dev_task_mut(&input.platform_id)
                             {
                                 task.branch = Some(branch.clone());
                                 task.pipeline_status = Some("pending".to_string());
@@ -1346,8 +1429,8 @@ async fn dev_finish(
                             .iter()
                             .position(|item| item.id == requirement.id)
                         {
-                            if let Some(task) = snapshot.requirements[index]
-                                .dev_task_mut(&platform_id)
+                            if let Some(task) =
+                                snapshot.requirements[index].dev_task_mut(&platform_id)
                             {
                                 task.branch = Some(branch.clone());
                                 task.mr_url = Some(mr.url.clone());
@@ -1426,7 +1509,17 @@ async fn dev_reopen(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::dev_reopen(snapshot, &actor, &id, &input.platform_id)
-    }).await?;
+    })
+    .await?;
+    Ok(Json(json!({ "requirement": requirement })))
+}
+
+async fn test_claim(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let requirement = mutate(&state, |snapshot| domain::claim_test(snapshot, &actor, &id)).await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1435,9 +1528,7 @@ async fn test_start(
     AuthUser(actor): AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let requirement = mutate(&state, |snapshot| {
-        domain::test_start(snapshot, &actor, &id)
-    }).await?;
+    let requirement = mutate(&state, |snapshot| domain::test_start(snapshot, &actor, &id)).await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1449,7 +1540,8 @@ async fn test_pass(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::test_pass(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1461,7 +1553,8 @@ async fn test_fail(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::test_fail(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1470,9 +1563,7 @@ async fn freeze(
     AuthUser(actor): AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let requirement = mutate(&state, |snapshot| {
-        domain::freeze(snapshot, &actor, &id)
-    }).await?;
+    let requirement = mutate(&state, |snapshot| domain::freeze(snapshot, &actor, &id)).await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1481,9 +1572,7 @@ async fn unfreeze(
     AuthUser(actor): AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    let requirement = mutate(&state, |snapshot| {
-        domain::unfreeze(snapshot, &actor, &id)
-    }).await?;
+    let requirement = mutate(&state, |snapshot| domain::unfreeze(snapshot, &actor, &id)).await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1495,7 +1584,8 @@ async fn release(
 ) -> Result<Json<Value>, ApiError> {
     let requirement = mutate(&state, |snapshot| {
         domain::release(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
 
@@ -1510,7 +1600,8 @@ async fn create_platform_group(
 ) -> Result<Json<Value>, ApiError> {
     let item = mutate(&state, |snapshot| {
         domain::create_platform_group(snapshot, &actor, input)
-    }).await?;
+    })
+    .await?;
     let snapshot = read_snapshot(&state).await?;
     Ok(Json(json!({
         "item": item,
@@ -1527,7 +1618,8 @@ async fn update_platform_group(
 ) -> Result<Json<Value>, ApiError> {
     let item = mutate(&state, |snapshot| {
         domain::update_platform_group(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     let snapshot = read_snapshot(&state).await?;
     Ok(Json(json!({
         "item": item,
@@ -1552,7 +1644,8 @@ async fn archive_platform_group(
             &id,
             action == "restore",
         )
-    }).await?;
+    })
+    .await?;
     let snapshot = read_snapshot(&state).await?;
     Ok(Json(json!({
         "platformGroups": snapshot.groups,
@@ -1567,7 +1660,8 @@ async fn create_platform(
 ) -> Result<Json<Value>, ApiError> {
     let item = mutate(&state, |snapshot| {
         domain::create_platform(snapshot, &actor, input)
-    }).await?;
+    })
+    .await?;
     let snapshot = read_snapshot(&state).await?;
     Ok(Json(json!({
         "item": item,
@@ -1584,7 +1678,8 @@ async fn update_platform(
 ) -> Result<Json<Value>, ApiError> {
     let item = mutate(&state, |snapshot| {
         domain::update_platform(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     let snapshot = read_snapshot(&state).await?;
     Ok(Json(json!({
         "item": item,
@@ -1602,14 +1697,9 @@ async fn archive_platform(
         return Err(ApiError::bad("action 只能是 archive 或 restore"));
     }
     mutate(&state, |snapshot| {
-        domain::archive_platform(
-            snapshot,
-            &actor,
-            "platforms",
-            &id,
-            action == "restore",
-        )
-    }).await?;
+        domain::archive_platform(snapshot, &actor, "platforms", &id, action == "restore")
+    })
+    .await?;
     let snapshot = read_snapshot(&state).await?;
     Ok(Json(json!({
         "platformGroups": snapshot.groups,
@@ -1629,9 +1719,7 @@ async fn list_skills(
     let mut skills: Vec<Skill> = snapshot
         .skills
         .into_iter()
-        .filter(|skill| {
-            actor.can_plan() || skill.scope == "global" || skill.owner_id == actor.id
-        })
+        .filter(|skill| actor.can_plan() || skill.scope == "global" || skill.owner_id == actor.id)
         .collect();
     skills.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(Json(json!({ "skills": skills })))
@@ -1672,7 +1760,8 @@ async fn create_skill(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     let skill = mutate(&state, |snapshot| {
         domain::create_skill(snapshot, &actor, input)
-    }).await?;
+    })
+    .await?;
     Ok((StatusCode::CREATED, Json(json!({ "skill": skill }))))
 }
 
@@ -1684,7 +1773,8 @@ async fn update_skill(
 ) -> Result<Json<Value>, ApiError> {
     let skill = mutate(&state, |snapshot| {
         domain::update_skill(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "skill": skill })))
 }
 
@@ -1696,7 +1786,8 @@ async fn add_skill_version(
 ) -> Result<Json<Value>, ApiError> {
     let skill = mutate(&state, |snapshot| {
         domain::add_skill_version(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "skill": skill })))
 }
 
@@ -1708,7 +1799,8 @@ async fn review_skill(
 ) -> Result<Json<Value>, ApiError> {
     let skill = mutate(&state, |snapshot| {
         domain::review_skill(snapshot, &actor, &id, input)
-    }).await?;
+    })
+    .await?;
     Ok(Json(json!({ "skill": skill })))
 }
 
@@ -1762,7 +1854,9 @@ async fn notification_groups(state: &AppState, user_id: &str) -> Result<Vec<Valu
                 key,
                 requirement_id: item.requirement_id.clone(),
                 code: requirement.map(|req| req.code.clone()).unwrap_or_default(),
-                title: requirement.map(|req| req.title.clone()).unwrap_or_else(|| "系统".to_string()),
+                title: requirement
+                    .map(|req| req.title.clone())
+                    .unwrap_or_else(|| "系统".to_string()),
                 total: 0,
                 unread: 0,
                 latest_at: item.at.clone(),
@@ -1818,7 +1912,9 @@ async fn read_notifications(
     }
     mark_notifications_read(&state, &actor.id, input.ids.as_deref()).await?;
     let unread = unread_notifications(&state, &actor.id).await?;
-    Ok(Json(json!({ "ok": true, "unreadNotificationCount": unread })))
+    Ok(Json(
+        json!({ "ok": true, "unreadNotificationCount": unread }),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1980,7 +2076,11 @@ fn unique_user_id(snapshot: &Snapshot, raw: &str) -> String {
             .trim_matches('-')
             .to_lowercase()
     );
-    let base = if base == "dt-" { "dt-user".to_string() } else { base };
+    let base = if base == "dt-" {
+        "dt-user".to_string()
+    } else {
+        base
+    };
     if !snapshot.users.iter().any(|user| user.id == base) {
         return base;
     }
@@ -2138,8 +2238,8 @@ async fn gitlab_webhook(
     if !gitlab::webhook_authorized(&state.config, token) {
         return Err(ApiError::unauthorized("GitLab Webhook 令牌无效"));
     }
-    let payload: Value = serde_json::from_slice(&body)
-        .map_err(|_| ApiError::bad("Webhook 请求体不是合法 JSON"))?;
+    let payload: Value =
+        serde_json::from_slice(&body).map_err(|_| ApiError::bad("Webhook 请求体不是合法 JSON"))?;
     let delivery = headers
         .get("x-gitlab-event-uuid")
         .and_then(|value| value.to_str().ok())
@@ -2160,7 +2260,10 @@ async fn gitlab_webhook(
     if kind != "pipeline" && kind != "merge_request" {
         return Ok(Json(json!({ "ok": true, "ignored": kind })));
     }
-    let attrs = payload.get("object_attributes").cloned().unwrap_or(Value::Null);
+    let attrs = payload
+        .get("object_attributes")
+        .cloned()
+        .unwrap_or(Value::Null);
     let branch = if kind == "pipeline" {
         attrs.get("ref").and_then(Value::as_str)
     } else {
@@ -2179,11 +2282,22 @@ async fn gitlab_webhook(
     // merge_request 的 url 是 API 地址（/api/v4/...），点进浏览器会 404；
     // 必须优先用 web_url。
     let url = if kind == "merge_request" {
-        attrs.get("web_url").and_then(Value::as_str).map(String::from)
+        attrs
+            .get("web_url")
+            .and_then(Value::as_str)
+            .map(String::from)
             .or_else(|| attrs.get("url").and_then(Value::as_str).map(String::from))
     } else {
-        attrs.get("url").and_then(Value::as_str).map(String::from)
-            .or_else(|| attrs.get("web_url").and_then(Value::as_str).map(String::from))
+        attrs
+            .get("url")
+            .and_then(Value::as_str)
+            .map(String::from)
+            .or_else(|| {
+                attrs
+                    .get("web_url")
+                    .and_then(Value::as_str)
+                    .map(String::from)
+            })
     };
     let mr_iid = attrs.get("iid").and_then(Value::as_i64);
     let platform_projects: Vec<(String, Option<String>, Option<String>)> = {
@@ -2218,7 +2332,9 @@ async fn gitlab_webhook(
                             None => true,
                         };
                         let path_ok = match configured_path {
-                            Some(configured) => project_path.as_deref() == Some(configured.as_str()),
+                            Some(configured) => {
+                                project_path.as_deref() == Some(configured.as_str())
+                            }
                             None => true,
                         };
                         id_ok && path_ok
@@ -2249,7 +2365,8 @@ async fn gitlab_webhook(
             let duplicated = !delivery.is_empty()
                 && snapshot.events.iter().any(|event| {
                     event.kind.starts_with("integration.gitlab")
-                        && event.payload.get("delivery").and_then(Value::as_str) == Some(delivery.as_str())
+                        && event.payload.get("delivery").and_then(Value::as_str)
+                            == Some(delivery.as_str())
                 });
             if !duplicated {
                 snapshot.push_event(
@@ -2324,6 +2441,7 @@ pub fn router(state: AppState) -> Router {
         .route("/iterations/{id}/restore", post(restore_iteration))
         .route("/iterations/{id}/move-requirement", post(move_requirement))
         .route("/requirements", post(create_requirement))
+        .route("/requirements/{id}", delete(delete_requirement))
         .route(
             "/requirements/by-session/{record_id}",
             get(requirement_by_session),
@@ -2346,7 +2464,10 @@ pub fn router(state: AppState) -> Router {
         .route("/requirements/{id}/scope", post(set_scope))
         .route("/requirements/{id}/design-claim", post(design_claim))
         .route("/requirements/{id}/design-deliver", post(design_deliver))
-        .route("/requirements/{id}/document", post(update_requirement_document))
+        .route(
+            "/requirements/{id}/document",
+            post(update_requirement_document),
+        )
         .route("/requirements/{id}/artifacts", post(add_artifact))
         .route("/artifacts/{id}", get(get_artifact).delete(delete_artifact))
         .route("/requirements/{id}/dev-assign", post(dev_assign))
@@ -2354,6 +2475,7 @@ pub fn router(state: AppState) -> Router {
         .route("/requirements/{id}/dev-start", post(dev_start))
         .route("/requirements/{id}/dev-finish", post(dev_finish))
         .route("/requirements/{id}/dev-reopen", post(dev_reopen))
+        .route("/requirements/{id}/test-claim", post(test_claim))
         .route("/requirements/{id}/test-start", post(test_start))
         .route("/requirements/{id}/test-pass", post(test_pass))
         .route("/requirements/{id}/test-fail", post(test_fail))

@@ -364,6 +364,12 @@ window.__ModuleLoader__.load({
       vChanged: '改了 {files}',
       vMore: '{first} 等 {n} 个文件',
       vFirst: '最早的一版 · {n} 个文件',
+      vSecReq: '需求版本 · 提交定格',
+      vSecLocal: '本机快照 · 每轮一版',
+      vReqSub: '提交时定格 · 只读',
+      vReqTip: '回到需求卡上看这一版（提交时定格，只读）',
+      vFiles: '{n} 个文件',
+      histTipReq: '需求版本在提交时定格，点开回需求卡上看；本机快照每轮对话前后各存一版，能回看当时的样子、和现在左右对比',
       sep: '、',
       viewing: '第 {n} 版 · {time}',
       compare: '对比',
@@ -1138,6 +1144,12 @@ window.__ModuleLoader__.load({
       vChanged: 'Changed {files}',
       vMore: '{first} and {rest} more',
       vFirst: 'Earliest kept · {n} files',
+      vSecReq: 'Submitted versions',
+      vSecLocal: 'Local snapshots · one per turn',
+      vReqSub: 'Frozen at submit · read-only',
+      vReqTip: 'Show this version on the requirement card (frozen at submit, read-only)',
+      vFiles: '{n} files',
+      histTipReq: 'Submitted versions are frozen on the requirement card; local snapshots are saved before and after every turn for looking back and comparing',
       sep: ', ',
       viewing: 'Version {n} · {time}',
       compare: 'Compare',
@@ -2233,6 +2245,8 @@ window.__ModuleLoader__.load({
 .ddp-ver b .live{width:7px;height:7px;border-radius:50%;background:#2fbf71;box-shadow:0 0 0 3px rgba(47,191,113,.16)}
 .ddp-ver span{font-size:12px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ddp-ver small{font-size:11px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ddp-ver:disabled{cursor:default}
+.ddp-histsec{margin:10px 2px 3px;font-size:11px;color:var(--dsw-alias-label-tertiary);letter-spacing:.02em}
 .ddp-flows{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:20}
 .ddp-flows .halo{fill:none;stroke:var(--dsw-alias-bg-layer-2);stroke-linecap:round;stroke-linejoin:round}
 .ddp-flows .ln{fill:none;stroke:${ACCENT};stroke-linecap:round;stroke-linejoin:round}
@@ -5319,12 +5333,13 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         const f = wins.current.get(id)
         if (!f || !f.contentWindow) return
         // 远程看：沙盒里的页面是不透明的源，只能发给 *（发的都是界面指令，没有要保密的）
-        if (f.hasAttribute('srcdoc')) f.contentWindow.postMessage({ wbCanvas: 1, ...msg }, '*')
+        // 页面里的 picker.js 只认 dshDesign 这个标记（它往外发的是 wbCanvas，见下面的收件处）
+        if (f.hasAttribute('srcdoc')) f.contentWindow.postMessage({ dshDesign: 1, ...msg }, '*')
         else {
           // 按这一帧自己的地址发：单看时换到别的设计目录，还是同一个组件，api 里留着的旧闭包记的是旧地址，消息会被浏览器丢掉（导出一直等到超时）
           let to = ''
           try { to = new URL(f.getAttribute('src')).origin } catch { /* 地址不对就不发 */ }
-          if (to) f.contentWindow.postMessage({ wbCanvas: 1, ...msg }, to)
+          if (to) f.contentWindow.postMessage({ dshDesign: 1, ...msg }, to)
         }
       }
 
@@ -5534,7 +5549,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
           let id = 0
           for (const [k, f] of wins.current) if (f && f.contentWindow === e.source) { id = k; break }
           const d = e.data
-          if (!id || !d || d.dshDesign !== 1) return
+          if (!id || !d || (d.wbCanvas !== 1 && d.dshDesign !== 1)) return
           const L = life.current
           const p = P.current
           const isCur = id === curRef.current
@@ -7226,26 +7241,53 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
           h('button', { role: 'menuitem', onClick: close(onOther) }, h(I.folder), h('span', null, t('openOther')))) : null)
     }
 
-    /** 版本面板：现在 + 存过的几版（新的在前），点一版看当时的样子 */
-    function HistoryPanel({ t, versions, ver, onPick, onClose }) {
+    /**
+     * 版本面板：现在 + 需求提交时定格的原型版本 + 本机每轮存下的快照（新的在前）。
+     * 定格版本在服务端附件里，只能回需求卡上看；本机快照点一版看当时的样子，还能和现在左右对比。
+     */
+    function HistoryPanel({ t, versions, ver, onPick, onClose, requirementVersions = [], onOpenRequirementVersion = null }) {
       const files = (list) => {
         const names = list.map((f) => f.split('/').pop())
         return names.length <= 2 ? names.join(t('sep')) : t('vMore', { first: names.slice(0, 2).join(t('sep')), n: names.length, rest: names.length - 2 })
       }
       const labelOf = (v) => (v.label === '回退前' ? t('vSaved') : v.label || t('vBefore'))
+      const reqVersions = (Array.isArray(requirementVersions) ? requirementVersions : [])
+        .slice()
+        .sort((a, b) => Number(a.version) - Number(b.version))
+        .reverse()
+      const namesOf = (list) => (Array.isArray(list) ? list : [])
+        .map((file) => String(file && file.name ? file.name : file).split('/').pop())
+        .filter(Boolean)
+      const canJump = typeof onOpenRequirementVersion === 'function'
+      const section = (key, text) => h('div', { key, className: 'ddp-histsec' }, text)
       return h('div', { className: 'ddp-tokens ddp-hist', onPointerDown: (e) => e.stopPropagation() },
         h('header', null, h(I.history), h('b', null, t('history')), h('button', { className: 'ddp-btn', title: '×', onClick: onClose }, h(I.close))),
-        h('p', { className: 'tip' }, t('histTip')),
+        h('p', { className: 'tip' }, reqVersions.length ? t('histTipReq') : t('histTip')),
         h('div', { className: 'bd' },
           h('button', { className: 'ddp-ver' + (!ver ? ' sel' : ''), onClick: () => onPick(null) },
             h('b', null, h('i', { className: 'live' }), t('now'))),
+          reqVersions.length ? section('req', t('vSecReq')) : null,
+          reqVersions.map((v) => {
+            const names = namesOf(v.files)
+            return h('button', {
+              key: `req-${v.version}`,
+              className: 'ddp-ver ddp-ver-req',
+              title: names.length ? `${t('vReqTip')} · ${names.join(t('sep'))}` : t('vReqTip'),
+              disabled: !canJump,
+              onClick: () => { if (canJump) onOpenRequirementVersion(v.version) },
+            },
+              h('b', null, `v${v.version}`, h('em', null, hhmm(v.createdAt))),
+              h('span', null, t('vReqSub')),
+              names.length ? h('small', null, t('vFiles', { n: names.length })) : null)
+          }),
+          versions.length && reqVersions.length ? section('local', t('vSecLocal')) : null,
           versions.length
             ? versions.map((v) => h('button', { key: v.n, className: 'ddp-ver' + (ver && ver.n === v.n ? ' sel' : ''), onClick: () => onPick(v) },
               h('b', null, t('vN', { n: v.n }), h('em', null, hhmm(v.at))),
               h('span', null, labelOf(v)),
               v.changed && v.changed.length ? h('small', null, t('vChanged', { files: files(v.changed) }))
                 : v.first ? h('small', null, t('vFirst', { n: v.count })) : null))
-            : h('div', { className: 'none' }, t('histEmpty'))))
+            : reqVersions.length ? null : h('div', { className: 'none' }, t('histEmpty'))))
     }
 
     /**
@@ -10491,7 +10533,7 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
             onClose: () => setPanel(false),
           }) : null,
           pane ? sidePane() : null,
-          hist ? h(HistoryPanel, { t, versions, ver, onPick: (v) => { setVer(v); if (!v) setCmp(false) }, onClose: () => setHist(false) }) : null,
+          hist ? h(HistoryPanel, { t, versions, ver, onPick: (v) => { setVer(v); if (!v) setCmp(false) }, onClose: () => setHist(false), requirementVersions: props.requirementVersions, onOpenRequirementVersion: props.onOpenRequirementVersion }) : null,
           mark && !markOff ? h(MarkLayer, { t, sending: markBusy, frames: markFrames, onCancel: () => { markRun.current++; setMark(false) }, onSend: sendMark, onCopy: canCopyImage() ? copyMark : null }) : null,
           demo ? h('div', { className: 'ddp-banner' + side },
             h(I.play),

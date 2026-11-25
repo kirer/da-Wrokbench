@@ -290,7 +290,7 @@ async function loginAs(page, name) {
   await page.getByRole('button', { name: `以「${name}」身份进入` }).click()
   await waitFor(async () => (await loginRows(page)) === 0, { label: `${name} 登录提交`, timeout: 20000 })
   const text = await bodyText(page)
-  if (/首次使用接下来|选择职能与平台/.test(text) && !(await page.getByRole('link', { name: '迭代列表' }).isVisible().catch(() => false))) {
+  if (/首次使用接下来|选择职能与平台/.test(text) && !(await page.locator('.dsh-wb-crumbs').isVisible().catch(() => false))) {
     throw new Error('登录后出现首次引导，脚本不会自动配置身份与文件夹')
   }
   await returnToWorkbench(page)
@@ -300,7 +300,7 @@ async function loginAs(page, name) {
 }
 
 async function panelReady(page) {
-  if (await page.getByRole('link', { name: '迭代列表' }).isVisible().catch(() => false)) return true
+  if (await page.locator('.dsh-wb-crumbs').isVisible().catch(() => false)) return true
   if ((await loginRows(page)) > 0) return true
   return false
 }
@@ -327,6 +327,13 @@ async function returnToWorkbench(page) {
   }, { label: '打开研发工作台面板', timeout: 30000, interval: 900 })
 }
 
+async function goHome(page) {
+  // 首页是面包屑的根节点；已经在首页时它是当前层，没有可点的按钮。
+  const home = page.getByRole('button', { name: '首页', exact: true })
+  if (await home.isVisible().catch(() => false)) await home.click()
+  await page.waitForTimeout(350)
+}
+
 async function ensureUser(page, name) {
   await returnToWorkbench(page)
   if ((await loginRows(page)) > 0) {
@@ -338,7 +345,7 @@ async function ensureUser(page, name) {
   const state = await readState(page).catch(() => null)
   if (state && state.currentUser && state.currentUser.name === name) return
   log(`切换身份：${(state && state.currentUser && state.currentUser.name) || identity || '未知'} → ${name}`)
-  await page.getByRole('link', { name: '设置' }).click()
+  await page.getByRole('button', { name: '设置', exact: true }).click()
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
   await waitFor(async () => (await loginRows(page)) > 0, { label: '登录页', timeout: 20000 })
   await loginAs(page, name)
@@ -346,8 +353,7 @@ async function ensureUser(page, name) {
 
 async function openIteration(page, name) {
   await returnToWorkbench(page)
-  await page.getByRole('link', { name: '迭代列表' }).click()
-  await page.waitForTimeout(350)
+  await goHome(page)
   const link = page.getByRole('link', { name, exact: true }).first()
   await link.waitFor({ state: 'visible', timeout: 15000 })
   await link.click()
@@ -555,8 +561,7 @@ async function preflight(page) {
 async function createIteration(page) {
   await ensureUser(page, '张三')
   await returnToWorkbench(page)
-  await page.getByRole('link', { name: '迭代列表' }).click()
-  await page.waitForTimeout(400)
+  await goHome(page)
   await page.getByRole('button', { name: '新建迭代', exact: true }).click()
   const dialog = page.getByRole('dialog').last()
   await dialog.getByPlaceholder('迭代编码，例如 2026-S12').fill(ITERATION.code)

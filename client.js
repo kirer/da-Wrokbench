@@ -26,7 +26,7 @@ window.__ModuleLoader__.load({
     }
 
     const h = react.createElement
-    const { useState, useEffect, useCallback, useMemo, useRef } = react
+    const { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } = react
     // 主面板注册时声明了会话作用域的子插槽；宿主把 SessionProvider / renderSlot
     // 作为标准 props 传给组件，这里用 context 带给页面深处，避免逐层透传。
     const SlotKit = react.createContext(null)
@@ -434,8 +434,18 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .scroll { overflow: auto; min-height: 0; flex: 1; }
 /* 所有页面共用同一圈固定边距；宽度跟着窗口走，不再卡最大宽度。 */
 .dsh-wb-design .page { padding: 22px 28px 40px; max-width: none; }
-/* 层级导航固定挂在顶栏下方一条上下等高的窄栏里，所有页面都在同一位置。 */
-.dsh-wb-design .dsh-wb-contextbar { flex: none; display: flex; align-items: center; min-height: 38px; padding: 0 28px; border-bottom: 1px solid var(--line); }
+/* 首页：迭代表上面放「我的工作台」和「技能」两个入口。 */
+.dsh-wb-design .home-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.dsh-wb-design .home-link { display: flex; align-items: center; gap: 11px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.dsh-wb-design .home-link:hover { border-color: var(--line-2); background: var(--surface-2); }
+.dsh-wb-design .home-link > .ic { width: 18px; height: 18px; color: var(--primary); flex: none; }
+.dsh-wb-design .home-link-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dsh-wb-design .home-link-body b { font-size: var(--fs-13); font-weight: var(--fw-semi); }
+.dsh-wb-design .home-link-body span { font-size: var(--fs-11); color: var(--text-3); }
+.dsh-wb-design .home-link .chev { margin-left: auto; width: 14px; height: 14px; color: var(--text-3); flex: none; }
+.dsh-wb-design .home-link:hover .chev { color: var(--text-2); }
+/* 层级导航并进顶栏：项目选择器后面直接是面包屑，页面不再单独占一条。 */
+.dsh-wb-design .topbar .dsh-wb-crumbs { min-width: 0; overflow: hidden; }
 .dsh-wb-design .dsh-wb-crumbs { display: flex; align-items: center; gap: 1px; min-height: 28px; font-size: var(--fs-12); color: var(--text-3); min-width: 0; }
 .dsh-wb-design .dsh-wb-crumbs .sep { flex: none; width: 12px; height: 12px; color: var(--line-3); }
 .dsh-wb-design .dsh-wb-crumbs .step,
@@ -665,7 +675,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .table td a.rk { display: inline-block; padding: 5px 0; white-space: nowrap; }
 .dsh-wb-design .crumb a { display: inline-flex; align-items: center; min-height: 24px; padding: 0 2px; }
 .dsh-wb-design .meta-kv a { display: inline-flex; align-items: center; min-height: 24px; }
-.dsh-wb-design .table td .rksub { color: var(--text-3); font-size: var(--fs-11); margin-top: 2px; }
 .dsh-wb-design .td-code { font-family: var(--font-mono); color: var(--text-3); font-size: var(--fs-11); }
 .dsh-wb-design .table-wrap { border: 1px solid var(--line); border-radius: var(--r-md); overflow: auto; background: var(--surface); }
 .dsh-wb-design .table-wrap .table { min-width: 760px; }
@@ -953,22 +962,23 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .branch:last-child { margin-bottom: 0; }
 .dsh-wb-design .branch::before { content: ""; position: absolute; left: -17px; top: 28px; width: 17px; height: 1px; background: var(--line-2); }
 .dsh-wb-design .branch::after { content: ""; position: absolute; left: -20px; top: 25px; width: 7px; height: 7px; border-radius: 50%; background: var(--bg); border: 1px solid var(--line-3); }
-.dsh-wb-design .req-card { border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); padding: 13px 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color .12s var(--ease); }
+.dsh-wb-design .req-card { border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); padding: 13px 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color .12s var(--ease); cursor: pointer; }
 .dsh-wb-design .req-card:hover { border-color: var(--line-3); }
 .dsh-wb-design .req-card .rc-hd { display: flex; align-items: center; gap: 8px; }
+.dsh-wb-design .req-card .rc-del { margin-left: auto; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.dsh-wb-design .req-card .rc-del:hover { background: var(--red-bg); color: var(--st-block); }
 .dsh-wb-design .req-card .rc-code { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
 .dsh-wb-design .req-card .rc-title { font-size: 14px; font-weight: 600; color: var(--text); display: inline-block; padding: 2px 0; }
 .dsh-wb-design .req-card .rc-title:hover { color: var(--primary); }
 .dsh-wb-design .req-card .rc-matrix { flex-wrap: wrap; gap: 4px; }
 .dsh-wb-design .req-card .rc-ft { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--line); }
-.dsh-wb-design .req-links { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
-.dsh-wb-design .req-link { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: var(--r-xs); background: var(--surface-2); border: 1px solid var(--line); font-size: 12px; color: var(--text-2); }
-.dsh-wb-design .req-link:hover { border-color: var(--primary-line); color: var(--text); }
-.dsh-wb-design .req-link svg { width: 11px; height: 11px; color: var(--text-3); }
 .dsh-wb-design .with-aside { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 22px; align-items: start; }
 .dsh-wb-design .aside-col { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; }
 /* 需求总览是一面扁平的卡片墙：所有卡片同样小，不按区块分组。 */
 .dsh-wb-design .cardwall { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; grid-auto-rows: 1fr; }
+/* 总述和需求日志并排放在第一行：左边读需求，右边看过程。 */
+.dsh-wb-design .req-top { display: grid; grid-template-columns: minmax(0, 2.7fr) minmax(280px, 1fr); gap: 12px; margin-bottom: 12px; align-items: stretch; }
+@media (max-width: 1100px) { .dsh-wb-design .req-top { grid-template-columns: minmax(0, 1fr); } }
 /* 参与者卡：一人一张（开发按端一张），卡头是角色和人，卡底是他的工作面入口。 */
 .dsh-wb-design .pcard { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dsh-wb-design .pcard .phead { display: flex; align-items: center; gap: 7px; min-width: 0; }
@@ -979,19 +989,30 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .pcard .pbody { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .dsh-wb-design .pcard .pstat { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--text-2); }
 .dsh-wb-design .pcard .pstat b { font-size: 15px; font-weight: 600; color: var(--text); }
-.dsh-wb-design .pcard .pfoot { display: flex; align-items: center; gap: 6px; border-top: 1px dashed var(--line); padding-top: 9px; margin-top: auto; }
-.dsh-wb-design .pcard .pfoot .btn { flex: none; }
+/* 工作面入口：卡片右上角的小图标，悬停才显眼。 */
+.dsh-wb-design .pcard .pcorner { flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-3); cursor: pointer; }
+.dsh-wb-design .pcard .pcorner:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .pcard .pcorner:disabled { opacity: .35; cursor: default; background: transparent; color: var(--text-3); }
 .dsh-wb-design .pcard .kv2 { display: grid; grid-template-columns: 52px 1fr; gap: 4px 6px; font-size: 11.5px; }
 .dsh-wb-design .pcard .kv2 dt { color: var(--text-3); }
 .dsh-wb-design .pcard .kv2 dd { margin: 0; color: var(--text-2); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+/* 待认领的位置：右上角的状态徽标换成可点的「认领」，确认后卡片写成本人。 */
+.dsh-wb-design .pcard .pclaim { flex: none; height: 22px; padding: 0 10px; border: 1px solid var(--primary-line); border-radius: 999px; background: var(--primary-bg); color: var(--primary); font-size: 11px; font-weight: 600; line-height: 1; cursor: pointer; transition: background .12s var(--ease), color .12s var(--ease), border-color .12s var(--ease); }
+.dsh-wb-design .pcard .pclaim:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+.dsh-wb-design .pcard .pclaim:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.dsh-wb-design .pclaim-error { margin-top: 8px; color: var(--red); }
 /* 小卡片头只留图标、标题和徽标；长说明和右侧提示收起来，别把标题挤成两行。 */
 .dsh-wb-design .cardwall .dcard2 .ch .t { white-space: nowrap; }
-.dsh-wb-design .cardwall .dcard2:not(.span2) .ch .r .tiny,
-.dsh-wb-design .cardwall .dcard2:not(.span2) .ch .r.tiny { display: none; }
-/* 总述是这页的主内容，单独占满一行，保持原来舒展的阅读宽度。 */
-.dsh-wb-design .cardwall .dcard2.span2 { grid-column: 1 / -1; }
+/* 总述卡：标题行只放标题和版本徽标，正文太长时默认收起，需要再展开。 */
+.dsh-wb-design .dcard2 .ch .t { flex: none; white-space: nowrap; }
+.dsh-wb-design .doc-body { position: relative; }
+.dsh-wb-design .doc-body.is-clipped { overflow: hidden; }
+.dsh-wb-design .doc-body.is-clipped::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: linear-gradient(to bottom, transparent, var(--surface)); pointer-events: none; }
+.dsh-wb-design .doc-toggle { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text-2); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; white-space: nowrap; }
+.dsh-wb-design .doc-toggle:hover { border-color: var(--line-2); background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .doc-toggle svg { transition: transform 150ms ease; }
+.dsh-wb-design .doc-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .dsh-wb-design .dcard2 { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.dsh-wb-design .dcard2.span2 { grid-column: span 2; }
 .dsh-wb-design .dcard2 .ch { display: flex; align-items: center; gap: 8px; }
 .dsh-wb-design .dcard2 .ch .t { font-size: 13px; font-weight: 600; }
 .dsh-wb-design .dcard2 .ch .r { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -1171,6 +1192,13 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .rf-meta b { color: var(--text-2); font-weight: 500; }
 .dsh-wb-design .spec-line { font-size: 13px; color: var(--text-2); line-height: var(--lh-loose); }
 .dsh-wb-design .spec-line b { color: var(--text); font-weight: 500; }
+/* 原型版本：只有提交需求时才会新增；「最新」是当前工作区里的原型。 */
+.dsh-wb-design .pv-bar { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.dsh-wb-design .pv-bar .pv-label { font-size: 11px; color: var(--text-4); margin-right: 1px; }
+.dsh-wb-design .pv-chip { height: 22px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text-3); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
+.dsh-wb-design .pv-chip:hover { border-color: var(--line-2); color: var(--text); }
+.dsh-wb-design .pv-chip.is-on { border-color: var(--primary-line); background: var(--primary-bg); color: var(--primary-ink); }
+.dsh-wb-design .pv-bar .pv-hint { font-size: 11px; color: var(--text-4); margin-left: auto; }
 .dsh-wb-design .shot3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .dsh-wb-design .shot { border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-2); }
 .dsh-wb-design .shot .img { height: 60px; background: linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 16px, linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%, var(--surface-2); display: flex; align-items: center; justify-content: center; }
@@ -1354,7 +1382,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .topbar .avatar{margin-right:2px}
 .dsh-wb-design .topbar .identity{cursor:pointer;border:1px solid transparent;padding:3px 7px;border-radius:var(--r-sm);background:transparent}
 .dsh-wb-design .topbar .identity:hover{background:var(--surface-2);border-color:var(--line)}
-.dsh-wb-design .nav-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;margin-left:6px;border-radius:999px;background:var(--primary-strong);color:#fff;font-size:10px;line-height:1;text-align:center;font-weight:var(--fw-semi);vertical-align:1px}
 .dsh-wb-design .nav-link{position:relative}
 .dsh-wb-design .toast-region{position:fixed;right:20px;bottom:20px;z-index:80;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .dsh-wb-design .wb-toast{display:flex;align-items:center;gap:10px;min-height:38px;padding:8px 12px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);box-shadow:var(--shadow-2);color:var(--text);font-size:12px;pointer-events:auto}
@@ -1391,12 +1418,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .mxg{display:inline-flex;align-items:center;gap:3px;padding:1px 3px 1px 0;border-radius:4px;background:var(--surface-2);border:1px solid var(--line)}
 .dsh-wb-design .mxg .gl2{font-size:10px;color:var(--text-3);padding:0 4px;white-space:nowrap}
 .dsh-wb-design .mna2{font-size:10px;color:var(--text-4);white-space:nowrap}
-.dsh-wb-design .req-link{display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 7px;border-radius:var(--r-xs);font-size:var(--fs-11);color:var(--text-2);border:1px solid var(--line);background:var(--surface)}
-.dsh-wb-design .req-link:hover{color:var(--text);border-color:var(--line-3);background:var(--surface-2)}
-.dsh-wb-design .req-link svg{width:11px;height:11px}
-.dsh-wb-design .req-links{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
 .dsh-wb-design .rc-ft{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0;padding-top:0;border-top:0}
-.dsh-wb-design .rc-ft .req-links{margin-left:auto}
 .dsh-wb-design .log-item{display:flex;gap:9px;padding:8px 14px;align-items:flex-start}
 .dsh-wb-design .log-item .c{min-width:0;flex:1}
 .dsh-wb-design .log-item .l1{font-size:12px;color:var(--text-2);line-height:var(--lh-snug)}
@@ -1471,7 +1493,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .td-code{font-family:var(--font-mono);font-size:12px;color:var(--text-3)}
 .dsh-wb-design .rk{font-size:13px;font-weight:var(--fw-med);color:var(--text)}
 .dsh-wb-design .rk:hover{color:var(--primary)}
-.dsh-wb-design .rksub{font-size:11px;color:var(--text-3);margin-top:2px}
 .dsh-wb-design .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 
 `
@@ -1628,6 +1649,7 @@ window.__ModuleLoader__.load({
   <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3Z"/></symbol>
   <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h5l1.5 2.5h5L16 13h5"/><path d="M4.5 5h15l1.5 8v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4l1.5-8Z"/></symbol>
   <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></symbol>
 </svg>
 
 `
@@ -1758,7 +1780,39 @@ window.__ModuleLoader__.load({
       return snapshot
     }
 
-    // 斜杠命令的结果本来只写进会话日志；这里补一个轻量 toast，让 /wb-* 的执行结果
+    // 画布的「选择 / 改字 / 样式 / 画笔」要把结果放进对话输入框。输入门面由 DSH
+    // 以 inputActions 的形式发给会话作用域的插槽，这里在开场白那个插槽里按会话记一份，
+    // 画布从工作台中间打开时照样拿得到；会话关掉就撤掉。
+    const sessionInputActions = new Map()
+
+    function useSessionInputActions(sid, inputActions) {
+      useEffect(() => {
+        if (typeof sid !== 'string' || sid === '' || inputActions === undefined || inputActions === null) return undefined
+        sessionInputActions.set(sid, inputActions)
+        return () => {
+          if (sessionInputActions.get(sid) === inputActions) sessionInputActions.delete(sid)
+        }
+      }, [sid, inputActions])
+    }
+
+    // 画布要的是「拿一下光标位置、插一段字」的同步门面；没收到真正的 inputActions 前
+    // 退回复制，收到之后每次都现取，不把旧会话的门面带过去。
+    function inputActionsFor(sid) {
+      if (typeof sid !== 'string' || sid === '') return undefined
+      return {
+        captureInsertion: () => {
+          const target = sessionInputActions.get(sid)
+          return target && typeof target.captureInsertion === 'function' ? target.captureInsertion() : undefined
+        },
+        insertText: (text, span) => {
+          const target = sessionInputActions.get(sid)
+          if (!target || typeof target.insertText !== 'function' || span === undefined) return false
+          return target.insertText(text, span)
+        },
+      }
+    }
+
+    // 斜杠命令的结果本来只写进会话日志；这里补一个轻量 toast，让 /req-now 这类直达命令的结果
     // 在 composer 清空后仍然可见（失败也保留，便于纠正参数）。
     let commandToastSeq = 0
     let commandToastState = null
@@ -1838,25 +1892,9 @@ window.__ModuleLoader__.load({
 .dsh-wb-title{font-size:22px;line-height:1.2;font-weight:650;letter-spacing:-.01em;margin:0}
 .dsh-wb-title-sub{margin-top:6px;font-size:12px;color:var(--dsw-alias-label-tertiary)}
 .dsh-wb-top-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:nowrap;gap:7px;margin-left:auto;flex:none}
-.dsh-wb-popwrap{position:relative;display:inline-flex}
 .dsh-wb-iconbtn{position:relative;height:30px;min-width:30px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px}
 .dsh-wb-iconbtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsh-wb-bell-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:var(--dsw-alias-state-error-primary,#e05a5a);color:#fff;font-size:9.5px;line-height:15px;text-align:center;font-weight:650}
-.dsh-wb-popover{position:absolute;right:0;top:calc(100% + 7px);z-index:60;width:min(380px,88vw);max-height:min(70vh,560px);overflow:auto;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsw-elevation-prominent,0 18px 50px rgba(0,0,0,.35));padding:6px}
-.dsh-wb-popover-head{display:flex;align-items:center;gap:8px;padding:7px 8px 9px;border-bottom:1px solid var(--dsw-alias-border-l1);margin-bottom:4px}
-.dsh-wb-popover-head b{font-size:12px;font-weight:650}
-.dsh-wb-popover-head .dsh-wb-btn{margin-left:auto}
-.dsh-wb-notif{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;padding:8px 9px;cursor:pointer}
-.dsh-wb-notif-groups{display:flex;gap:5px;flex-wrap:wrap;padding:0 0 8px;border-bottom:1px solid var(--dsw-alias-border-l1);margin-bottom:4px}
-.dsh-wb-notif-group{height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:10px;cursor:pointer;white-space:nowrap}
-.dsh-wb-notif-group:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dsh-wb-notif-group.is-active{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-brand-primary);color:var(--dsw-alias-label-primary)}
-.dsh-wb-notif:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dsh-wb-notif.is-unread{background:var(--dsw-alias-bg-layer-2)}
-.dsh-wb-notif-title{font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:6px}
-.dsh-wb-notif-dot{width:5px;height:5px;border-radius:50%;background:var(--dsw-alias-brand-primary);flex:none}
-.dsh-wb-notif-body{font-size:11px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
-.dsh-wb-notif-time{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-size:9.5px;color:var(--dsw-alias-label-tertiary);margin-top:2px}
 .dsh-wb-dev-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
 .dsh-wb-devcard{border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-base);padding:8px 9px;min-width:0;display:flex;flex-direction:column;gap:4px}
 .dsh-wb-devcard-head{display:flex;align-items:center;gap:6px;min-width:0}
@@ -1972,7 +2010,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-plan b{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-weight:500;color:var(--dsw-alias-label-primary)}
 .dsh-wb-iterlabel{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dsw-alias-label-tertiary)}
 .dsh-wb-dialog textarea.dsh-wb-input{height:64px;padding:7px 10px;resize:vertical;line-height:1.5}
-.dsh-wb-dialog textarea.dsh-wb-brief{margin-top:10px;height:112px;font-size:12px}
 .dsh-wb-poc{border:1px dashed var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);padding:10px 11px;margin-top:14px;background:var(--dsw-alias-bg-layer-2)}
 .dsh-wb-poc-h{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:650;color:var(--dsw-alias-label-secondary);margin-bottom:8px}
 .dsh-wb-poc-h .dsh-wb-mock{height:18px;font-size:9px}
@@ -2000,8 +2037,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-search{display:flex;gap:6px;align-items:center;padding:0 10px 8px}
 .dsh-wb-search-input{height:30px;font-size:12px}
 .dsh-wb-reviewbox{margin-top:10px;padding:10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-bg-layer-2)}
-.dsh-wb-btn:focus-visible,.dsh-wb-iconbtn:focus-visible,.dsh-wb-notif:focus-visible,.dsh-wb-notif-group:focus-visible,.dsh-wb-auth-chip:focus-visible,.dsh-wb-rqbar-toggle:focus-visible,a:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
-.dsh-wb-notif-group{min-height:24px}
+.dsh-wb-btn:focus-visible,.dsh-wb-iconbtn:focus-visible,.dsh-wb-auth-chip:focus-visible,.dsh-wb-rqbar-toggle:focus-visible,a:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .dsh-wb-rqbar-toggle{min-width:24px;min-height:24px}
 .dsh-wb-dialog h2{font-size:16px;font-weight:650;margin:0 0 4px}
 .dsh-wb-dialog p{margin:0 0 14px;font-size:12px;color:var(--dsw-alias-label-tertiary);line-height:1.5}
@@ -2434,7 +2470,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-req-full{overflow:hidden}
 .dsh-wb-req-full-body{padding:12px 14px 16px}
 .dsh-wb-my-list{overflow:hidden}
-.dsh-wb-notif-page{overflow:hidden}
 @media (max-width:1180px){.dsh-wb-iter-kpis,.dsh-wb-my-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-wb-detail-layout{grid-template-columns:1fr}.dsh-wb-detail-aside{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-wb-req-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dsh-wb-nav-brand{display:none}}
 @media (max-width:860px){.dsh-wb-navbar{flex-wrap:wrap;min-height:auto;padding:8px 12px;gap:6px}.dsh-wb-nav{order:3;width:100%;overflow-x:auto}.dsh-wb-content{padding:16px 14px 32px}.dsh-wb-detail-head{flex-direction:column}.dsh-wb-detail-actions{width:100%;justify-content:flex-start}.dsh-wb-detail-aside{grid-template-columns:1fr}.dsh-wb-reqcards{grid-template-columns:1fr}}
 
@@ -3135,21 +3170,7 @@ window.__ModuleLoader__.load({
           console.warn('[dsh-workbench] 需求简报保存失败', reason)
         }
       }
-      // 新会话的输入框放一份模板：有简报时直接按文档出原型；没有时让用户补全。
-      await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
-        const input = ctx.conversation?.input
-        if (input?.requestDraftInitialization === undefined) return
-        try {
-          input.requestDraftInitialization(reference.binding, {
-            prompt: text !== ''
-              ? briefedRequirementPrompt(saved, state)
-              : requirementDescriptionPrompt(saved, state),
-            clearPreviousDraft: true,
-          })
-        } catch (reason) {
-          console.warn('[dsh-workbench] 需求描述模板写入失败', reason)
-        }
-      })
+      // 输入框不再预填模板；进入会话时由 RequirementGreeting 在对话上方写引导。
       return { requirement: saved, sessionId, folderPath, workspaceId }
     }
 
@@ -3653,7 +3674,7 @@ window.__ModuleLoader__.load({
             ),
         h('div', { className: 'dsh-wb-subhead' }, `开发任务 · ${devDone}/${devTasks.length}`),
         devTasks.length === 0
-          ? h('div', { className: 'dsh-wb-note' }, '还没有开发任务。需求排期后按平台生成；负责人可以在会话里用 /dev-assign 指派。')
+          ? h('div', { className: 'dsh-wb-note' }, '还没有开发任务。需求排期后按平台生成；负责人可以在会话里用 /lead-assign-dev 指派。')
           : h('div', { className: 'dsh-wb-dev-grid' }, devTasks.map(devTaskCard)),
         testRuns.length > 0
           ? h('div', null,
@@ -3731,11 +3752,11 @@ window.__ModuleLoader__.load({
             '需求：',
             h('code', null, '/req-submit'),
             ' ',
-            h('code', null, '/req-review'),
+            h('code', null, '/lead-review'),
             ' ',
-            h('code', null, '/req-schedule'),
+            h('code', null, '/lead-schedule'),
             ' ',
-            h('code', null, '/req-scope'),
+            h('code', null, '/lead-scope'),
             '；设计：',
             h('code', null, '/design-claim'),
             ' ',
@@ -3749,7 +3770,7 @@ window.__ModuleLoader__.load({
             '；测试：',
             h('code', null, '/test-verify'),
             '；发布：',
-            h('code', null, '/release-freeze'),
+            h('code', null, '/lead-release'),
             '。工作台只保留创建入口和状态展示。',
           ),
         ),
@@ -3857,7 +3878,6 @@ window.__ModuleLoader__.load({
 
     function CreateRequirementDialog({ ctx, state, onClose, onCreated, onToast }) {
       const [title, setTitle] = useState('')
-      const [brief, setBrief] = useState('')
       const [busy, setBusy] = useState(false)
       const [step, setStep] = useState('')
       const [error, setError] = useState('')
@@ -3877,9 +3897,9 @@ window.__ModuleLoader__.load({
           const created = await api('requirements', { method: 'POST', body: JSON.stringify({ title: value }) })
           requirement = created.requirement
           setStep('准备迭代目录')
-          const done = await finishRequirementCreation(ctx, requirement, state, brief)
-          setStep('打开会话')
-          ctx.uiWorkspace.openSession(done.sessionId)
+          const done = await finishRequirementCreation(ctx, requirement, state)
+          // 建完先落在需求页，会话就在右侧坞里；不切到 DSH 的会话工作区。
+          setStep('打开需求页')
           onToast(`${done.requirement.code} ${done.requirement.title} 已创建`, false)
           onCreated(done.requirement)
         } catch (reason) {
@@ -3888,12 +3908,12 @@ window.__ModuleLoader__.load({
           setStep('')
           setBusy(false)
         }
-      }, [title, brief, busy, ctx, onCreated, onToast, state])
+      }, [title, busy, ctx, onCreated, onToast, state])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
           h('h2', { id: modal.titleId }, '新建需求'),
-          h('p', null, `迭代 ${state.iteration?.code ?? '—'} · 填需求名称；可选的简报会写进需求文档，创建后直接按文档出原型。`),
+          h('p', null, `迭代 ${state.iteration?.code ?? '—'} · 只填需求名称；创建后在会话里说清楚背景、页面和验收，模型会整理进需求文档。`),
           h('input', {
             ref: inputRef,
             className: 'dsh-wb-input',
@@ -3903,15 +3923,6 @@ window.__ModuleLoader__.load({
             disabled: busy,
             onChange: (event) => setTitle(event.target.value),
             onKeyDown: (event) => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) void submit() },
-          }),
-          h('textarea', {
-            className: 'dsh-wb-input dsh-wb-brief',
-            value: brief,
-            placeholder: '需求简报（可选）：背景、目标、关键页面、验收标准。写在这里，会话就不用再重复一遍。',
-            rows: 5,
-            maxLength: 12000,
-            disabled: busy,
-            onChange: (event) => setBrief(event.target.value),
           }),
           busy ? h('div', { className: 'dsh-wb-progress' }, h('span', { className: 'dsh-wb-spinner' }), `${step}…`) : null,
           error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
@@ -4160,124 +4171,33 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function CreateSessionDialog({ ctx, state, requirement, stay = false, onClose, onCreated, onToast }) {
-      const roles = state.currentUser.roles ?? []
-      const canProduct = roles.includes('product') || roles.includes('lead') || roles.includes('admin')
-      const canDesign = roles.includes('design') || roles.includes('lead') || roles.includes('admin')
-      const canDev = roles.includes('dev') || roles.includes('lead') || roles.includes('admin')
-      const canTest = roles.includes('qa') || roles.includes('lead') || roles.includes('admin')
-      const types = [
-        canDesign ? 'design' : null,
-        canDev ? 'dev' : null,
-        canTest ? 'test' : null,
-        canProduct ? 'review' : null,
-        canProduct ? 'requirement' : null,
-      ].filter(Boolean)
-      const [type, setType] = useState(() => (canDesign ? 'design' : canDev ? 'dev' : canTest ? 'test' : 'review'))
-      const [busy, setBusy] = useState(false)
-      const [step, setStep] = useState('')
-      const [error, setError] = useState('')
-      const modal = useModalBehavior(onClose, !busy)
-      // 同一需求的后续会话也挂在迭代目录下，不另建需求工作区。
-      const sessionRoot = String(state.iterationDir ?? state.baseDir ?? '').replace(/\/+$/, '')
-      const baseDir = String(state.baseDir ?? '').replace(/\/+$/, '')
-
-      const submit = useCallback(async () => {
-        if (busy || sessionRoot === '') return
-        setBusy(true)
-        setError('')
-        try {
-          setStep('准备迭代目录')
-          const split = splitDirectory(sessionRoot)
-          if (sessionRoot !== baseDir && split !== null) {
-            await ensureChildDirectory(split.parent, split.name)
-          }
-          setStep('创建工作区')
-          const workspace = await ctx.workspaces.create({ path: sessionRoot })
-          const workspaceId = workspace.workspaceId
-          setStep('创建会话')
-          const sessionId = await ctx.sessions.create({ workspaceId })
-          setStep('设置会话标题')
-          await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
-            const result = await reference.binding.session.rename(`${requirement.title} · ${sessionTypeLabel(type)}`)
-            if (result.ok !== true) throw new Error(result.error?.message || '会话标题设置失败')
-            // 和新建需求一样，先给设计会话 / 需求会话放一份可补全的说明模板。
-            const prompt = type === 'design'
-              ? designDescriptionPrompt(requirement, state)
-              : type === 'requirement' ? requirementDescriptionPrompt(requirement, state) : ''
-            const input = ctx.conversation?.input
-            if (prompt !== '' && input?.requestDraftInitialization !== undefined) {
-              try {
-                const seeded = input.requestDraftInitialization(reference.binding, { prompt })
-                if (seeded !== 'applied') console.warn('[dsh-workbench] 会话说明模板未写入输入框：', seeded)
-              } catch (reason) {
-                console.warn('[dsh-workbench] 会话说明模板写入失败', reason)
-              }
-            }
-          })
-          setStep('记录会话')
-          const body = await api(`requirements/${encodeURIComponent(requirement.id)}/sessions`, {
-            method: 'POST',
-            body: JSON.stringify({
-              type,
-              label: `${sessionTypeLabel(type)}会话`,
-              dshSessionId: sessionId,
-              workspaceId,
-              folderPath: sessionRoot,
-            }),
-          })
-          // 从会话坞里新建时留在需求页，让会话直接嵌进坞；从其它入口新建仍切到会话。
-          if (stay !== true) ctx.uiWorkspace.openSession(sessionId)
-          onToast(`${requirement.code} 的${sessionTypeLabel(type)}会话已创建`, false)
-          onCreated(body.requirement)
-          onClose()
-        } catch (reason) {
-          setError(reason instanceof Error ? reason.message : String(reason))
-          setStep('')
-          setBusy(false)
-        }
-      }, [busy, sessionRoot, baseDir, requirement, stay, state, type, ctx, onCreated, onClose, onToast])
-
-      return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
-        h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
-          h('h2', { id: modal.titleId }, `新建会话 · ${requirement.code}`),
-          h('p', null, '同一需求可以有多场会话：需求会话用于提交与评审排期，设计会话做设计，开发会话推进各端开发，测试会话记录测试结论，评审会话讨论评审意见。'),
-          types.length === 0
-            ? h('div', { className: 'dsh-wb-dialog-err' }, '当前身份不能为这条需求创建会话。')
-            : h('div', { className: 'dsh-wb-auth-chips', style: { marginBottom: '12px' } },
-                types.map(item => h('button', {
-                  className: `dsh-wb-auth-chip${type === item ? ' is-on' : ''}`,
-                  type: 'button',
-                  key: item,
-                  disabled: busy,
-                  onClick: () => setType(item),
-                }, `${sessionTypeLabel(item)}会话`)),
-              ),
-          h('div', { className: 'dsh-wb-note', style: { marginBottom: '10px' } },
-            type === 'design'
-              ? '设计会话里用 /design-claim、/design-start、/design-deliver 完成设计。'
-              : type === 'dev'
-                ? '开发会话里用 /dev-start 开始某端开发，完成后用 /dev-finish；各端都完成后需求进入待测试。'
-                : type === 'test'
-                  ? '测试会话里用 /test-verify 开始测试、记录通过或不通过；不通过会通知开发负责人。'
-                  : type === 'review'
-                    ? '评审会话里用 /req-review 给出评审结论；负责人可用 /req-schedule、/req-scope。'
-                    : '需求会话里用 /req-submit 提交需求，之后在评审会话里用 /req-review 评审。',
-          ),
-          h('div', { className: 'dsh-wb-note mono', style: { overflowWrap: 'anywhere' } }, `会话目录：${sessionRoot || '迭代目录尚未就绪'}`),
-          busy ? h('div', { className: 'dsh-wb-progress' }, h('span', { className: 'dsh-wb-spinner' }), `${step}…`) : null,
-          error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
-          h('div', { className: 'dsh-wb-dialog-actions' },
-            h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: onClose }, '取消'),
-            h('button', {
-              className: 'dsh-wb-btn dsh-wb-btn--primary',
-              type: 'button',
-              disabled: busy || types.length === 0 || sessionRoot === '',
-              onClick: () => { void submit() },
-            }, busy ? '创建中…' : '创建会话'),
-          ),
-        ),
-      )
+    // 需求页的会话都按同一套流程创建：迭代目录 → DSH 工作区 → 会话 →
+    // 标题 → 服务端会话记录。进入需求页时按身份自动调用；引导信息由会话开场白给出。
+    async function createRequirementSession(ctx, state, requirement, type) {
+      const sessionRoot = String(state?.iterationDir ?? state?.baseDir ?? '').replace(/\/+$/, '')
+      const baseDir = String(state?.baseDir ?? '').replace(/\/+$/, '')
+      if (sessionRoot === '') throw new Error('还没有可用的迭代目录')
+      const split = splitDirectory(sessionRoot)
+      if (sessionRoot !== baseDir && split !== null) await ensureChildDirectory(split.parent, split.name)
+      const workspace = await ctx.workspaces.create({ path: sessionRoot })
+      const workspaceId = workspace.workspaceId
+      const sessionId = await ctx.sessions.create({ workspaceId })
+      await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
+        const result = await reference.binding.session.rename(`${requirement.title} · ${sessionTypeLabel(type)}`)
+        if (result.ok !== true) throw new Error(result.error?.message || '会话标题设置失败')
+      })
+      // 服务端只存会话记录；DSH 会话 ID 和本机路径由 host 半端写进本机映射。
+      const body = await api(`requirements/${encodeURIComponent(requirement.id)}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type,
+          label: `${sessionTypeLabel(type)}会话`,
+          dshSessionId: sessionId,
+          workspaceId,
+          folderPath: sessionRoot,
+        }),
+      })
+      return { sessionId, requirement: body.requirement }
     }
 
     function activePlatformGroups(platformGroups, platforms) {
@@ -4635,10 +4555,6 @@ window.__ModuleLoader__.load({
       )
       return h('div', { className: 'page' },
         h('div', { className: 'page-head' },
-          h('div', { className: 'ttl-block' },
-            h('h1', { className: 'page-title' }, '设置'),
-            h('div', { className: 'page-sub' }, '身份与平台、文件夹、认证、通知、技能更新'),
-          ),
           h('div', { className: 'page-actions' },
             h('button', { className: 'btn btn-sm', type: 'button', disabled: auth.busy, onClick: () => { void auth.logout() } }, '退出登录'),
             h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy || folder.trim() === '', onClick: () => { void save() } }, busy ? '保存中…' : '保存更改'),
@@ -5083,136 +4999,6 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function NotificationBell({ state, onOpenRequirement, onReload, onToast }) {
-      const [open, setOpen] = useState(false)
-      const [busy, setBusy] = useState(false)
-      const [groupFilter, setGroupFilter] = useState('')
-      const wrapRef = useRef(null)
-      const buttonRef = useRef(null)
-      const panelRef = useRef(null)
-      const panelId = useRef(`dsh-wb-notif-panel-${++modalSeq}`).current
-      const items = Array.isArray(state.notifications) ? state.notifications : []
-      const groups = Array.isArray(state.notificationGroups) ? state.notificationGroups : []
-      const unread = state.unreadNotificationCount ?? items.filter(item => item.read !== true).length
-      const visibleItems = groupFilter === ''
-        ? items
-        : items.filter(item => (item.requirementId ?? 'system') === groupFilter)
-
-      useEffect(() => {
-        if (groupFilter !== '' && !groups.some(group => group.key === groupFilter)) setGroupFilter('')
-      }, [groups, groupFilter])
-
-      useEffect(() => {
-        if (!open) return undefined
-        const close = (event) => { if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false) }
-        document.addEventListener('mousedown', close)
-        const focusTimer = setTimeout(() => {
-          const target = panelRef.current?.querySelector('button:not([disabled])')
-          target?.focus()
-        }, 0)
-        return () => {
-          document.removeEventListener('mousedown', close)
-          clearTimeout(focusTimer)
-        }
-      }, [open])
-
-      const closePopover = () => {
-        setOpen(false)
-        buttonRef.current?.focus()
-      }
-
-      const markAll = useCallback(async () => {
-        if (busy) return
-        setBusy(true)
-        try {
-          await api('notifications/read', { method: 'POST', body: '{}' })
-          await onReload()
-        } catch (reason) {
-          onToast(reason instanceof Error ? reason.message : String(reason), true)
-        } finally {
-          setBusy(false)
-        }
-      }, [busy, onReload, onToast])
-
-      const openItem = useCallback(async (item) => {
-        setOpen(false)
-        if (item.read !== true) {
-          try {
-            await api('notifications/read', { method: 'POST', body: JSON.stringify({ ids: [item.id] }) })
-            await onReload()
-          } catch (_) { /* 读取失败不阻塞跳转 */ }
-        }
-        if (item.requirementId) onOpenRequirement(item.requirementId)
-      }, [onOpenRequirement, onReload])
-
-      return h('div', {
-        className: 'dsh-wb-popwrap',
-        ref: wrapRef,
-        onKeyDown: (event) => {
-          if (event.key === 'Escape' && open) {
-            event.preventDefault()
-            event.stopPropagation()
-            closePopover()
-          }
-        },
-      },
-        h('button', {
-          ref: buttonRef,
-          className: 'dsh-wb-iconbtn',
-          type: 'button',
-          title: unread > 0 ? `${unread} 条未读通知` : '通知',
-          'aria-label': unread > 0 ? `通知，${unread} 条未读` : '通知',
-          'aria-haspopup': 'dialog',
-          'aria-expanded': open,
-          'aria-controls': panelId,
-          onClick: () => setOpen(value => !value),
-        },
-          h(BellIcon),
-          h('span', null, '通知'),
-          unread > 0 ? h('span', { className: 'dsh-wb-bell-badge' }, unread > 99 ? '99+' : String(unread)) : null,
-        ),
-        open ? h('div', { className: 'dsh-wb-popover', ref: panelRef, id: panelId, role: 'dialog', 'aria-label': '通知' },
-          h('div', { className: 'dsh-wb-popover-head' },
-            h('b', null, '通知'),
-            h('span', { className: 'dsh-wb-count' }, `${unread} 条未读`),
-            unread > 0 ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--ghost', type: 'button', disabled: busy, onClick: () => { void markAll() } }, busy ? '处理中…' : '全部已读') : null,
-          ),
-          groups.length > 0
-            ? h('div', { className: 'dsh-wb-notif-groups' },
-                h('button', {
-                  className: `dsh-wb-notif-group${groupFilter === '' ? ' is-active' : ''}`,
-                  type: 'button',
-                  onClick: () => setGroupFilter(''),
-                }, `全部 ${items.length}`),
-                groups.map(group => h('button', {
-                  className: `dsh-wb-notif-group${groupFilter === group.key ? ' is-active' : ''}`,
-                  type: 'button',
-                  key: group.key,
-                  title: `${group.code || '系统'} ${group.title}`,
-                  onClick: () => setGroupFilter(group.key),
-                }, `${group.code || '系统'}${group.unread > 0 ? ` · ${group.unread}` : ''}`)),
-              )
-            : null,
-          visibleItems.length === 0
-            ? h('div', { className: 'dsh-wb-empty', style: { padding: '24px 14px' } }, h('b', null, '还没有通知'), '需求评审、开发完成、测试结果和技能审核会出现在这里。')
-            : visibleItems.map(item => h('button', {
-                className: `dsh-wb-notif${item.read === true ? '' : ' is-unread'}`,
-                type: 'button',
-                key: item.id,
-                'aria-label': `${item.read === true ? '' : '未读，'}${item.title}${item.body ? `，${item.body}` : ''}，${relativeTime(item.at)}`,
-                onClick: () => { void openItem(item) },
-              },
-                h('span', { className: 'dsh-wb-notif-title' },
-                  item.read === true ? null : h('span', { className: 'dsh-wb-notif-dot' }),
-                  item.title,
-                ),
-                item.body ? h('span', { className: 'dsh-wb-notif-body' }, item.body) : null,
-                h('span', { className: 'dsh-wb-notif-time' }, relativeTime(item.at)),
-              )),
-        ) : null,
-      )
-    }
-
     function RolePackChips({ value, onChange, disabled }) {
       return h('div', { className: 'dsh-wb-auth-chips' },
         ['lead', 'product', 'design', 'dev', 'qa', 'admin'].map(role => h('button', {
@@ -5522,15 +5308,6 @@ window.__ModuleLoader__.load({
                 ),
               )
       return h('div', { className: 'page' },
-        h('div', { className: 'page-head' },
-          h('div', { className: 'ttl-block' },
-            h('h1', { className: 'page-title' }, '技能库'),
-            h('div', { className: 'page-sub' }, `${skills.length} 个技能 · 已发布 ${skills.filter(skill => skill.status === 'active').length} · 审核中 ${skills.filter(skill => skill.status === 'pending_review').length} · 已归档 ${skills.filter(skill => skill.status === 'archived').length}`),
-          ),
-          h('div', { className: 'page-actions' },
-            h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: startCreate }, h(DesignIcon, { name: 'plus' }), '新建技能'),
-          ),
-        ),
         error !== '' ? h('div', { className: 'banner banner--mock', style: { marginBottom: '14px' } }, h(DesignIcon, { name: 'alert' }), h('span', null, error)) : null,
         h('div', { className: 'toolbar' },
           h('div', { className: 'seg' },
@@ -5542,6 +5319,7 @@ window.__ModuleLoader__.load({
             h(DesignIcon, { name: 'search' }),
             h('input', { value: query, placeholder: '搜索技能', 'aria-label': '搜索技能', onChange: event => setQuery(event.target.value) }),
           ),
+          h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: startCreate }, h(DesignIcon, { name: 'plus' }), '新建技能'),
         ),
         h('div', { className: 'skill-layout' },
           h('div', { className: 'skill-list' },
@@ -5877,13 +5655,46 @@ window.__ModuleLoader__.load({
     function dockSessionOf(requirement, user) {
       const own = (requirement?.sessions ?? [])
         .filter(session =>
-          session.own === true && typeof session.sessionId === 'string' && session.sessionId !== '')
+          session.archived !== true
+          && session.own === true && typeof session.sessionId === 'string' && session.sessionId !== '')
         // 同一类型可能建过不止一场；会话坞永远打开最新的一场。
         .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
       if (own.length === 0) return null
       const byRole = { product: 'requirement', design: 'design', dev: 'dev', qa: 'test', lead: 'requirement' }
       const preferred = byRole[user?.activeRole]
       return own.find(session => session.type === preferred) ?? own[0]
+    }
+
+    // 卡片墙上有没有「我」：负责人、设计、会签、开发、测试都算；会话记录不算卡片，
+    // 否则以前自动开过会话的人会看不到「加入需求」的入口。
+    function requirementHasCard(requirement, user) {
+      if (requirement === null || !user) return false
+      const uid = user.id
+      return requirement.ownerId === uid
+        || requirement.designerId === uid
+        || requirement.testerId === uid
+        || (requirement.reviewerIds ?? []).includes(uid)
+        || (requirement.reviews ?? []).some(review => review.by === uid)
+        || (requirement.devTasks ?? []).some(task => task.assigneeId === uid)
+        || (requirement.testRuns ?? []).some(run => run.by === uid)
+    }
+
+    // 已经在这条需求上有位置：有卡片，或者本人名下已有会话。
+    // 测试没有认领这一步：QA 进来就准备测试会话，测试卡随第一轮测试出现。
+    function requirementJoined(requirement, user) {
+      if (requirement === null || !user) return false
+      if (sessionTypeForRole(user) === 'test') return true
+      return requirementHasCard(requirement, user)
+        || (requirement.sessions ?? []).some(session => session.archived !== true && session.createdBy === user.id)
+    }
+
+    // 进入需求时自动开的会话类型：按当前身份，产品/负责人开需求会话，其余各开各的。
+    function sessionTypeForRole(user) {
+      const role = user?.activeRole || (user?.roles ?? [])[0] || ''
+      if (role === 'design') return 'design'
+      if (role === 'dev') return 'dev'
+      if (role === 'qa') return 'test'
+      return 'requirement'
     }
 
     // 会话坞里只放对话本身：固定 Chat 视图，复用宿主的 conversation.content 工厂。
@@ -5917,7 +5728,7 @@ window.__ModuleLoader__.load({
       }, { slots: { views: ChatOnlyView } })
     }
 
-    function SessionDock({ ctx, kit, state, requirement, onNewSession, width = 400, onResizeStart, onResizeReset }) {
+    function SessionDock({ ctx, kit, state, requirement, creating = false, createError = '', waitingForPublish = false, onRetry, width = 400, onResizeStart, onResizeReset }) {
       const record = dockSessionOf(requirement, state?.currentUser)
       const sessionId = record?.sessionId ?? ''
       const [reference, setReference] = useState(null)
@@ -5969,13 +5780,19 @@ window.__ModuleLoader__.load({
                   ? error
                   : sessionId !== ''
                     ? '正在打开你的会话…'
-                    : '每人在这条需求上都有自己的会话；创建后，画布和会话会一直并排。',
-                sessionId === ''
+                    : createError !== ''
+                      ? `自动创建会话失败：${createError}`
+                      : creating
+                        ? '正在为你创建这条需求上的会话…'
+                        : waitingForPublish
+                          ? '需求发布后，这里会准备你的会话。'
+                          : '正在准备你的会话…',
+                sessionId === '' && createError !== '' && onRetry !== undefined
                   ? h('button', {
                       className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-btn--primary',
                       type: 'button',
-                      onClick: onNewSession,
-                    }, '创建我的会话')
+                      onClick: onRetry,
+                    }, '重试')
                   : null,
               ),
         ),
@@ -6341,7 +6158,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function IterationListView({ state, query, onQuery, filter, onFilter, sort, onSort, onOpen, onCreate, canCreate }) {
+    function IterationListView({ state, query, onQuery, filter, onFilter, onOpen, onCreate, onOpenMy, onOpenSkills, canCreate, hasProject = true }) {
       const projectId = state.project?.id ?? state.currentProjectId ?? null
       const entries = [...(state.iterations ?? [])]
         .filter(iteration => iteration.archived !== true)
@@ -6356,6 +6173,7 @@ window.__ModuleLoader__.load({
           return iteration.ownerId === uid || requirements.some(requirement =>
             requirement.ownerId === uid ||
             requirement.designerId === uid ||
+            requirement.testerId === uid ||
             (requirement.reviewerIds ?? []).includes(uid) ||
             (requirement.devTasks ?? []).some(task => task.assigneeId === uid))
         }
@@ -6363,39 +6181,26 @@ window.__ModuleLoader__.load({
         if (filter === 'done') return iteration.status === 'done'
         return true
       })
-      const phaseOrder = { '规划中': 0, '需求': 1, '评审': 2, '设计': 3, '开发': 4, '测试': 5, '已封板': 6 }
-      const ordered = sort === ''
-        ? visible
-        : [...visible].sort((left, right) => {
-            if (sort === 'owner') {
-              const leftOwner = state.users.find(user => user.id === left.iteration.ownerId)?.name ?? left.iteration.ownerId
-              const rightOwner = state.users.find(user => user.id === right.iteration.ownerId)?.name ?? right.iteration.ownerId
-              return leftOwner.localeCompare(rightOwner, 'zh-CN')
-            }
-            const leftPhase = phaseOrder[iterationPhaseLabel(left.iteration, left.requirements)] ?? 9
-            const rightPhase = phaseOrder[iterationPhaseLabel(right.iteration, right.requirements)] ?? 9
-            return leftPhase - rightPhase
-          })
-      const mine = entries.filter(({ iteration, requirements }) =>
-        iteration.ownerId === uid || requirements.some(requirement =>
-          requirement.ownerId === uid ||
-          requirement.designerId === uid ||
-          (requirement.reviewerIds ?? []).includes(uid))).length
-      const active = entries.filter(entry => entry.iteration.status === 'in_progress').length
-      const month = monthKey()
-      const closed = entries.filter(entry =>
-        entry.iteration.status === 'done' && String(entry.iteration.endDate ?? '').startsWith(month)).length
+      const ordered = visible
 
       return h('div', { className: 'page' },
-        h('div', { className: 'page-head' },
-          h('div', { className: 'ttl-block' },
-            h('h1', { className: 'page-title' }, '迭代'),
-            h('div', { className: 'page-sub' }, `${state.project?.name ?? '当前项目'} · 共 ${entries.length} 个迭代 · 我参与 ${mine} 个 · 进行中 ${active} 个 · 本月封板 ${closed} 个`),
+        h('div', { className: 'home-links' },
+          h('button', { className: 'home-link', type: 'button', onClick: onOpenMy },
+            h(DesignIcon, { name: 'workbench' }),
+            h('span', { className: 'home-link-body' },
+              h('b', null, '我的工作台'),
+              h('span', null, '需求、设计任务、待办合成一份清单'),
+            ),
+            h(DesignIcon, { name: 'chev-right', className: 'chev' }),
           ),
-          canCreate ? h('div', { className: 'page-actions' },
-            h('button', { className: 'btn btn-primary', type: 'button', onClick: onCreate },
-              h(DesignIcon, { name: 'plus' }), '新建迭代'),
-          ) : null,
+          h('button', { className: 'home-link', type: 'button', onClick: onOpenSkills },
+            h(DesignIcon, { name: 'skills' }),
+            h('span', { className: 'home-link-body' },
+              h('b', null, '技能'),
+              h('span', null, '团队技能与个人技能，按角色可用'),
+            ),
+            h(DesignIcon, { name: 'chev-right', className: 'chev' }),
+          ),
         ),
         h(IterationKpis, { state, entries }),
         h('div', { className: 'toolbar' },
@@ -6409,31 +6214,23 @@ window.__ModuleLoader__.load({
               }, label)),
           ),
           h('div', { className: 'spacer' }),
-          h('button', {
-            className: 'dropdown-trigger',
-            type: 'button',
-            'aria-pressed': sort === 'phase',
-            style: sort === 'phase' ? { borderColor: 'var(--primary-line)', color: 'var(--primary)' } : undefined,
-            onClick: () => onSort(sort === 'phase' ? '' : 'phase'),
-          }, '按阶段', h(DesignIcon, { name: 'chev-down', className: 'chev' })),
-          h('button', {
-            className: 'dropdown-trigger',
-            type: 'button',
-            'aria-pressed': sort === 'owner',
-            style: sort === 'owner' ? { borderColor: 'var(--primary-line)', color: 'var(--primary)' } : undefined,
-            onClick: () => onSort(sort === 'owner' ? '' : 'owner'),
-          }, '按负责人', h(DesignIcon, { name: 'chev-down', className: 'chev' })),
+          canCreate ? h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: onCreate },
+            h(DesignIcon, { name: 'plus' }), '新建迭代') : null,
         ),
         ordered.length === 0
           ? h('div', { className: 'empty-page' },
               h(DesignIcon, { name: normalized !== '' ? 'search' : 'iter', size: 28 }),
-              h('b', null, normalized !== '' ? '没有匹配的迭代' : '这个项目还没有迭代'),
-              h('span', null, normalized !== '' ? '换一个关键词或筛选条件。' : canCreate ? '点右上「新建迭代」开始。' : '等负责人创建迭代后再来。'),
+              h('b', null, normalized !== '' ? '没有匹配的迭代' : hasProject ? '这个项目还没有迭代' : '还没有项目'),
+              h('span', null, normalized !== ''
+                ? '换一个关键词或筛选条件。'
+                : hasProject
+                  ? (canCreate ? '点右上「新建迭代」开始。' : '等负责人创建迭代后再来。')
+                  : '先在左上角项目菜单新建项目。'),
             )
           : h('div', { className: 'table-wrap' },
               h('table', { className: 'table', style: { minWidth: '920px' } },
                 h('thead', null, h('tr', null,
-                  h('th', { style: { width: '92px' } }, '编号'),
+                  h('th', { style: { width: '120px' } }, '编号'),
                   h('th', null, '迭代名称'),
                   h('th', { style: { width: '130px' } }, '当前阶段'),
                   h('th', { style: { width: '150px' } }, '起止'),
@@ -6461,7 +6258,6 @@ window.__ModuleLoader__.load({
                           href: '#',
                           onClick: event => { event.preventDefault(); onOpen(iteration.id) },
                         }, iteration.name),
-                        h('div', { className: 'rksub' }, `范围 ${inScope} 需求 · ${iteration.status === 'planning' ? '规划中' : iteration.status === 'done' ? '已封板' : phase}`),
                       ),
                       h('td', null, h(DesignChip, { tone: phaseChipTone(phase), glyph: phase === '已封板' ? '✓' : phase === '规划中' ? '○' : '◐' }, phase)),
                       h('td', { className: 'mono', style: { fontSize: '12px', color: 'var(--text-3)' } }, `${shortDay(iteration.startDate)} → ${shortDay(iteration.endDate)}`),
@@ -6542,7 +6338,7 @@ window.__ModuleLoader__.load({
       return from === to ? from : `${from}→${to}`
     }
 
-    function RequirementCard({ requirement, state, onOpen, onOpenSession, onOpenDesign }) {
+    function RequirementCard({ requirement, state, onOpen, onOpenSession, onOpenDesign, onDelete }) {
       const owner = state.users.find(user => user.id === requirement.ownerId)
       const designer = requirement.designerId ? state.users.find(user => user.id === requirement.designerId) : null
       const grouped = groupedPlatforms(state.platforms ?? [], state.platformGroups ?? [], requirement.platformIds)
@@ -6550,22 +6346,43 @@ window.__ModuleLoader__.load({
       const included = new Set(requirement.platformIds ?? [])
       const excluded = allPlatforms.filter(item => !included.has(item.id))
       const testRun = (requirement.testRuns ?? [])[(requirement.testRuns ?? []).length - 1]
+      const tester = requirement.testerId ? state.users.find(user => user.id === requirement.testerId) : null
       const test = testChipMeta(testRun)
-      const designCount = Math.max(
-        requirement.designFiles?.length ?? 0,
-        (requirement.designScreens?.length ?? 0) + (requirement.designImages?.length ?? 0),
-      )
+      // 测试和设计一样，有人负责之前先把「待认领」摆出来，别只写一个没信息的「测试」。
+      const testChip = !testRun && !tester && (requirement.versions ?? []).length > 0 && !['released', 'done'].includes(requirement.status)
+        ? { tone: 'warn', glyph: '◇', label: '测试待认领' }
+        : test
+      const testChipLabel = testChip.label === '测试待认领' ? '测试待认领' : '测试'
       const reqMeta = REQ_STATUS[requirement.status] ?? { label: requirement.status || '未知', tone: 'idle', glyph: '·' }
-      return h('article', { className: 'req-card' },
+      const published = (requirement.versions ?? []).length > 0
+      // 整张需求卡都可以点：标题、平台、底部都会跳到需求全量。
+      // 键盘入口保留在标题链接上，卡片本身不再重复一个 tab 停留点。
+      return h('article', {
+        className: 'req-card',
+        onClick: () => onOpen(requirement.id),
+      },
         h('div', { className: 'rc-hd' },
           h('span', { className: 'rc-code' }, requirement.code),
           h(StatusChip, { kind: 'req', value: requirement.status }),
-          requirement.designUpdatedAt ? h(DesignChip, { tone: 'warn', glyph: '◷', className: 'design-updated' }, '设计已更新') : null,
+          published && requirement.designUpdatedAt ? h(DesignChip, { tone: 'warn', glyph: '◷', className: 'design-updated' }, '设计已更新') : null,
+          requirement.ownerId === state.currentUser?.id && typeof onDelete === 'function'
+            ? h('button', {
+                className: 'rc-del',
+                type: 'button',
+                title: '删除需求',
+                'aria-label': `删除需求 ${requirement.code}`,
+                onClick: event => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  onDelete(requirement)
+                },
+              }, h(DesignIcon, { name: 'trash', size: 15 }))
+            : null,
         ),
-        h('a', { className: 'rc-title', href: '#', onClick: event => { event.preventDefault(); onOpen(requirement.id) } }, requirement.title),
+        h('a', { className: 'rc-title', href: '#', onClick: event => { event.preventDefault(); event.stopPropagation(); onOpen(requirement.id) } }, requirement.title),
         h('div', { className: 'row wrap', style: { gap: '4px', margin: '8px 0' } },
           h(DesignChip, { tone: statusChipTone('req', requirement.status, reqMeta), glyph: reqMeta.glyph, title: `需求 ${reqMeta.label}` }, '需求'),
-          h(StatusChip, { kind: 'design', value: requirement.designStatus }),
+          published ? h(StatusChip, { kind: 'design', value: requirement.designStatus }) : null,
           grouped.length === 0
             ? h(DesignChip, { tone: 'idle', glyph: '○' }, '未设置平台')
             : grouped.map(entry => h('span', { className: 'mxg', key: entry.group.id },
@@ -6581,7 +6398,7 @@ window.__ModuleLoader__.load({
                   }, item.shortName ?? item.name)
                 }),
               )),
-          h(DesignChip, { tone: test.tone, glyph: test.glyph, title: test.label }, '测试'),
+          h(DesignChip, { tone: testChip.tone, glyph: testChip.glyph, title: testChip.label }, testChipLabel),
           requirement.release ? h(DesignChip, { tone: 'done', glyph: '▲' }, requirement.release.version) : null,
           excluded.length > 0 ? h('span', { className: 'mna2', title: '不涉及' }, `不涉及 ${excluded.slice(0, 5).map(item => item.shortName ?? item.name).join('·')}`) : null,
         ),
@@ -6589,22 +6406,9 @@ window.__ModuleLoader__.load({
           h('span', { className: 'assignee' },
             h(Avatar, { name: owner?.name ?? requirement.ownerId }),
             designer !== null ? h(Avatar, { name: designer.name }) : null,
+            tester !== null ? h(Avatar, { name: tester.name }) : null,
           ),
           h('span', { className: 'tiny muted' }, `${owner?.name ?? '—'} ${relativeTime(requirement.updatedAt)}更新`),
-          h('div', { className: 'req-links' },
-            h('a', { className: 'req-link', href: '#', onClick: event => { event.preventDefault(); onOpen(requirement.id) } }, '总述'),
-            requirement.sessionId && designCount > 0 ? h('a', {
-              className: 'req-link',
-              href: '#',
-              title: `打开设计画布（${designCount} 个页面）`,
-              onClick: event => { event.preventDefault(); onOpenDesign(requirement) },
-            }, '设计稿') : null,
-            requirement.sessionId ? h('a', {
-              className: 'req-link',
-              href: '#',
-              onClick: event => { event.preventDefault(); onOpenSession(requirement.sessionId) },
-            }, h(DesignIcon, { name: 'workbench' }), '会话') : null,
-          ),
         ),
       )
     }
@@ -6656,8 +6460,10 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function IterationDetailView({ state, requirements, onCreateRequirement, onOpenSettings, canCreate, canConfig, onOpenRequirement, onOpenSession, onOpenDesign }) {
+    function IterationDetailView({ state, requirements, onCreateRequirement, onOpenSettings, canCreate, canConfig, onOpenRequirement, onOpenSession, onOpenDesign, onReload, onToast }) {
       const [reqFilter, setReqFilter] = useState('all')
+      const [deleteTarget, setDeleteTarget] = useState(null)
+      const [deleting, setDeleting] = useState(false)
       const iteration = state.iteration
       const owner = state.users.find(user => user.id === iteration.ownerId)
       const phase = iterationPhaseLabel(iteration, requirements)
@@ -6667,9 +6473,27 @@ window.__ModuleLoader__.load({
       const activity = recentRequirementActivity(state, requirements)
       const designReady = requirements.filter(item => ['delivered', 'not_needed'].includes(item.designStatus)).length
       const inScope = requirements.filter(item => item.inScope !== false)
-      const pendingReview = requirements.filter(item => ['pending_review', 'draft', 'changes_requested'].includes(item.status))
+      // 「待评审」只数真的提交了、等评审的需求；草稿和退回重写还没到评审这一步。
+      const pendingReview = requirements.filter(item => item.status === 'pending_review')
       const doing = requirements.filter(item => ['in_progress', 'dev_done', 'testing'].includes(item.status))
       const visible = reqFilter === 'review' ? pendingReview : reqFilter === 'active' ? doing : requirements
+      const removeRequirement = async () => {
+        if (deleteTarget === null || deleting) return
+        setDeleting(true)
+        try {
+          const result = await api(`requirements/${encodeURIComponent(deleteTarget.id)}`, { method: 'DELETE' })
+          const failures = Array.isArray(result?.sessionDeleteFailures) ? result.sessionDeleteFailures.length : 0
+          onToast?.(failures > 0
+            ? `${deleteTarget.code} 已删除；${failures} 个相关会话未能删除`
+            : `${deleteTarget.code} 已删除，相关会话已清理`, failures > 0)
+          setDeleteTarget(null)
+          onReload?.()
+        } catch (reason) {
+          onToast?.(reason instanceof Error ? reason.message : String(reason), true)
+        } finally {
+          setDeleting(false)
+        }
+      }
       const windows = {
         '需求与评审': { left: 0, width: 12 },
         '设计': { left: 12, width: 21 },
@@ -6744,7 +6568,7 @@ window.__ModuleLoader__.load({
               h('span', { className: 't' }, '需求'),
               h('span', { className: 'n' }, String(requirements.length)),
               h('div', { className: 'r' },
-                h('div', { className: 'seg', style: { height: '26px' } },
+                h('div', { className: 'seg' },
                   [['all', '全部'], ['review', `待评审 ${pendingReview.length}`], ['active', `进行中 ${doing.length}`]].map(([key, label]) =>
                     h('button', { key, type: 'button', className: reqFilter === key ? 'active' : '', onClick: () => setReqFilter(key) }, label)),
                 ),
@@ -6754,7 +6578,7 @@ window.__ModuleLoader__.load({
             ),
             h('p', { className: 'tiny muted', style: { margin: '-4px 0 14px' } },
               '每张需求卡只显示', h('b', null, '设计状态'), '和涉及平台的进展；认领 / 指派 / 提交 / 变更都由 skill 在',
-              h('b', null, '会话'), '里完成。点标题进入「需求全量」，卡片链到总述 / 设计稿 / 会话。'),
+              h('b', null, '会话'), '里完成。点标题进入「需求全量」。'),
             visible.length === 0
               ? h('div', { className: 'empty-page' },
                   h(DesignIcon, { name: 'iter', size: 28 }),
@@ -6769,6 +6593,7 @@ window.__ModuleLoader__.load({
                       onOpen: onOpenRequirement,
                       onOpenSession,
                       onOpenDesign,
+                      onDelete: target => setDeleteTarget(target),
                     }),
                   )),
                 ),
@@ -6795,15 +6620,6 @@ window.__ModuleLoader__.load({
               ),
             ),
             h('div', { className: 'card', style: { padding: '13px 14px' } },
-              h('div', { className: 'tiny muted', style: { marginBottom: '8px' } }, '范围'),
-              h('div', { className: 'row gap-4', style: { flexWrap: 'wrap' } },
-                h(DesignChip, { tone: 'plain' }, `已排期 ${requirements.filter(item => ['approved', 'scheduled'].includes(item.status)).length}`),
-                h(DesignChip, { tone: 'prog' }, `进行中 ${doing.length}`),
-                h(DesignChip, { tone: 'done' }, `已完成 ${requirements.filter(item => ['done', 'released', 'test_passed'].includes(item.status)).length}`),
-                h(DesignChip, { tone: 'na' }, `范围外 ${requirements.filter(item => item.inScope === false).length}`),
-              ),
-            ),
-            h('div', { className: 'card', style: { padding: '13px 14px' } },
               h('div', { className: 'tiny muted', style: { marginBottom: '8px' } }, '整体进度'),
               h('div', { className: 'row gap-3' },
                 h('div', { className: `progress${progress >= 100 ? ' green' : ''}`, style: { flex: 1 } }, h('span', { style: { width: `${Math.min(100, progress)}%` } })),
@@ -6812,6 +6628,15 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+        deleteTarget !== null
+          ? h(ConfirmDialog, {
+              title: '删除需求',
+              confirmLabel: '删除需求',
+              busy: deleting,
+              onConfirm: () => { void removeRequirement() },
+              onClose: () => { if (!deleting) setDeleteTarget(null) },
+            }, `删除 ${deleteTarget.code}「${deleteTarget.title}」？删除后不能恢复，相关会话也会一起删除。`)
+          : null,
       )
     }
 
@@ -6874,10 +6699,14 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementPageView({ ctx, state, requirement, onOpenPrototype, onOpenSession, onOpenDesignCanvas, onOpenTest }) {
+    function RequirementPageView({ ctx, state, requirement, onOpenPrototype, onOpenDesignCanvas, onJoinRequirement, prototypeVersionFocus = null, onPrototypeVersionFocusDone = null }) {
       usePreviewTickets([requirement.id])
       // 需求页的缩略图直接在弹层里放大看，不再依赖会话右栏。
       const [shotPreview, setShotPreview] = useState(null)
+      // 「认领」：卡片还是待认领、本人又能接这个位置时，状态徽标换成认领按钮。
+      const [claimTarget, setClaimTarget] = useState(null)
+      const [claimBusy, setClaimBusy] = useState(false)
+      const [claimError, setClaimError] = useState('')
       const iteration = (state.iterations ?? []).find(item => item.id === requirement.iterationId)
       const artifacts = Array.isArray(requirement.artifacts) ? requirement.artifacts : []
       const designArtifacts = artifacts.filter(artifact => artifact.kind === 'design')
@@ -6893,25 +6722,52 @@ window.__ModuleLoader__.load({
         artifact.kind === 'prototype'
         && typeof artifact.name === 'string'
         && /\.html?$/i.test(artifact.name))
+      // 提交需求时固化的原型版本；平时改原型只会更新「最新」，不会新增版本。
+      const prototypeVersions = (Array.isArray(requirement.prototypeVersions) ? requirement.prototypeVersions : [])
+        .slice()
+        .sort((a, b) => Number(a.version) - Number(b.version))
+      const [prototypeVersion, setPrototypeVersion] = useState(null)
+      useEffect(() => { setPrototypeVersion(null) }, [requirement.id])
+      // 画布版本面板里点了「提交定格」的版本：回到需求页时把原型卡直接切到那一版。
+      useEffect(() => {
+        if (prototypeVersionFocus === null) return
+        setPrototypeVersion(prototypeVersionFocus.version)
+        if (typeof onPrototypeVersionFocusDone === 'function') onPrototypeVersionFocusDone()
+      }, [prototypeVersionFocus])
       const images = designArtifacts.filter(artifact => /^image\//i.test(String(artifact.contentType || ''))).length
       const owner = state.users.find(user => user.id === requirement.ownerId)
       const designer = requirement.designerId ? state.users.find(user => user.id === requirement.designerId) : null
+      const tester = requirement.testerId ? state.users.find(user => user.id === requirement.testerId) : null
       const versions = requirement.versions ?? []
       const designVersions = requirement.designVersions ?? []
       const devTasks = requirement.devTasks ?? []
       const testRuns = requirement.testRuns ?? []
       const latestTest = testRuns[testRuns.length - 1] ?? null
       const testReportArtifacts = artifacts.filter(artifact => artifact.kind === 'test-report')
-      const testSession = (requirement.sessions ?? []).find(session => session.type === 'test' && session.sessionId)
       const grouped = groupedPlatforms(state.platforms ?? [], state.platformGroups ?? [], requirement.platformIds)
       // 涉及端不再按组展示：所有端拉平成一个网格，卡片大小一致。
       const endPlatforms = grouped.flatMap(entry => entry.items)
-      const includedIds = new Set(requirement.platformIds ?? [])
-      const excluded = (state.platforms ?? []).filter(item => item.active !== false && !includedIds.has(item.id))
       const document = requirement.document ?? null
       const latestVersion = versions[versions.length - 1] ?? null
       const docSummary = String(document?.summary ?? '').trim() || String(latestVersion?.summary ?? '').trim()
       const docBody = String(document?.body ?? '').trim()
+      // 需求正文常常一大段：超过预览高度就默认收起，先让第一屏看到总述，
+      // 需要细读时点标题行的「展开全文」。用实际高度判断，短文档不显示按钮。
+      const DOC_PREVIEW_HEIGHT = 220
+      const docBodyRef = useRef(null)
+      const [docExpanded, setDocExpanded] = useState(false)
+      const [docOverflowing, setDocOverflowing] = useState(false)
+      useLayoutEffect(() => {
+        const node = docBodyRef.current
+        if (node === null) return undefined
+        const measure = () => setDocOverflowing(node.scrollHeight > DOC_PREVIEW_HEIGHT + 24)
+        measure()
+        if (typeof ResizeObserver !== 'function') return undefined
+        const observer = new ResizeObserver(measure)
+        observer.observe(node)
+        return () => observer.disconnect()
+      }, [docSummary, docBody, document?.acceptanceCriteria, requirement.id])
+      useEffect(() => { setDocExpanded(false) }, [requirement.id])
       const shortName = name => String(name ?? '').split(/[\\/]/).pop()
       // 需求文档里的「## 原型页面 / ## 设计页面」清单：每屏一行，形如
       // `1. 01-xxx.html — 页面名：说明`。把它贴到对应缩略图下面，开发看图时
@@ -6978,7 +6834,26 @@ window.__ModuleLoader__.load({
             updatedAt: file.updatedAt,
             note: prototypeNotes.get(shortName(file.name ?? file.relativePath)) ?? '',
           }))
-      const prototypeScreens = prototypeItems.length
+      const selectedPrototypeVersion = prototypeVersion === null
+        ? null
+        : prototypeVersions.find(item => item.version === prototypeVersion) ?? null
+      // 选历史版本时只读：附件还是提交那一刻的那几份，点击只在弹层里放大。
+      const versionedPrototypeItems = selectedPrototypeVersion === null
+        ? null
+        : (Array.isArray(selectedPrototypeVersion.files) ? selectedPrototypeVersion.files : [])
+            .map(file => prototypeArtifacts.find(artifact => artifact.id === file.artifactId))
+            .filter(Boolean)
+            .map(artifact => ({
+              key: `v-${artifact.id}`,
+              name: shortName(artifact.name),
+              path: '',
+              src: readyPreviewUrl({ artifactId: artifact.id, name: artifact.name }),
+              kind: 'html',
+              updatedAt: selectedPrototypeVersion.createdAt,
+              note: prototypeNotes.get(shortName(artifact.name)) ?? '',
+            }))
+      const displayedPrototypeItems = versionedPrototypeItems ?? prototypeItems
+      const prototypeScreens = displayedPrototypeItems.length
       // 页面跑在 dsh-app://app 里，链接用本机 DSH 的 http origin，右键复制仍有意义。
       const hostOrigin = (() => {
         try {
@@ -7054,47 +6929,73 @@ window.__ModuleLoader__.load({
       // 会话记录可能属于别人（sessionId 为空，代表本机打不开他的会话）；
       // 卡片仍要把这条记录显示出来，只有「进入会话」需要有可用的 sessionId。
       const sessionFor = (types, personId) => (requirement.sessions ?? [])
-        .filter(session => types.includes(session.type)
+        .filter(session => session.archived !== true
+          && types.includes(session.type)
           && (personId === undefined || session.createdBy === personId))
         .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0] ?? null
-      const productSession = sessionFor(['requirement'], requirement.ownerId)
       const designSession = sessionFor(['design'])
-      const roleButton = (label, onClick, primary = false, disabled = false) => h('button', {
-        className: `btn btn-sm${primary ? ' btn-primary' : ' btn-ghost'}`,
-        type: 'button',
-        disabled,
-        onClick,
-      }, label)
+      // 测试还没有轮次时，先把进入过测试会话的人显示出来；否则测试卡永远只有「未开始」。
+      const testSession = sessionFor(['test'])
+      // 草稿还没有发布：只展示总述、产品卡片和需求日志；
+      // 发布（提交出 v1）之后，才按涉及的端和人出现设计、开发、测试卡片。
+      const published = (requirement.versions ?? []).length > 0
       const rolePerson = (person, fallback = '待认领') => person
         ? h('span', { className: 'assignee' }, h(Avatar, { name: person.name }), person.name)
         : h('span', { className: 'muted' }, fallback)
-      const roleCard = ({ key, icon, role, person, fallback = '待认领', chip = null, body, actions = [] }) => h('div', { className: 'pcard', key },
+      // 工作面入口收成卡片右上角的一个图标，会话统一在右侧会话坞里，不再单独放按钮。
+      const cornerAction = (label, onClick, disabled = false) => h('button', {
+        className: 'pcorner',
+        type: 'button',
+        title: label,
+        'aria-label': label,
+        disabled,
+        onClick,
+      }, h(DesignIcon, { name: 'panel', size: 14 }))
+      const prototypeVersionBar = prototypeVersions.length === 0 ? null : h('div', { className: 'pv-bar', key: 'pv-bar' },
+        h('span', { className: 'pv-label' }, '原型版本'),
+        h('button', {
+          type: 'button',
+          className: `pv-chip${prototypeVersion === null ? ' is-on' : ''}`,
+          onClick: () => setPrototypeVersion(null),
+        }, '最新'),
+        [...prototypeVersions].reverse().map(version => h('button', {
+          type: 'button',
+          key: version.version,
+          title: `提交时定格 · ${(Array.isArray(version.files) ? version.files.length : 0)} 屏 · ${relativeTime(version.createdAt)}`,
+          className: `pv-chip${prototypeVersion === version.version ? ' is-on' : ''}`,
+          onClick: () => setPrototypeVersion(version.version),
+        }, `v${version.version}`)),
+        prototypeVersion !== null
+          ? h('span', { className: 'pv-hint' }, '提交时定格，只读')
+          : null,
+      )
+      const roleCard = ({ key, icon, role, person, fallback = '待认领', chip = null, corner = null, body }) => h('div', { className: 'pcard', key },
         h('div', { className: 'phead' },
           h('span', { className: 'prole' }, h(DesignIcon, { name: icon, size: 13 }), role),
           rolePerson(person, fallback),
           chip !== null ? h('span', { className: 'pchip' }, chip) : null,
+          corner,
         ),
         h('div', { className: 'pbody' }, body),
-        actions.length > 0 ? h('div', { className: 'pfoot' }, actions) : null,
       )
       const devCard = (platform) => {
         const task = devTasks.find(candidate => candidate.platformId === platform.id)
         const meta = devTaskChipMeta(task)
         const assignee = task?.assigneeId ? state.users.find(user => user.id === task.assigneeId) : null
-        const session = task?.assigneeId ? sessionFor(['dev'], task.assigneeId) : null
-        const openDev = () => onOpenSession(session?.sessionId ?? requirement.sessionId)
         return roleCard({
           key: `dev-${platform.id}`,
           icon: 'branch',
           role: `开发 · ${platform.name}`,
           person: assignee,
           fallback: '待认领',
-          chip: h(DesignChip, { tone: meta.tone, glyph: meta.glyph }, meta.label),
+          chip: claimablePlatform(platform)
+            ? h('button', {
+                className: 'pclaim',
+                type: 'button',
+                onClick: () => openClaimDialog({ kind: 'dev', platformId: platform.id, label: `开发 · ${platform.name}` }),
+              }, '认领')
+            : h(DesignChip, { tone: meta.tone, glyph: meta.glyph }, meta.label),
           body: h('dl', { className: 'kv2' },
-            h('dt', null, '负责人'),
-            h('dd', null, assignee
-              ? h('span', { className: 'assignee' }, h(Avatar, { name: assignee.name }), assignee.name)
-              : h('span', { className: 'muted' }, task ? '未指派 · 进入会话认领' : '待认领 · 进入会话认领')),
             h('dt', null, '时间'),
             h('dd', null, task?.startedAt || task?.finishedAt ? `${relativeTime(task.startedAt ?? task.finishedAt)}` : '未排期'),
             h('dt', null, '关键产物'),
@@ -7120,12 +7021,51 @@ window.__ModuleLoader__.load({
               task?.branch ? h('span', { className: 'dsh-wb-branch', title: '开发分支' }, task.branch) : null,
             ),
             h('dt', null, '依赖/阻塞'),
-            h('dd', null, task?.pipelineStatus === 'failed' ? h(DesignChip, { tone: 'block', glyph: '!' }, '流水线失败') : task ? '无' : '等待认领'),
+            h('dd', null, task?.pipelineStatus === 'failed' ? h(DesignChip, { tone: 'block', glyph: '!' }, '流水线失败') : task ? '无' : '暂无'),
           ),
-          actions: requirement.sessionId
-            ? [roleButton(task ? '进入开发会话' : '进入会话认领', openDev)]
-            : [],
         })
+      }
+      // 认领入口长在卡片上：卡片还是「待认领」、本人又能接这个位置时，
+      // 右上角的状态徽标换成「认领」按钮；确认后卡片写成本人并打开会话。
+      const me = state.currentUser
+      const myRoles = me.roles ?? []
+      const myActiveRole = me.activeRole || myRoles[0] || ''
+      const myPlatformIds = [...(me.platforms ?? []), ...(me.activePlatformIds ?? [])]
+      const claimStatusOpen = !['creating', 'create_failed', 'frozen', 'released', 'done'].includes(requirement.status)
+      const claimDevStatus = ['approved', 'scheduled', 'in_progress', 'dev_done', 'test_failed', 'test_passed'].includes(requirement.status)
+      const claimablePlatform = platform => {
+        if (!published || !claimDevStatus || typeof onJoinRequirement !== 'function') return false
+        if (myActiveRole !== 'dev' || !myRoles.includes('dev')) return false
+        if ((me.platforms ?? []).length > 0 && !myPlatformIds.includes(platform.id)) return false
+        const task = devTasks.find(candidate => candidate.platformId === platform.id)
+        return task === undefined || (!task.assigneeId && task.status !== 'done')
+      }
+      const claimableDesign = published && claimStatusOpen
+        && typeof onJoinRequirement === 'function'
+        && myActiveRole === 'design' && myRoles.includes('design')
+        && !requirement.designerId
+        && !['not_needed', 'delivered'].includes(requirement.designStatus)
+      // 测试负责人：开发做完到测试收尾之间可以认领；提交时也可以直接指定。
+      const claimTestStatus = ['dev_done', 'testing', 'test_failed', 'test_passed'].includes(requirement.status)
+      const claimableTest = published && claimTestStatus
+        && typeof onJoinRequirement === 'function'
+        && myActiveRole === 'qa' && myRoles.includes('qa')
+        && !requirement.testerId
+      const openClaimDialog = target => {
+        setClaimTarget(target)
+        setClaimError('')
+      }
+      const confirmClaim = () => {
+        if (claimBusy || claimTarget === null) return
+        setClaimBusy(true)
+        setClaimError('')
+        Promise.resolve(onJoinRequirement(requirement, {
+          kind: claimTarget.kind,
+          platformId: claimTarget.kind === 'dev' ? claimTarget.platformId : undefined,
+        }))
+          .then(() => setClaimTarget(null))
+          .catch(reason => setClaimError(reason instanceof Error ? reason.message : String(reason)))
+          .finally(() => setClaimBusy(false))
       }
       return h('div', { className: 'page' },
         h('div', { className: 'rf-head' },
@@ -7133,15 +7073,20 @@ window.__ModuleLoader__.load({
             h('div', { className: 'l1' },
               h('span', { className: 'code' }, requirement.code),
               h(StatusChip, { kind: 'req', value: requirement.status }),
-              requirement.designUpdatedAt ? h(DesignChip, { tone: 'warn', glyph: '◷' }, '设计已更新') : null,
+              published && requirement.designUpdatedAt ? h(DesignChip, { tone: 'warn', glyph: '◷' }, '设计已更新') : null,
             ),
             h('h1', null, requirement.title),
             h('div', { className: 'rf-meta' },
               h('span', { className: 'it' }, '项目 ', h('b', null, state.project?.name ?? '—')),
               h('span', { className: 'it' }, '迭代 ', h('b', null, iteration ? `${iteration.code} ${iteration.name}` : '未归属')),
               h('span', { className: 'it' }, '产品 ', h('span', { className: 'assignee' }, h(Avatar, { name: owner?.name ?? requirement.ownerId }), h('b', null, owner?.name ?? requirement.ownerId))),
-              h('span', { className: 'it' }, '设计 ', designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), h('b', null, designer.name)) : h('span', { className: 'muted' }, requirement.designStatus === 'not_needed' ? '无需设计' : '未认领')),
-              h('span', { className: 'it' }, '设计状态 ', h(StatusChip, { kind: 'design', value: requirement.designStatus })),
+              published
+                ? h('span', { className: 'it' }, '设计 ', designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), h('b', null, designer.name)) : h('span', { className: 'muted' }, requirement.designStatus === 'not_needed' ? '无需设计' : '待认领'))
+                : null,
+              // 没人认领 / 无需设计时，下一行的状态徽标还是同一句话，别摆两遍。
+              published && designer
+                ? h('span', { className: 'it' }, '设计状态 ', h(StatusChip, { kind: 'design', value: requirement.designStatus }))
+                : null,
               h('span', { className: 'it' }, '更新 ', h('b', null, relativeTime(requirement.updatedAt))),
             ),
           ),
@@ -7150,8 +7095,8 @@ window.__ModuleLoader__.load({
           h(DesignIcon, { name: 'lock' }),
           h('span', null, '这是需求的沉淀视图，只有', h('b', null, '已提交 / 已交付'), '的版本在这里；草稿留在本地不出现。写操作都在会话里由 skill 完成。'),
         ),
-        h('div', { className: 'cardwall' },
-          h('div', { className: 'dcard2 span2' },
+        h('div', { className: 'req-top' },
+          h('div', { className: 'dcard2' },
             h('div', { className: 'ch' },
               h(DesignIcon, { name: 'file' }),
               h('span', { className: 't' }, '总述'),
@@ -7159,10 +7104,21 @@ window.__ModuleLoader__.load({
                 versions.length > 0
                   ? h('span', { className: 'badge badge--live' }, `需求 v${versions.length} · 最新`)
                   : h('span', { className: 'badge' }, '尚无版本'),
-                h('span', { className: 'tiny muted' }, latestVersion?.summary || (docSummary !== '' ? docSummary : '尚未提交需求总述')),
+                docOverflowing
+                  ? h('button', {
+                      className: 'doc-toggle',
+                      type: 'button',
+                      'aria-expanded': docExpanded ? 'true' : 'false',
+                      onClick: () => setDocExpanded(value => !value),
+                    }, docExpanded ? '收起' : '展开全文', h(DesignIcon, { name: 'chev-down', size: 12 }))
+                  : null,
               ),
             ),
-            h('div', { className: 'spec-line' },
+            h('div', {
+              className: `spec-line doc-body${docOverflowing && !docExpanded ? ' is-clipped' : ''}`,
+              ref: docBodyRef,
+              style: docOverflowing && !docExpanded ? { maxHeight: `${DOC_PREVIEW_HEIGHT}px` } : undefined,
+            },
               docSummary !== '' ? h('div', { className: 'spec-item' }, h('b', null, '总述：'), h(MarkdownText, { text: docSummary })) : null,
               docBody !== '' ? h('div', { className: 'spec-item' }, h('b', null, '正文：'), h(MarkdownText, { text: docBody })) : null,
               document?.acceptanceCriteria ? h('div', { className: 'spec-item' }, h('b', null, '验收：'), h(MarkdownText, { text: document.acceptanceCriteria })) : null,
@@ -7181,6 +7137,29 @@ window.__ModuleLoader__.load({
                   )),
             ),
           ),
+          h('div', { className: 'dcard2' },
+            h('div', { className: 'ch' },
+              h(DesignIcon, { name: 'history' }),
+              h('span', { className: 't' }, '需求日志'),
+              h('span', { className: 'r tiny muted' }, '谁在什么时候做了什么'),
+            ),
+            h('div', { className: 'card-bd', style: { padding: '6px 0' } },
+              sortedLogs.length === 0
+                ? h('div', { className: 'tiny muted', style: { padding: '12px 14px' } }, '还没有提交或交付记录。')
+                : sortedLogs.map((event, index) => {
+                    const user = state.users.find(item => item.id === event.who)
+                    return h('div', { className: 'log-item', key: `${event.at}-${index}` },
+                      h(Avatar, { name: user?.name ?? event.who }),
+                      h('div', { className: 'c' },
+                        h('div', { className: 'l1' }, h('b', null, user?.name ?? event.who), ' ', event.text),
+                        h('div', { className: 'l2' }, `${relativeTime(event.at)} · ${event.sub}`),
+                      ),
+                    )
+                  }),
+            ),
+          ),
+        ),
+        h('div', { className: 'cardwall' },
           // 产品：自己的会话 + 原型画布。
           roleCard({
             key: 'role-product',
@@ -7190,14 +7169,11 @@ window.__ModuleLoader__.load({
             fallback: '—',
             chip: h(StatusChip, { kind: 'req', value: requirement.status }),
             body: [
-              h('div', { className: 'pstat' },
-                h('b', null, `原型 ${prototypeScreens} 屏`),
-                h('span', { className: 'tiny muted' }, prototypeItems[0] ? `更新 ${relativeTime(prototypeItems[0].updatedAt)}` : '还没开始'),
-              ),
+              prototypeVersionBar,
               prototypeScreens === 0
-                ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'workbench' }), '原型还没开始，在会话里让 AI 出第一版。')
+                ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'workbench' }), prototypeVersion === null ? '原型还没开始；需求文档确认后，让 AI 出第一版。' : '这个版本没有原型文件。')
                 : h('div', { className: 'shot3' },
-                    prototypeItems.slice(0, 3).map(item => shotTile({
+                    displayedPrototypeItems.slice(0, 3).map(item => shotTile({
                       key: item.key,
                       name: item.name,
                       src: item.src,
@@ -7210,24 +7186,28 @@ window.__ModuleLoader__.load({
                     })),
                   ),
             ],
-            actions: [
-              roleButton('打开原型画布', () => {
-                const first = prototypeItems.find(item => item.path !== '')
-                if (first) onOpenPrototype({ path: first.path, name: first.name })
-              }, true, prototypeItems.every(item => item.path === '')),
-              requirement.sessionId !== '' || productSession !== null
-                ? roleButton('进入会话', () => onOpenSession(productSession?.sessionId ?? requirement.sessionId))
-                : null,
-            ].filter(Boolean),
+            corner: cornerAction('打开原型画布', () => {
+              const first = prototypeItems.find(item => item.path !== '')
+              if (first) onOpenPrototype({ path: first.path, name: first.name })
+            }, prototypeItems.every(item => item.path === '')),
           }),
           // 设计：自己的会话 + 设计画布；设计稿「打开」也进设计画布。
-          roleCard({
+          published ? roleCard({
             key: 'role-design',
             icon: 'package',
             role: '设计',
             person: designer,
             fallback: requirement.designStatus === 'not_needed' ? '无需设计' : '待认领',
-            chip: h(StatusChip, { kind: 'design', value: requirement.designStatus }),
+            chip: claimableDesign
+              ? h('button', {
+                  className: 'pclaim',
+                  type: 'button',
+                  onClick: () => openClaimDialog({ kind: 'design', label: '设计' }),
+                }, '认领')
+              // 抬头已经写了「待认领」，这里说工作状态，别重复同一个词
+              : requirement.designStatus === 'unclaimed'
+                ? h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始')
+                : h(StatusChip, { kind: 'design', value: requirement.designStatus }),
             body: [
               h('div', { className: 'pstat' },
                 h('b', null, `${designPreviewable} 个可预览`),
@@ -7252,29 +7232,32 @@ window.__ModuleLoader__.load({
                   ),
               requirement.designUpdatedAt ? h('div', { className: 'tiny', style: { color: 'var(--amber)' } }, '设计晚于开发更新，需评估返工。') : null,
             ],
-            actions: [
-              typeof onOpenDesignCanvas === 'function'
-                ? roleButton('打开设计画布', () => onOpenDesignCanvas(null), true, designSession === null && designPreviewable === 0 && !designDelivered)
-                : null,
-              typeof designSession?.sessionId === 'string' && designSession.sessionId !== ''
-                ? roleButton('进入设计会话', () => onOpenSession(designSession.sessionId))
-                : null,
-            ].filter(Boolean),
-          }),
-          endPlatforms.map(devCard),
-          endPlatforms.length === 0
+            corner: typeof onOpenDesignCanvas === 'function'
+              ? cornerAction('打开设计画布', () => onOpenDesignCanvas(null), designSession === null && designPreviewable === 0 && !designDelivered)
+              : null,
+          }) : null,
+          published ? endPlatforms.map(devCard) : null,
+          published && endPlatforms.length === 0
             ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'minus' }), '未设置涉及平台。')
             : null,
           // 测试：测试会话 + 测试轮次/证据，后续再加测试列表工作面。
-          roleCard({
+          published ? roleCard({
             key: 'role-test',
             icon: 'shield',
             role: '测试',
-            person: latestTest ? state.users.find(user => user.id === latestTest.by) ?? null : null,
-            fallback: '未开始',
-            chip: latestTest
-              ? h(DesignChip, { tone: latestTest.status === 'passed' ? 'done' : latestTest.status === 'failed' ? 'block' : 'warn', glyph: latestTest.status === 'passed' ? '✓' : latestTest.status === 'failed' ? '!' : '◷' }, `测试${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status}`)
-              : h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始测试'),
+            person: tester
+              ?? (latestTest ? state.users.find(user => user.id === latestTest.by) ?? null : null)
+              ?? (testSession?.createdBy ? state.users.find(user => user.id === testSession.createdBy) ?? null : null),
+            fallback: '待认领',
+            chip: claimableTest
+              ? h('button', {
+                  className: 'pclaim',
+                  type: 'button',
+                  onClick: () => openClaimDialog({ kind: 'test', label: '测试' }),
+                }, '认领')
+              : latestTest
+                ? h(DesignChip, { tone: latestTest.status === 'passed' ? 'done' : latestTest.status === 'failed' ? 'block' : 'warn', glyph: latestTest.status === 'passed' ? '✓' : latestTest.status === 'failed' ? '!' : '◷' }, `测试${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status}`)
+                : h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始测试'),
             body: [
               h('div', { className: 'pstat' },
                 h('b', null, `${testRuns.length} 轮测试`),
@@ -7287,33 +7270,25 @@ window.__ModuleLoader__.load({
                     testRuns.length > 1 ? h('div', { className: 'spec-item' }, h('b', null, '测试轮次：'), `${testRuns.length} 轮`) : null,
                   ),
             ],
-            actions: testSession ? [roleButton('进入测试会话', () => onOpenTest(requirement))] : [],
-          }),
-        h('div', { className: 'dcard2' },
-          h('div', { className: 'ch' },
-            h(DesignIcon, { name: 'history' }),
-            h('span', { className: 't' }, '需求日志'),
-            h('span', { className: 'r tiny muted' }, '谁在什么时候做了什么'),
-          ),
-          h('div', { className: 'card-bd', style: { padding: '6px 0' } },
-            sortedLogs.length === 0
-              ? h('div', { className: 'tiny muted', style: { padding: '12px 14px' } }, '还没有提交或交付记录。')
-              : sortedLogs.map((event, index) => {
-                  const user = state.users.find(item => item.id === event.who)
-                  return h('div', { className: 'log-item', key: `${event.at}-${index}` },
-                    h(Avatar, { name: user?.name ?? event.who }),
-                    h('div', { className: 'c' },
-                      h('div', { className: 'l1' }, h('b', null, user?.name ?? event.who), ' ', event.text),
-                      h('div', { className: 'l2' }, `${relativeTime(event.at)} · ${event.sub}`),
-                    ),
-                  )
-                }),
-          ),
+          }) : null,
         ),
-        ),
-        excluded.length > 0
+        !published
           ? h('div', { className: 'narep', style: { marginTop: '12px' } },
-              h(DesignIcon, { name: 'minus' }), `不涉及：${excluded.map(item => item.name).join('、')}（产品已确认，本需求不改）`)
+              h(DesignIcon, { name: 'file' }), '需求还没有发布；提交出第一版后，这里会出现设计、开发和测试卡片。')
+          : null,
+        claimTarget !== null
+          ? h(ConfirmDialog, {
+              title: '认领这个任务？',
+              confirmLabel: '认领并开始',
+              busy: claimBusy,
+              onClose: () => { if (!claimBusy) setClaimTarget(null) },
+              onConfirm: confirmClaim,
+            },
+            h('p', null, `确认后「${claimTarget.label}」会落到你名下，卡片显示你的名字，并打开你在这条需求上的会话。`),
+            claimError !== ''
+              ? h('p', { className: 'pclaim-error' }, claimError)
+              : null,
+          )
           : null,
         shotPreview !== null
           ? h(ShotPreviewDialog, { shot: shotPreview, onClose: () => setShotPreview(null) })
@@ -7333,12 +7308,15 @@ window.__ModuleLoader__.load({
       ).filter(requirement =>
         requirement.ownerId === uid ||
         requirement.designerId === uid ||
+        requirement.testerId === uid ||
         (requirement.reviewerIds ?? []).includes(uid) ||
         (requirement.devTasks ?? []).some(task => task.assigneeId === uid) ||
         (requirement.sessions ?? []).some(session => session.createdBy === uid))
       const todoOf = (requirement) => {
         if (requirement.designerId === uid && requirement.designStatus === 'changes_requested') return { tone: 'block', glyph: '!', label: '设计被退回' }
         if (requirement.designerId === uid && !['delivered', 'not_needed'].includes(requirement.designStatus)) return { tone: 'warn', glyph: '◷', label: '设计待交付' }
+        if (requirement.testerId === uid && ['dev_done', 'testing'].includes(requirement.status)) return { tone: 'warn', glyph: '◷', label: '测试待完成' }
+        if (requirement.testerId === uid && requirement.status === 'test_failed') return { tone: 'block', glyph: '!', label: '测试未通过' }
         if ((requirement.reviewerIds ?? []).includes(uid) && requirement.status === 'pending_review') return { tone: 'warn', glyph: '◷', label: '待你评审' }
         if (requirement.ownerId === uid && requirement.status === 'draft') return { tone: 'idle', glyph: '○', label: '需求待提交' }
         if (requirement.ownerId === uid && requirement.status === 'changes_requested') return { tone: 'block', glyph: '!', label: '需求被退回' }
@@ -7368,15 +7346,10 @@ window.__ModuleLoader__.load({
         if (requirement.designerId === uid) roles.push('设计')
         if ((requirement.reviewerIds ?? []).includes(uid)) roles.push('评审')
         if ((requirement.devTasks ?? []).some(task => task.assigneeId === uid)) roles.push('开发')
+        if (requirement.testerId === uid) roles.push('测试')
         return roles.length === 0 ? ['关注'] : roles
       }
       return h('div', { className: 'page' },
-        h('div', { className: 'page-head' },
-          h('div', { className: 'ttl-block' },
-            h('h1', { className: 'page-title' }, '我的工作台'),
-            h('div', { className: 'page-sub' }, `${state.project?.name ?? '当前项目'} · ${state.currentUser.name} · ${mine.length} 项 · ${todo.length} 待处理 · ${active.length} 进行中`),
-          ),
-        ),
         h('p', { className: 'filter-note' }, '需求、设计任务、待办合并为一份清单，按需求去重——一眼看清「这条需求里我是谁、要做什么」。'),
         h('div', { className: 'statbar' },
           h('div', { className: 'st' },
@@ -7492,21 +7465,14 @@ window.__ModuleLoader__.load({
         return { name: 'bell', color: 'var(--text-2)' }
       }
       return h('div', { className: 'page' },
-        h('div', { className: 'page-head' },
-          h('div', { className: 'ttl-block' },
-            h('h1', { className: 'page-title' }, '通知中心'),
-            h('div', { className: 'page-sub' }, `${unread} 条未读 · 共 ${items.length} 条 · 指派 / 变更 / 交付 / 系统`),
-          ),
-          items.length > 0 ? h('div', { className: 'page-actions' },
-            h('button', { className: 'btn btn-sm', type: 'button', disabled: busy || unread === 0, onClick: () => { void markAll() } },
-              busy ? '处理中…' : '全部标为已读'),
-          ) : null,
-        ),
         h('div', { className: 'toolbar' },
           h('div', { className: 'seg' },
             [['all', '全部'], ['unread', `未读 ${unread}`], ['assign', '指派'], ['change', '变更'], ['system', '系统']].map(([key, label]) =>
               h('button', { key, type: 'button', className: filter === key ? 'active' : '', onClick: () => setFilter(key) }, label)),
           ),
+          h('div', { className: 'spacer' }),
+          items.length > 0 ? h('button', { className: 'btn btn-sm', type: 'button', disabled: busy || unread === 0, onClick: () => { void markAll() } },
+            busy ? '处理中…' : '全部标为已读') : null,
         ),
         filtered.length === 0
           ? h('div', { className: 'empty-page' },
@@ -7557,12 +7523,13 @@ window.__ModuleLoader__.load({
       const [canvasTarget, setCanvasTarget] = useState(null)
       // 中间画布可以是产品原型，也可以是设计画布；两种卡片各自打开自己的工作面。
       const [canvasKind, setCanvasKind] = useState('prototype')
+      // 从画布的版本面板跳回需求页时要停在哪个原型版本（提交时定格的那一版）。
+      const [prototypeVersionFocus, setPrototypeVersionFocus] = useState(null)
       const [shellNode, setShellNode] = useState(null)
       const [flushLeft, setFlushLeft] = useState(false)
       const [selectedRequirementId, setSelectedRequirementId] = useState(null)
       const [iterationQuery, setIterationQuery] = useState('')
       const [iterationFilter, setIterationFilter] = useState('all')
-      const [iterationSort, setIterationSort] = useState('')
       const [myFilter, setMyFilter] = useState('all')
       const [dialogOpen, setDialogOpen] = useState(false)
       const [settingsOpen, setSettingsOpen] = useState(false)
@@ -7573,7 +7540,11 @@ window.__ModuleLoader__.load({
       const [iterationManageOpen, setIterationManageOpen] = useState(false)
       const [projectMenuOpen, setProjectMenuOpen] = useState(false)
       const [projectDialog, setProjectDialog] = useState(null)
-      const [sessionFor, setSessionFor] = useState(null)
+      // 进入需求页时自动建的会话：记录进度和失败原因，失败后给一次手动重试。
+      const [autoSession, setAutoSession] = useState({ status: 'idle', error: '' })
+      const [autoSessionTick, setAutoSessionTick] = useState(0)
+      const autoSessionKeyRef = useRef('')
+      const mountedRef = useRef(true)
       const [toast, setToast] = useState(null)
       const [retrying, setRetrying] = useState('')
       const [dockWidth, setDockWidth] = useState(readDockWidth)
@@ -7584,6 +7555,9 @@ window.__ModuleLoader__.load({
         : (state.requirements ?? []).find(item => item.id === selectedRequirementId) ?? null
       const dockRecord = state === null ? null : dockSessionOf(selectedRequirement, state.currentUser)
       const dockSessionId = dockRecord?.sessionId ?? ''
+      // 没加入这条需求的人没有会话坞；认领 / 加入之后它才出现。
+      const dockJoined = state !== null && selectedRequirement !== null
+        && requirementJoined(selectedRequirement, state.currentUser)
       const dockWidthRef = useRef(dockWidth)
       const dockDownAt = useRef(0)
       const projectMenuRef = useRef(null)
@@ -7593,6 +7567,11 @@ window.__ModuleLoader__.load({
         const timer = setTimeout(() => setToast(null), 3600)
         return () => clearTimeout(timer)
       }, [toast])
+
+      useEffect(() => {
+        mountedRef.current = true
+        return () => { mountedRef.current = false }
+      }, [])
 
       // 项目下拉：点外面或按 Esc 收起，不用额外铺一层遮罩挡住页面。
       useEffect(() => {
@@ -7689,14 +7668,69 @@ window.__ModuleLoader__.load({
 
       const openSession = useCallback((sessionId) => {
         if (typeof sessionId !== 'string' || sessionId === '') return
+        // 需求页的会话常驻右侧坞：只把焦点还给坞，不切到 DSH 的会话工作区。
+        const dock = document.querySelector('.dsh-wb-dock')
+        if (dock !== null) {
+          dock.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+          const input = dock.querySelector('[data-composer-input="true"]')
+          if (input instanceof HTMLElement) input.focus()
+          return
+        }
         try { ctx.uiWorkspace.openSession(sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
       }, [ctx])
 
       const openSessionFor = useCallback((requirement, kind) => {
-        const findSession = type => (requirement.sessions ?? []).find(session => session.type === type && session.sessionId)?.sessionId
+        const findSession = type => (requirement.sessions ?? []).find(session => session.archived !== true && session.type === type && session.sessionId)?.sessionId
         const type = kind === 'design' || kind === 'test' || kind === 'dev' ? kind : 'requirement'
         openSession(findSession(type) ?? requirement.sessionId)
       }, [openSession])
+
+      // 会话坞里的会话要等状态刷完才出现：加入后等坞挂上再把焦点交进去。
+      // 这里只碰坞本身——找不到坞也不能切去 DSH 的会话工作区，否则会离开工作台。
+      const pendingDockFocusRef = useRef(false)
+      useEffect(() => {
+        if (!pendingDockFocusRef.current || dockSessionId === '' || !dockJoined) return
+        pendingDockFocusRef.current = false
+        const dock = document.querySelector('.dsh-wb-dock')
+        if (dock === null) return
+        dock.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        const input = dock.querySelector('[data-composer-input="true"]')
+        if (input instanceof HTMLElement) input.focus()
+      }, [dockSessionId, dockJoined])
+
+      // 加入需求：先认领设计 / 某个端，再准备好本人会话，最后把焦点交给右侧会话坞。
+      const joinRequirement = useCallback(async (requirement, target) => {
+        const type = target.kind === 'design' ? 'design' : target.kind === 'test' ? 'test' : 'dev'
+        const claimed = target.kind === 'design'
+          ? await api(`requirements/${encodeURIComponent(requirement.id)}/design-claim`, { method: 'POST', body: '{}' })
+          : target.kind === 'test'
+            ? await api(`requirements/${encodeURIComponent(requirement.id)}/test-claim`, { method: 'POST', body: '{}' })
+            : await api(`requirements/${encodeURIComponent(requirement.id)}/dev-claim`, {
+                method: 'POST',
+                body: JSON.stringify({ platformId: target.platformId }),
+              })
+        const updated = claimed.requirement ?? requirement
+        // 之前已经有一场本人同类型会话就直接复用，没有才新开一场。
+        const existing = (requirement.sessions ?? []).find(session =>
+          session.archived !== true && session.type === type && session.own === true
+          && typeof session.sessionId === 'string' && session.sessionId !== '')
+        let sessionId = existing?.sessionId ?? ''
+        let sessionError = null
+        try {
+          if (sessionId === '') sessionId = (await createRequirementSession(ctx, state, updated, type)).sessionId
+        } catch (reason) {
+          sessionError = reason instanceof Error ? reason.message : String(reason)
+        }
+        // 认领已经成功：不管会话建没建好，卡片都要刷新出来；会话失败交给自动重试。
+        pendingDockFocusRef.current = true
+        await workbench.reload()
+        const label = target.kind === 'design' ? '设计' : target.kind === 'test' ? '测试' : `开发 · ${platformName(state.platforms, target.platformId)}`
+        if (sessionError !== null) {
+          showToast(`已加入 ${requirement.code}，但${label}会话还没准备好：${sessionError}`, true)
+          return
+        }
+        showToast(`已加入 ${requirement.code}，${label}会话已打开`, false)
+      }, [ctx, state, workbench, showToast])
 
       const openRequirement = useCallback(async (requirementId) => {
         if (state === null) return
@@ -7782,7 +7816,6 @@ window.__ModuleLoader__.load({
           const done = await finishRequirementCreation(ctx, requirement, state)
           showToast(`${done.requirement.code} 已创建`, false)
           await workbench.reload()
-          ctx.uiWorkspace.openSession(done.sessionId)
         } catch (reason) {
           await markCreationFailed(requirement, reason)
           showToast(reason instanceof Error ? reason.message : String(reason), true)
@@ -7792,15 +7825,55 @@ window.__ModuleLoader__.load({
         }
       }, [ctx, state, showToast, workbench])
 
-      const handleSessionCreated = async (requirement) => {
-        setSessionFor(null)
-        setSelectedRequirementId(requirement.id)
-        setWorkspaceView('requirement')
-        // 建完会话留在需求总述，右侧会话直接可用；画布仍然从原型「打开」进。
-        setCanvasOpen(false)
-        setCanvasTarget(null)
-        await workbench.reload()
-      }
+      // 进入需求页不再让用户手动建会话：本人还没有会话时，按当前身份直接开一场。
+      useEffect(() => {
+        if (view !== 'requirement' || selectedRequirement === null || state === null) return undefined
+        if (dockSessionId !== '') {
+          // 已经开好会话：清掉上一次的 key，之后会话被归档/替换时还能再自动开一场。
+          autoSessionKeyRef.current = ''
+          setAutoSession(current => current.status === 'idle' ? current : { status: 'idle', error: '' })
+          return undefined
+        }
+        if (selectedRequirement.status === 'creating' || selectedRequirement.status === 'create_failed') return undefined
+        // 不在卡片墙上的同事不预先开会话：先点「加入这条需求」认领，
+        // 有了卡片之后再按身份准备会话；否则谁打开看一眼都会多出一场会话。
+        if (!requirementJoined(selectedRequirement, state.currentUser)) {
+          setAutoSession(current => current.status === 'idle' ? current : { status: 'idle', error: '' })
+          return undefined
+        }
+        // 草稿还没发布：只有产品 / 负责人需要需求会话；设计、开发、测试等发布后再准备。
+        const type = sessionTypeForRole(state.currentUser)
+        const published = (selectedRequirement.versions ?? []).length > 0
+        if (!published && type !== 'requirement') {
+          setAutoSession(current => current.status === 'idle' ? current : { status: 'idle', error: '' })
+          return undefined
+        }
+        const key = `${selectedRequirement.id}:${state.currentUser.id}`
+        if (autoSessionKeyRef.current === key) return undefined
+        autoSessionKeyRef.current = key
+        setAutoSession({ status: 'creating', error: '' })
+        const code = selectedRequirement.code
+        createRequirementSession(ctx, state, selectedRequirement, type)
+          .then(async () => {
+            if (mountedRef.current) {
+              setAutoSession({ status: 'idle', error: '' })
+              showToast(`${code} 的${sessionTypeLabel(type)}会话已就绪`, false)
+            }
+            await workbench.reload()
+          })
+          .catch((reason) => {
+            if (!mountedRef.current) return
+            setAutoSession({ status: 'error', error: reason instanceof Error ? reason.message : String(reason) })
+          })
+        return undefined
+      }, [view, selectedRequirement, state, dockSessionId, autoSessionTick, ctx, workbench, showToast])
+
+      // 失败后允许手动重试；成功创建过（key 已记下）就不再自动重来，避免死循环。
+      const retryAutoSession = useCallback(() => {
+        autoSessionKeyRef.current = ''
+        setAutoSession({ status: 'idle', error: '' })
+        setAutoSessionTick(tick => tick + 1)
+      }, [])
 
       const openPrototypeCanvas = useCallback((target) => {
         if (target === null || typeof target.path !== 'string' || target.path === '') return
@@ -7810,6 +7883,36 @@ window.__ModuleLoader__.load({
         setView('requirement')
         setWorkspaceView('requirement')
       }, [])
+
+      // 模型刚往需求目录里写出原型：自动打开原型画布，不用再点右上角的「打开原型画布」。
+      // 第一次看到这条需求时只记下已有的文件（老需求不弹）；之后新出现的才弹。
+      // 同一次停留里只自动弹一次：用户自己关掉画布后不再抢回来。
+      const autoCanvas = useRef({ requirementId: '', opened: false, seen: new Set() })
+      useEffect(() => {
+        if (view !== 'requirement' || selectedRequirement === null || state === null) return
+        if (selectedRequirement.ownerId !== state.currentUser.id) return
+        const folder = String(selectedRequirement.folderPath ?? '').replace(/\/+$/, '')
+        const artifacts = (selectedRequirement.artifacts ?? []).filter(artifact =>
+          artifact.kind === 'prototype'
+          && typeof artifact.name === 'string'
+          && /\.html?$/i.test(artifact.name))
+        const track = autoCanvas.current
+        if (track.requirementId !== selectedRequirement.id) {
+          autoCanvas.current = {
+            requirementId: selectedRequirement.id,
+            opened: false,
+            seen: new Set(artifacts.map(artifact => artifact.id)),
+          }
+          return
+        }
+        const fresh = artifacts.filter(artifact => !track.seen.has(artifact.id))
+        if (fresh.length === 0) return
+        for (const artifact of fresh) track.seen.add(artifact.id)
+        if (track.opened || canvasOpen || folder === '') return
+        const first = fresh[0]
+        track.opened = true
+        openPrototypeCanvas({ path: `${folder}/${first.name.replace(/^\/+/, '')}`, name: first.name })
+      }, [view, selectedRequirement, state, canvasOpen, openPrototypeCanvas])
 
       // 设计卡片的工作面：设计画布。打开到具体设计稿或画布首页都走这里。
       const openDesignCanvas = useCallback((target) => {
@@ -7840,6 +7943,16 @@ window.__ModuleLoader__.load({
         setWorkspaceView('requirement')
         setCanvasOpen(false)
         setCanvasTarget(null)
+      }, [])
+
+      // 画布「版本」面板里点了提交定格的版本：关掉画布，回需求页把原型卡切到那一版。
+      // 定格的原型在服务端附件里，只能在需求卡上看（只读），画布里看的是本机正在改的文件。
+      const openRequirementVersion = useCallback((version) => {
+        setCanvasOpen(false)
+        setCanvasTarget(null)
+        setView('requirement')
+        setWorkspaceView('requirement')
+        setPrototypeVersionFocus({ version: Number(version) })
       }, [])
 
       if (workbench.loading && state === null) {
@@ -7889,34 +8002,11 @@ window.__ModuleLoader__.load({
       const canCreateIteration = roles.includes('lead') || roles.includes('admin')
       const canCreateRequirement = roles.includes('product') || roles.includes('admin')
       const canConfig = canCreateIteration
-      const isAdmin = state.currentUser.roles.includes('admin')
-      const unread = state.unreadNotificationCount ?? (state.notifications ?? []).filter(item => item.read !== true).length
-      const navItems = [
-        ['iterations', '迭代列表'],
-        ['my', '我的工作台'],
-        ['skills', '技能库'],
-        ['settings', '设置'],
-        ['notifications', '通知'],
-      ]
-      const onNav = (key) => {
-        if (key === 'skills') { setView('skills'); return }
-        if (key === 'settings') { setView('settings'); return }
-        if (key === 'iterations') {
-          // 从「我的工作台」等顶层页切回来时，回到迭代区上次待的位置，不总是打回列表。
-          // 想回扁平列表就点面包屑根节点。
-          if (workspaceView === 'requirement' && selectedRequirement !== null) { setView('requirement'); return }
-          if (workspaceView !== 'iterations' && activeIteration !== null) { setView('iteration'); return }
-          setView('iterations')
-          return
-        }
-        if (key === 'my') { setView('my'); return }
-        if (key === 'notifications') { setView('notifications'); return }
-      }
-      const navActive = view === 'iteration' || view === 'requirement' ? 'iterations' : view
       // 右侧会话坞常驻；卡片的工作面在中间打开：产品是原型画布，设计是设计画布。
       // 没有自己的会话时借用对应会话承载画布，不是负责人/设计负责人一律只读。
       const designSessionId = (selectedRequirement?.sessions ?? [])
-        .find(session => session.type === 'design' && typeof session.sessionId === 'string' && session.sessionId !== '')?.sessionId ?? ''
+        .find(session => session.archived !== true
+          && session.type === 'design' && typeof session.sessionId === 'string' && session.sessionId !== '')?.sessionId ?? ''
       // 设计会话在别人机器上时 sessionId 为空，借用当前用户的会话来承载只读画布。
       const canvasSid = canvasKind === 'design'
         ? (designSessionId !== ''
@@ -7927,14 +8017,17 @@ window.__ModuleLoader__.load({
         && state.currentUser.id === (canvasKind === 'design' ? selectedRequirement.designerId : selectedRequirement.ownerId)
       const stageActive = view === 'requirement' && selectedRequirement !== null && canvasOpen
         && (canvasKind === 'design' || canvasTarget !== null)
+      const unreadNotifications = state.unreadNotificationCount
+        ?? (Array.isArray(state.notifications) ? state.notifications : []).filter(item => item.read !== true).length
+      const homeCrumb = { key: 'list', label: '首页', onClick: goIterationList }
       const iterationCrumbs = [
-        { key: 'list', label: '迭代列表', onClick: goIterationList },
+        homeCrumb,
         activeIteration === null
           ? { key: 'iter', label: '迭代未选择' }
           : { key: 'iter', label: activeIteration.code, mono: true },
       ]
       const requirementCrumbs = [
-        { key: 'list', label: '迭代列表', onClick: goIterationList },
+        homeCrumb,
         activeIteration === null
           ? { key: 'iter', label: '迭代未归属' }
           : { key: 'iter', label: activeIteration.code, mono: true, onClick: goIterationDetail },
@@ -7948,11 +8041,10 @@ window.__ModuleLoader__.load({
       if (stageActive) {
         requirementCrumbs.push({ key: 'canvas', label: canvasKind === 'design' ? '设计' : '原型' })
       }
-      // 顶层页只有当前层，保证这条导航栏在所有页面都占同一个位置。
+      // 顶层页也带上「首页」这一层，顶栏的面包屑在任何页面都能点回去。
       const sectionCrumbs = {
-        iterations: { key: 'list', label: '迭代列表' },
         my: { key: 'my', label: '我的工作台' },
-        skills: { key: 'skills', label: '技能库' },
+        skills: { key: 'skills', label: '技能' },
         settings: { key: 'settings', label: '设置' },
         notifications: { key: 'notifications', label: '通知' },
       }
@@ -7960,18 +8052,21 @@ window.__ModuleLoader__.load({
         ? iterationCrumbs
         : view === 'requirement'
           ? requirementCrumbs
-          : [sectionCrumbs[view] ?? sectionCrumbs.iterations]
+          : view === 'iterations'
+            ? [homeCrumb]
+            : [homeCrumb, sectionCrumbs[view] ?? homeCrumb]
       const requirementMain = selectedRequirement === null
         ? h('div', { className: 'page' },
-            h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到迭代列表重新选择。')))
+            h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到首页重新选择。')))
         : h(RequirementPageView, {
             ctx,
             state,
             requirement: selectedRequirement,
             onOpenPrototype: openPrototypeCanvas,
-            onOpenSession: (sessionId) => openSession(sessionId),
             onOpenDesignCanvas: openDesignCanvas,
-            onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
+            onJoinRequirement: joinRequirement,
+            prototypeVersionFocus,
+            onPrototypeVersionFocusDone: () => setPrototypeVersionFocus(null),
           })
 
       return h('div', { className: `dsh-wb-design${flushLeft ? ' is-flush-left' : ''}`, ref: setShellNode },
@@ -8031,16 +8126,7 @@ window.__ModuleLoader__.load({
                   : null,
               ),
               h('span', { className: 'plugnac-sep' }),
-              navItems.map(([key, label]) => h('a', {
-                key,
-                href: '#',
-                className: navActive === key ? 'active' : '',
-                'aria-current': navActive === key ? 'page' : undefined,
-                style: { position: 'relative' },
-                onClick: event => { event.preventDefault(); onNav(key) },
-              }, label, key === 'notifications' && unread > 0
-                ? h('span', { className: 'nav-badge' }, unread > 99 ? '99+' : String(unread))
-                : null)),
+              h(Breadcrumbs, { items: currentCrumbs }),
             ),
             h('div', { className: 'spacer' }),
             view === 'iterations'
@@ -8055,19 +8141,34 @@ window.__ModuleLoader__.load({
                 )
               : null,
             h('button', {
+              className: 'dsh-wb-iconbtn',
+              type: 'button',
+              title: '设置',
+              'aria-label': '设置',
+              onClick: () => setView('settings'),
+            }, h(DesignIcon, { name: 'settings' })),
+            h('button', {
+              className: 'dsh-wb-iconbtn',
+              type: 'button',
+              title: unreadNotifications > 0 ? `${unreadNotifications} 条未读通知` : '通知',
+              'aria-label': unreadNotifications > 0 ? `通知，${unreadNotifications} 条未读` : '通知',
+              onClick: () => setView('notifications'),
+            },
+              h(BellIcon),
+              unreadNotifications > 0 ? h('span', { className: 'dsh-wb-bell-badge' }, unreadNotifications > 99 ? '99+' : String(unreadNotifications)) : null,
+            ),
+            h('button', {
               className: 'dropdown-trigger',
               type: 'button',
               title: '个人设置',
               onClick: () => setView('settings'),
             },
               h(Avatar, { name: state.currentUser.name }),
-              `当前身份：${roleLabel(state.currentUser.activeRole)}`,
+              roleLabel(state.currentUser.activeRole),
               auth.provider === 'mock' ? h('span', { className: 'badge badge--mock' }, 'MOCK') : null,
               h(DesignIcon, { name: 'chev-down', className: 'chev' }),
             ),
           ),
-          // 页面层级固定在顶栏下这一条，跨页面不换位置。
-          h('div', { className: 'dsh-wb-contextbar' }, h(Breadcrumbs, { items: currentCrumbs })),
           h('div', { className: 'dsh-wb-shell-body' },
             h('div', { className: stageActive ? 'scroll is-stage' : 'scroll' },
             workbench.error !== null && workbench.error !== ''
@@ -8092,6 +8193,12 @@ window.__ModuleLoader__.load({
                           currentWorkId: selectedRequirement.id,
                           // 产品负责人可编辑原型；设计负责人可编辑设计画布，其他人只读。
                           readOnly: !canvasEditable,
+                          // 画布「版本」面板里同时列出需求提交时定格的原型版本：
+                          // 本机快照是每轮对话的过程稿，提交版本才是需求卡上的 v1、v2。
+                          requirementVersions: canvasKind === 'prototype'
+                            ? (Array.isArray(selectedRequirement.prototypeVersions) ? selectedRequirement.prototypeVersions : [])
+                            : [],
+                          onOpenRequirementVersion: openRequirementVersion,
                         }),
                   ),
                 )
@@ -8102,19 +8209,22 @@ window.__ModuleLoader__.load({
                   onQuery: setIterationQuery,
                   filter: iterationFilter,
                   onFilter: setIterationFilter,
-                  sort: iterationSort,
-                  onSort: setIterationSort,
                   onOpen: (id) => { void openIteration(id) },
                   onCreate: () => setIterationOpen(true),
-                  canCreate: canCreateIteration,
+                  onOpenMy: () => setView('my'),
+                  onOpenSkills: () => { setView('skills') },
+                  canCreate: canCreateIteration && currentProject !== null,
+                  hasProject: currentProject !== null,
                 })
               : view === 'iteration'
                 ? activeIteration === null
                   ? h('div', { className: 'page' },
                       h('div', { className: 'empty-page' },
                         h(DesignIcon, { name: 'iter', size: 28 }),
-                        h('b', null, '这个项目还没有迭代'),
-                        h('span', null, canCreateIteration ? '点上方项目菜单回到迭代列表，再新建迭代。' : '等负责人创建迭代后再来。'),
+                        h('b', null, currentProject === null ? '还没有项目' : '这个项目还没有迭代'),
+                        h('span', null, currentProject === null
+                          ? '先在左上角项目菜单新建项目。'
+                          : canCreateIteration ? '点上方项目菜单回到首页，再新建迭代。' : '等负责人创建迭代后再来。'),
                       ))
                   : h(IterationDetailView, {
                     state,
@@ -8126,6 +8236,8 @@ window.__ModuleLoader__.load({
                     onOpenRequirement: (id) => { void openRequirement(id) },
                     onOpenSession: (sessionId) => openSession(sessionId),
                     onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
+                    onReload: () => { void workbench.reload() },
+                    onToast: showToast,
                   })
                 : view === 'requirement'
                   ? requirementMain
@@ -8160,14 +8272,18 @@ window.__ModuleLoader__.load({
                             onToast: showToast,
                           }),
             ),
-            // 右侧会话常驻：无论角色、无论有没有自己的会话，都在这条需求旁边。
-            view === 'requirement' && selectedRequirement !== null
+            // 会话坞只属于这条需求上的参与者；认领后才会出现，没加入的人看到整页卡片墙。
+            view === 'requirement' && dockJoined
               ? h(SessionDock, {
                   ctx,
                   kit,
                   state,
                   requirement: selectedRequirement,
-                  onNewSession: () => setSessionFor({ requirement: selectedRequirement, stay: true }),
+                  creating: autoSession.status === 'creating',
+                  createError: autoSession.error,
+                  waitingForPublish: (selectedRequirement.versions ?? []).length === 0
+                    && sessionTypeForRole(state.currentUser) !== 'requirement',
+                  onRetry: retryAutoSession,
                   width: dockWidth,
                   onResizeStart: beginDockResize,
                   onResizeReset: resetDockWidth,
@@ -8198,15 +8314,6 @@ window.__ModuleLoader__.load({
           state,
           onClose: () => setIterationManageOpen(false),
           onReload: workbench.reload,
-          onToast: showToast,
-        }) : null,
-        sessionFor !== null ? h(CreateSessionDialog, {
-          ctx,
-          state,
-          requirement: sessionFor.requirement,
-          stay: sessionFor.stay === true,
-          onClose: () => setSessionFor(null),
-          onCreated: handleSessionCreated,
           onToast: showToast,
         }) : null,
         settingsOpen ? h(SettingsDialog, {
@@ -8274,7 +8381,7 @@ window.__ModuleLoader__.load({
           className: 'dsh-wb-rqbar-btn',
           type: 'button',
           onClick: onBackToSession,
-          title: '收起右侧栏，回到会话；提交 /req-submit，评审 /req-review，设计 /design-start',
+          title: '收起右侧栏，回到会话；提交 /req-submit，评审 /lead-review，设计 /design-start',
         }, '在会话中提交'),
         h('button', {
           className: 'dsh-wb-rqbar-toggle',
@@ -8609,27 +8716,7 @@ window.__ModuleLoader__.load({
       return { error, opening }
     }
 
-    function prototypeInstruction(requirement, state) {
-      const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
-        .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
-        .join('；')
-      const prototypeDir = requirement.prototypePath ?? 'prototype/'
-      return [
-        '/design-start',
-        '',
-        `需求：${requirement.code}「${requirement.title}」`,
-        `平台：${platforms || '未设置'}`,
-        `原型目录：${prototypeDir}`,
-        `需求文件夹：${requirement.folderPath ?? '尚未创建'}`,
-        '',
-        `请在这个需求里做产品原型：一屏一个 HTML 写进 ${prototypeDir}，先保证信息结构、关键流程和状态完整，不追求最终视觉。`,
-        '每屏是「左原型 + 右需求说明」的双栏文档：右栏写背景与目标、本屏范围、角色与权限、字段与业务规则、验收标准，最后是关键交互标注。',
-        '文件名用中文语义化名字（如 明细列表.html），不要用英文名。',
-        '右侧「需求」面板会自动把 prototype/ 里的页面显示成原型画布，不需要开画布。',
-      ].join('\n')
-    }
-
-    // 新建设计会话后填进输入框的模板：和需求会话同一套逻辑——先把要求讲清楚，再直接出设计稿。
+    // 旧的输入框模板：现在不再预填，只用来识别并清掉老会话里留下的草稿。
     function designDescriptionPrompt(requirement, state) {
       const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
         .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
@@ -8642,19 +8729,17 @@ window.__ModuleLoader__.load({
         `平台：${platforms || '未设置'}`,
         prototypes > 0 ? `产品原型：prototype/ 已有 ${prototypes} 屏` : '产品原型：还没有，按需求描述直接设计',
         '',
-        '先补全这次的设计要求，再直接出高保真设计稿：',
+        '先补全这次的设计要求：',
         '- 要设计的页面 / 流程：',
         '- 关键状态（默认、加载、空、错误、权限）：',
         '- 视觉方向（品牌色、参考、信息密度）：',
         '- 端与交付范围：',
         '',
-        '补全后请加载 ui-design 技能，一屏一个 HTML 写进这条需求的设计目录 design/，沿用原型里的信息结构和验收标准。',
-        '右侧「设计」面板会自动显示 design/ 里的页面；不要调用画布的 preview / check 工具，再用 /design-deliver 交付。',
+        '补全后按 /design-start 技能在 design/ 直接产出高保真设计稿，再用 /design-deliver 交付。',
       ].join('\n')
     }
 
-    // 创建时已经写了需求简报：文档已在工作台里，会话模板只指向文档和产物目录，
-    // 不再让用户把背景、流程、验收标准重复打一遍。
+    // 旧的输入框模板（有简报）：只用于识别并清掉老会话里留下的草稿。
     function briefedRequirementPrompt(requirement, state) {
       const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
         .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
@@ -8665,15 +8750,12 @@ window.__ModuleLoader__.load({
         `需求：${requirement.code}「${requirement.title}」`,
         `平台：${platforms || '未设置'}`,
         '',
-        '需求简报已经写进工作台的活文档，请先调用 workbench_design_context 读取，不要让我再重复描述。',
-        '按文档里的页面和验收标准，在这条需求的原型目录 prototype/ 下生成低保真产品原型，一屏一个 HTML；页面清单没写全时按文档目标补全关键状态。',
-        '每屏是「左原型 + 右需求说明」的双栏文档：右栏写背景与目标、本屏范围、角色与权限、字段与业务规则、验收标准，最后是关键交互标注。',
-        '文件名用中文语义化名字（如 明细列表.html），不要用英文名。',
-        '只写 prototype/，不要写 design/，不要调用交付工具。右侧「需求」面板会自动显示这些页面。',
+        '需求简报已经在活文档里（workbench_design_context 可读），不要让我再重复描述。',
+        '按 /design-start 技能在 prototype/ 直接产出产品原型；页面清单没写全时按文档目标补全关键状态。',
       ].join('\n')
     }
 
-    // 新建需求后填进会话输入框的模板：先引导产品把需求讲清楚，再让模型直接出原型。
+    // 旧的输入框模板（无简报）：只用于识别并清掉老会话里留下的草稿。
     // 需求会话产出的是产品原型（prototype/），高保真设计稿走设计会话（design/），两边不要混。
     function requirementDescriptionPrompt(requirement, state) {
       const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
@@ -8685,22 +8767,18 @@ window.__ModuleLoader__.load({
         `需求：${requirement.code}「${requirement.title}」`,
         `平台：${platforms || '未设置'}`,
         '',
-        '先补全这段需求描述，再直接出产品原型：',
+        '先补全这段需求描述：',
         '- 背景与要解决的问题：',
         '- 核心场景与用户路径：',
         '- 关键页面 / 主要流程：',
         '- 状态与边界（空态、异常、权限）：',
         '- 验收标准：',
         '',
-        '补全后请按描述做产品原型：一屏一个 HTML 写进这条需求的原型目录 prototype/（不是设计稿目录）。',
-        '每屏是「左原型 + 右需求说明」的双栏文档：右栏写背景与目标、本屏范围、角色与权限、字段与业务规则、验收标准，最后是关键交互标注。',
-        '文件名用中文语义化名字（如 明细列表.html），不要用英文名。',
-        '右侧「需求」面板会自动显示 prototype/ 里的页面；原型优先保证信息结构、流程和状态完整，不追求最终视觉。',
+        '补全后按 /design-start 技能在 prototype/ 直接产出产品原型。',
       ].join('\n')
     }
 
-    // 旧版需求描述模板（带「目标用户」）。只用来识别还留在输入框里的旧草稿，
-    // 命中后换成新模板；用户已经动过的草稿不会匹配，不会被覆盖。
+    // 更早的需求描述模板（带「目标用户」），同样只用于识别并清掉自动填入的草稿。
     function legacyRequirementDescriptionPrompt(requirement, state) {
       const platforms = groupedPlatforms(state?.platforms ?? [], state?.platformGroups ?? [], requirement.platformIds)
         .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
@@ -8725,47 +8803,46 @@ window.__ModuleLoader__.load({
     const promptRefreshed = new Set()
     const flatText = text => String(text ?? '').replace(/\s+/g, ' ').trim()
 
-    async function seedRequirementPrompt(ctx, sessionId, requirement, state) {
-      if (!sessionId || !requirement) return false
-      try {
-        return await ctx.sessions.using(sessionId, { source: 'workbench' }, async (reference) => {
-          const input = ctx.conversation?.input
-          if (input?.requestDraftInitialization === undefined) return false
-          // 默认 keep：输入框里已经有用户写的内容时不覆盖。
-          const result = input.requestDraftInitialization(reference.binding, {
-            prompt: requirementDescriptionPrompt(requirement, state),
-          })
-          if (result !== 'applied') console.warn('[dsh-workbench] 描述模板未写入输入框：', result)
-          return result === 'applied'
-        })
-      } catch (reason) {
-        console.warn('[dsh-workbench] 需求描述模板写入失败', reason)
-        return false
-      }
+    // 曾经自动填进输入框的模板。现在不再预填，只用来识别并清掉老会话里留下的草稿。
+    function seededPromptTemplates(requirement, state) {
+      return [
+        requirementDescriptionPrompt(requirement, state),
+        briefedRequirementPrompt(requirement, state),
+        designDescriptionPrompt(requirement, state),
+        legacyRequirementDescriptionPrompt(requirement, state),
+      ]
     }
 
-    // 需求会话开场白：需求会话还是空白时，请宿主往会话日志里写一条真实的
-    // assistant 消息（“请描述你的需求。”），走正常的对话记录，而不是在输入框
-    // 上方挂一个浮层。不发模型请求；写一次之后由 session.blank 收起。
+    // 需求会话开场白：会话还空白时，请宿主往会话日志里写一条真实的 assistant
+    // 消息，把需求编号、平台和要补的信息放在对话上方；输入框保持为空。
+    // 不发模型请求；写一次之后由 session.blank 收起。
     const greetingRequested = new Set()
-    function RequirementGreeting({ session, input, ctx }) {
+    const greetingUpgraded = new Set()
+    function RequirementGreeting({ session, input, inputActions, ctx }) {
       const sid = typeof session?.sessionId === 'string' ? session.sessionId : ''
+      // 这个插槽是会话作用域的，顺手把宿主给的输入门面留给画布用（见 inputActionsFor）。
+      useSessionInputActions(sid, inputActions)
       // 开场白只需要“这个会话有没有需求”；会话不空白后不再轮询，避免和右栏重复。
       const { requirement } = useRequirementForSession(sid, { poll: session?.blank === true })
       const { state } = useWorkbench()
       const design = requirement?.sessions?.find?.(item => item.type === 'design' && item.sessionId === sid)
       const inputApi = input?.requestDraftInitialization !== undefined ? input : ctx.conversation?.input
       const isDesign = design !== undefined && design !== null
-      // 输入框里还是未改动的旧版需求描述草稿时，换成新模板；用户已经补过的内容不覆盖。
+      const latest = useRef({ requirement, state })
+      latest.current = { requirement, state }
+      const stateReady = state !== null && state !== undefined
+      // 老会话输入框里可能还留着自动填入的模板：识别出来后清空，引导已经在对话上方。
+      // 用户改过的草稿不会匹配模板，不会被清掉。
       const draftText = typeof input?.draft === 'string' ? input.draft : ''
       useEffect(() => {
-        if (sid === '' || !requirement || isDesign || draftText === '') return undefined
+        if (sid === '' || !requirement || draftText === '') return undefined
         const init = typeof input?.requestDraftInitialization === 'function'
           ? input
           : inputApi?.requestDraftInitialization !== undefined ? inputApi : null
         if (init === null) return undefined
-        if (flatText(draftText) !== flatText(legacyRequirementDescriptionPrompt(requirement, state))) return undefined
-        const key = `${sid}:description-prompt-v2`
+        const flatDraft = flatText(draftText)
+        if (!seededPromptTemplates(requirement, state).some(template => flatText(template) === flatDraft)) return undefined
+        const key = `${sid}:clear-seeded-prompt`
         if (promptRefreshed.has(key)) return undefined
         promptRefreshed.add(key)
         let disposed = false
@@ -8773,50 +8850,114 @@ window.__ModuleLoader__.load({
           .then(() => ctx.sessions.using(sid, { source: 'workbench' }, async (reference) => {
             if (disposed) return
             const result = init.requestDraftInitialization(reference.binding, {
-              prompt: requirementDescriptionPrompt(requirement, state),
+              prompt: '',
               clearPreviousDraft: true,
             })
-            if (result !== 'applied') console.warn('[dsh-workbench] 旧需求描述模板没有换成新版：', result)
+            if (result !== 'applied') {
+              promptRefreshed.delete(key)
+              console.warn('[dsh-workbench] 自动填入的输入框模板没有清掉：', result)
+            }
           }))
           .catch((reason) => {
             promptRefreshed.delete(key)
-            console.warn('[dsh-workbench] 需求描述模板升级失败', reason)
+            console.warn('[dsh-workbench] 输入框模板清理失败', reason)
           })
         return () => { disposed = true }
-      }, [sid, requirement, isDesign, draftText, state, input, inputApi, ctx])
+      }, [sid, requirement, draftText, state, input, inputApi, ctx])
       const blank = requirement !== null && requirement !== undefined && session?.blank === true
         && (input?.phase === undefined || input.phase === 'plain')
       useEffect(() => {
-        if (!blank || sid === '') return undefined
-        const key = `${sid}:${design ? 'design' : 'requirement'}`
+        if (!blank || sid === '' || !requirement || !stateReady) return undefined
+        const key = `${sid}:${isDesign ? 'design' : 'requirement'}`
         if (greetingRequested.has(key)) return undefined
         greetingRequested.add(key)
         let disposed = false
+        let succeeded = false
         let attempt = 0
         let timer = 0
         const send = () => {
+          const current = latest.current
+          const req = current.requirement
+          if (req === null || req === undefined) return
+          const platforms = groupedPlatforms(current.state?.platforms ?? [], current.state?.platformGroups ?? [], req.platformIds)
+            .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
+            .join('；')
+          const briefed = String(req.document?.summary ?? '').trim() !== ''
+            || String(req.document?.body ?? '').trim() !== ''
           attempt += 1
           void api('session-greeting', {
             method: 'POST',
-            body: JSON.stringify({ sessionId: sid, kind: design ? 'design' : 'requirement' }),
+            body: JSON.stringify({
+              sessionId: sid,
+              kind: isDesign ? 'design' : 'requirement',
+              code: req.code,
+              title: req.title,
+              platforms,
+              briefed,
+              prototypes: req.prototypeFiles?.length ?? 0,
+            }),
           }).then(() => {
+            succeeded = true
             // 消息已经写进日志，让会话列表投影刷新 blank 状态，界面从空白首页切到对话记录。
             if (!disposed && typeof ctx.sessions?.refreshProjections === 'function') {
               ctx.sessions.refreshProjections(sid).catch(() => {})
             }
           }, (reason) => {
-            if (attempt < 3 && !disposed) {
-              timer = setTimeout(send, 1400)
+            if (disposed) return
+            if (attempt < 8) {
+              timer = setTimeout(send, attempt < 3 ? 900 : 1800)
             } else {
               greetingRequested.delete(key)
               console.warn('[dsh-workbench] session greeting failed', reason)
             }
           })
         }
-        // 会话刚打开时认领可能还没写完，稍等一下再请求；失败会重试。
+        // 会话刚打开时认领和 Agent 可能还没准备好；多试几次，卸载时把占位放开。
         timer = setTimeout(send, 600)
-        return () => { disposed = true; clearTimeout(timer) }
-      }, [blank, sid, design, ctx])
+        return () => {
+          disposed = true
+          clearTimeout(timer)
+          if (!succeeded) greetingRequested.delete(key)
+        }
+      }, [blank, sid, isDesign, ctx, stateReady])
+      // 老会话的开场白只有一句“请描述你的需求”，没有编号、平台和描述要点。
+      // 会话不是空白时请宿主补一条带这些信息的引导消息；已经有真实对话的会跳过。
+      useEffect(() => {
+        if (blank || sid === '' || !requirement || !stateReady) return undefined
+        const key = `${sid}:greeting-upgrade-v2`
+        if (greetingUpgraded.has(key)) return undefined
+        greetingUpgraded.add(key)
+        let disposed = false
+        const current = latest.current
+        const req = current.requirement
+        if (req === null || req === undefined) return undefined
+        const platforms = groupedPlatforms(current.state?.platforms ?? [], current.state?.platformGroups ?? [], req.platformIds)
+          .map(entry => `${entry.group.name} · ${entry.items.map(item => item.name).join(' / ')}`)
+          .join('；')
+        const briefed = String(req.document?.summary ?? '').trim() !== ''
+          || String(req.document?.body ?? '').trim() !== ''
+        void api('session-greeting', {
+          method: 'POST',
+          body: JSON.stringify({
+            sessionId: sid,
+            kind: isDesign ? 'design' : 'requirement',
+            code: req.code,
+            title: req.title,
+            platforms,
+            briefed,
+            prototypes: req.prototypeFiles?.length ?? 0,
+            upgrade: true,
+          }),
+        }).then(() => {
+          if (!disposed && typeof ctx.sessions?.refreshProjections === 'function') {
+            ctx.sessions.refreshProjections(sid).catch(() => {})
+          }
+        }, (reason) => {
+          greetingUpgraded.delete(key)
+          console.warn('[dsh-workbench] session greeting upgrade skipped', reason)
+        })
+        return () => { disposed = true }
+      }, [blank, sid, requirement, isDesign, ctx, stateReady])
       return null
     }
 
@@ -8826,7 +8967,8 @@ window.__ModuleLoader__.load({
     function workSessionId(requirement, kind) {
       if (kind === 'design') {
         const design = (Array.isArray(requirement.sessions) ? requirement.sessions : [])
-          .find(session => session.type === 'design' && typeof session.sessionId === 'string' && session.sessionId !== '')
+          .find(session => session.archived !== true
+            && session.type === 'design' && typeof session.sessionId === 'string' && session.sessionId !== '')
         return design ? design.sessionId : ''
       }
       return typeof requirement.sessionId === 'string' ? requirement.sessionId : ''
@@ -8859,8 +9001,11 @@ window.__ModuleLoader__.load({
       return groups
     }
 
-    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined, onBack = null, readOnly = false }) {
+    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined, onBack = null, readOnly = false, requirementVersions = [], onOpenRequirementVersion = null }) {
       const studio = useDesignStudio()
+      // 从工作台中间打开时没有插槽 props，改用开场白那里留下的门面。
+      const fallbackInputActions = useMemo(() => inputActionsFor(sid), [sid])
+      const actions = inputActions !== undefined ? inputActions : fallbackInputActions
       const t = useMemo(() => (studio.runtime ? studio.runtime.makeT(ctx) : key => key), [studio.runtime, ctx])
       const { error, opening } = useCanvasTarget(sid, targetPath)
       const { state } = useWorkbench()
@@ -8910,7 +9055,7 @@ window.__ModuleLoader__.load({
         ) : null,
         // inputActions 是宿主的输入门面：画布的画笔画标注、点选元素、
         // 样式修改都靠它“发到对话”，不传就只能退回复制。
-        h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork, inputActions, onBack }),
+        h(studio.runtime.PreviewTab, { sid, t, works: groups, worksKind: kind, currentWorkId, onOpenWork: openWork, inputActions: actions, onBack, requirementVersions, onOpenRequirementVersion }),
       )
     }
 
@@ -9302,7 +9447,7 @@ window.__ModuleLoader__.load({
     }
 
     // 测试右栏：QA 真正需要在一屏里看四件事——验收标准能勾、测试记录、
-    // 测试证据、开发交付物。状态写入仍走 /wb-test 命令，这里只做只读汇总，
+    // 测试证据、开发交付物。状态写入仍走 /test-now 命令，这里只做只读汇总，
     // 勾选仅是本机的测试清单进度，不回写团队服务端。
     function TestTab({ sid, ctx }) {
       const { requirement } = useRequirementForSession(sid)
@@ -9364,7 +9509,7 @@ window.__ModuleLoader__.load({
               h('b', null, latest === null ? '还没有测试记录' : `最新一轮：测试${TEST_STATUS_LABELS[latest.status] ?? latest.status}`),
             ),
             latest === null
-              ? h('span', { className: 'dsh-wb-test-banner-meta' }, '在测试会话里用 /wb-test start 开始一轮，pass / fail 记录结果。')
+              ? h('span', { className: 'dsh-wb-test-banner-meta' }, '在测试会话里用 /test-verify 开始一轮，pass / fail 记录结果。')
               : h('span', { className: 'dsh-wb-test-banner-meta' },
                   `${latestBy?.name ?? latest.by} · ${relativeTime(latest.finishedAt ?? latest.startedAt)}`,
                   latest.note ? ` · ${latest.note}` : '',
@@ -9470,9 +9615,9 @@ window.__ModuleLoader__.load({
           ),
 
           h('div', { className: 'dsh-wb-test-cmds' },
-            h('div', null, h('code', null, '/wb-test start'), ' 开始一轮测试'),
-            h('div', null, h('code', null, '/wb-test pass 说明'), ' 记录通过'),
-            h('div', null, h('code', null, '/wb-test fail 说明 https://缺陷链接'), ' 记录不通过'),
+            h('div', null, h('code', null, '/test-now start'), ' 开始一轮测试'),
+            h('div', null, h('code', null, '/test-now pass 说明'), ' 记录通过'),
+            h('div', null, h('code', null, '/test-now fail 说明 https://缺陷链接'), ' 记录不通过'),
           ),
         )
       }
@@ -9826,7 +9971,7 @@ window.__ModuleLoader__.load({
       const deliveredCount = screens.length + images.length
       const sessionRecord = (requirement?.sessions ?? []).find(item => item.sessionId === sid)
       const isDesignSession = sessionRecord?.type === 'design'
-      const designSession = (requirement?.sessions ?? []).find(item => item.type === 'design' && item.sessionId)
+      const designSession = (requirement?.sessions ?? []).find(item => item.archived !== true && item.type === 'design' && item.sessionId)
       const dedicated = designFiles.some(file => String(file.relativePath || '').startsWith('design/'))
       const needsDesignDir = isDesignSession && (designFiles.length === 0 || dedicated)
       const ensuredDesign = useEnsuredChild(requirement?.folderPath, needsDesignDir ? 'design' : '')

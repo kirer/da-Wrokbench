@@ -59,6 +59,23 @@ node e2e/desktop-s13.mjs --reset
 - 可选参数：`--allow-dirty`（跳过基线断言）、`--no-launch`（不自动启动桌面端）、
   `--timeout=<秒>`（单轮模型超时，默认 900）、`--evidence=<目录>`。
 
+## 「在线教育」结构全流程
+
+`check-online-education.mjs` 用一套干净数据跑「项目 → 迭代 → 两个需求 → 各角色进入需求」，
+验证参与者卡片墙、进入需求自动建会话、设计 / 开发认领和发布状态。它不调用模型，几分钟内跑完：
+
+```bash
+# 先清空测试数据（会退出/重开桌面端）
+bash tools/reset-workbench-test-data.sh
+
+# 跑结构全流程（--reset 可以合并上一步）
+node e2e/check-online-education.mjs
+```
+
+流程说明和当前缺口见 `docs/测试方案-在线教育全流程.md`；证据写到
+`runtime/test-evidence/online-education-<时间>/`。真实原型 / 设计稿生成仍由
+`desktop-s13.mjs` 覆盖。
+
 ## 脚本分层
 
 - 根目录的 `check-*.mjs`、`container-*.mjs`、`open-design-tab.mjs`、`see-*.mjs`、

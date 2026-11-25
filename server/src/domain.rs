@@ -214,11 +214,7 @@ where
     items.iter().map(|item| value(item)).max().unwrap_or(0) + 1
 }
 
-fn make_entity_id<'a>(
-    existing: impl Iterator<Item = &'a str>,
-    prefix: &str,
-    name: &str,
-) -> String {
+fn make_entity_id<'a>(existing: impl Iterator<Item = &'a str>, prefix: &str, name: &str) -> String {
     let existing: HashSet<&str> = existing.collect();
     let ascii = name
         .to_lowercase()
@@ -271,7 +267,11 @@ fn dev_assignee_ids(requirement: &Requirement) -> Vec<String> {
         .collect()
 }
 
-fn ensure_status(requirement: &Requirement, allowed: &[&str], action: &str) -> Result<(), ApiError> {
+fn ensure_status(
+    requirement: &Requirement,
+    allowed: &[&str],
+    action: &str,
+) -> Result<(), ApiError> {
     if !allowed.contains(&requirement.status.as_str()) {
         return Err(ApiError::conflict(format!(
             "需求当前是「{}」，不能{action}",
@@ -283,7 +283,9 @@ fn ensure_status(requirement: &Requirement, allowed: &[&str], action: &str) -> R
 
 fn check_not_creating(requirement: &Requirement, action: &str) -> Result<(), ApiError> {
     if requirement.status == STATUS_CREATING {
-        return Err(ApiError::conflict(format!("需求还在创建中，稍后再{action}")));
+        return Err(ApiError::conflict(format!(
+            "需求还在创建中，稍后再{action}"
+        )));
     }
     if requirement.status == STATUS_CREATE_FAILED {
         return Err(ApiError::conflict(format!(
@@ -337,11 +339,7 @@ pub fn create_project(
     let project = Project {
         id: format!("project-{}", uuid::Uuid::new_v4()),
         name,
-        description: input
-            .description
-            .unwrap_or_default()
-            .trim()
-            .to_string(),
+        description: input.description.unwrap_or_default().trim().to_string(),
         owner_id: Some(actor.id.clone()),
         archived: false,
         created_at: crate::now_iso(),
@@ -381,11 +379,9 @@ pub fn update_project(
         if name.chars().count() > 40 {
             return Err(ApiError::bad("项目名称长度不能超过 40"));
         }
-        if snap
-            .projects
-            .iter()
-            .any(|project| project.id != id && !project.archived && project.name.eq_ignore_ascii_case(name))
-        {
+        if snap.projects.iter().any(|project| {
+            project.id != id && !project.archived && project.name.eq_ignore_ascii_case(name)
+        }) {
             return Err(ApiError::conflict(format!("项目「{name}」已存在")));
         }
         snap.projects[index].name = name.to_string();
@@ -405,11 +401,7 @@ pub fn update_project(
 }
 
 /// 切换当前项目：顺手把不属于该项目的当前迭代清掉，避免“项目 A 下选中项目 B 的迭代”。
-pub fn select_project(
-    snap: &mut Snapshot,
-    actor: &User,
-    id: &str,
-) -> Result<Project, ApiError> {
+pub fn select_project(snap: &mut Snapshot, actor: &User, id: &str) -> Result<Project, ApiError> {
     let project = snap
         .projects
         .iter()
@@ -585,8 +577,7 @@ pub fn update_iteration(
         snap.iterations[index].status = status;
     }
     if input.start_date.is_some() {
-        snap.iterations[index].start_date =
-            validate_date(input.start_date.as_deref(), "开始日期")?;
+        snap.iterations[index].start_date = validate_date(input.start_date.as_deref(), "开始日期")?;
     }
     if input.end_date.is_some() {
         snap.iterations[index].end_date = validate_date(input.end_date.as_deref(), "结束日期")?;
@@ -783,6 +774,16 @@ pub fn move_requirement(
 // Requirements
 // ---------------------------------------------------------------------------
 
+/// 未提交 v1 的需求是产品自己的草稿：创建中、创建失败、草稿都还没发布，
+/// 只有创建人能看到；提交进入评审后，其他角色才在列表和需求页里看到它。
+pub fn requirement_visible_to(requirement: &Requirement, actor: &User) -> bool {
+    requirement.owner_id == actor.id
+        || !matches!(
+            requirement.status.as_str(),
+            STATUS_CREATING | STATUS_CREATE_FAILED | STATUS_DRAFT
+        )
+}
+
 pub fn create_requirement(
     snap: &mut Snapshot,
     actor: &User,
@@ -821,6 +822,7 @@ pub fn create_requirement(
         platform_ids: default_platform_ids(snap, actor),
         owner_id: actor.id.clone(),
         designer_id: None,
+        tester_id: None,
         in_scope: false,
         versions: Vec::new(),
         design_versions: Vec::new(),
@@ -840,6 +842,7 @@ pub fn create_requirement(
         release: None,
         document: RequirementDocument::default(),
         artifacts: Vec::new(),
+        prototype_versions: Vec::new(),
         create_error: None,
         created_at: at.clone(),
         updated_at: at,
@@ -853,6 +856,41 @@ pub fn create_requirement(
         json!({"code": requirement.code, "title": requirement.title}),
     );
     Ok((requirement, iteration))
+}
+
+pub fn delete_requirement(
+    snap: &mut Snapshot,
+    actor: &User,
+    reference: &str,
+) -> Result<Requirement, ApiError> {
+    let index = req_index(snap, reference)?;
+    if snap.requirements[index].owner_id != actor.id {
+        return Err(ApiError::forbidden("只有需求的创建人可以删除这条需求"));
+    }
+    let requirement = snap.requirements[index].clone();
+    // 附件正文和通知不在需求行里，删需求时一起清掉；会话记录随需求行一起消失。
+    let artifact_ids: HashSet<String> = requirement
+        .artifacts
+        .iter()
+        .map(|artifact| artifact.id.clone())
+        .collect();
+    snap.artifact_contents
+        .retain(|content| !artifact_ids.contains(&content.id));
+    snap.notifications.retain(|notification| {
+        notification.requirement_id.as_deref() != Some(requirement.id.as_str())
+    });
+    snap.pending_notifications.retain(|notification| {
+        notification.requirement_id.as_deref() != Some(requirement.id.as_str())
+    });
+    snap.requirements.remove(index);
+    snap.push_event(
+        Some(&actor.id),
+        "requirement.deleted",
+        Some(&requirement.id),
+        Some(&requirement.iteration_id),
+        json!({"code": requirement.code, "title": requirement.title}),
+    );
+    Ok(requirement)
 }
 
 pub fn bind_requirement(
@@ -870,8 +908,13 @@ pub fn bind_requirement(
         )));
     }
     let status = snap.requirements[index].status.as_str();
-    if !matches!(status, STATUS_CREATING | STATUS_CREATE_FAILED | STATUS_DRAFT) {
-        return Err(ApiError::conflict("只有创建中、创建失败或草稿状态的需求可以绑定会话"));
+    if !matches!(
+        status,
+        STATUS_CREATING | STATUS_CREATE_FAILED | STATUS_DRAFT
+    ) {
+        return Err(ApiError::conflict(
+            "只有创建中、创建失败或草稿状态的需求可以绑定会话",
+        ));
     }
     let record_id = session_record_id.ok_or_else(|| ApiError::bad("缺少会话记录 id"))?;
     let record = snap.requirements[index]
@@ -906,7 +949,9 @@ pub fn mark_create_failed(
     }
     let status = snap.requirements[index].status.as_str();
     if !matches!(status, STATUS_CREATING | STATUS_CREATE_FAILED) {
-        return Err(ApiError::conflict("只有创建中或创建失败的需求可以记录创建失败"));
+        return Err(ApiError::conflict(
+            "只有创建中或创建失败的需求可以记录创建失败",
+        ));
     }
     let message = message.trim();
     if message.chars().count() > 2000 {
@@ -992,9 +1037,13 @@ pub fn archive_session(
         .iter()
         .position(|session| session.id == record_id)
         .ok_or_else(|| ApiError::not_found("会话记录不存在"))?;
-    let created_by = snap.requirements[index].sessions[position].created_by.clone();
+    let created_by = snap.requirements[index].sessions[position]
+        .created_by
+        .clone();
     if created_by.as_deref() != Some(actor.id.as_str()) && !actor.can_plan() {
-        return Err(ApiError::forbidden("只有会话创建人或负责人可以归档/恢复会话"));
+        return Err(ApiError::forbidden(
+            "只有会话创建人或负责人可以归档/恢复会话",
+        ));
     }
     snap.requirements[index].sessions[position].archived = archived;
     if archived && snap.requirements[index].primary_session_id.as_deref() == Some(record_id) {
@@ -1033,11 +1082,32 @@ pub fn session_type_label(kind: &str) -> &'static str {
     }
 }
 
+/// 提交时顺带定下的分工。都可省略：不指定就留待认领，不替用户做决定。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitAssignments {
+    #[serde(default)]
+    pub designer_id: Option<String>,
+    #[serde(default)]
+    pub tester_id: Option<String>,
+    #[serde(default)]
+    pub dev: Vec<SubmitDevAssignment>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitDevAssignment {
+    pub platform_id: String,
+    pub assignee_id: String,
+}
+
 pub fn submit_requirement(
     snap: &mut Snapshot,
     actor: &User,
     reference: &str,
     summary: Option<&str>,
+    prototype_files: Vec<PrototypeVersionFile>,
+    assignments: SubmitAssignments,
 ) -> Result<Requirement, ApiError> {
     let index = req_index(snap, reference)?;
     check_not_creating(&snap.requirements[index], "提交")?;
@@ -1048,15 +1118,46 @@ pub fn submit_requirement(
         )));
     }
     if snap.requirements[index].owner_id != actor.id && !actor.can_plan() {
-        return Err(ApiError::forbidden("只有需求负责人或负责人/管理员可以提交这个需求"));
+        return Err(ApiError::forbidden(
+            "只有需求负责人或负责人/管理员可以提交这个需求",
+        ));
     }
+    // 待评审中也能再提交：相当于在这版需求上做变更，直接生成下一个版本
+    // （v2、v3…），评审按最新一版重新开始，上一版的会签记录保留但不再计数。
     if !matches!(
         snap.requirements[index].status.as_str(),
-        STATUS_DRAFT | STATUS_CHANGES_REQUESTED | STATUS_BACKLOG
+        STATUS_DRAFT | STATUS_CHANGES_REQUESTED | STATUS_BACKLOG | STATUS_PENDING_REVIEW
     ) {
-        return Err(ApiError::conflict("当前状态不能提交，只有草稿、待修改或已暂缓的需求可以提交"));
+        return Err(ApiError::conflict(
+            "当前状态不能提交：草稿、待修改、已暂缓或待评审中的需求可以提交（待评审中再提交会生成新版本）",
+        ));
     }
     let version = snap.requirements[index].versions.len() as u32 + 1;
+    // 原型版本只能引用这条需求自己的原型附件：附件 ID 是客户端传的，不能
+    // 直接信；顺手挡住重名，免得版本里出现两屏同名文件。
+    let mut prototype: Vec<PrototypeVersionFile> = Vec::new();
+    for file in prototype_files {
+        let name = file.name.trim().to_string();
+        if name.is_empty() {
+            return Err(ApiError::bad("原型文件名不能为空"));
+        }
+        let known = snap.requirements[index]
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.id == file.artifact_id && artifact.kind == "prototype");
+        if !known {
+            return Err(ApiError::bad(format!(
+                "原型「{name}」不在这条需求的原型附件里"
+            )));
+        }
+        if prototype.iter().any(|item| item.name == name) {
+            return Err(ApiError::bad(format!("原型文件名重复：{name}")));
+        }
+        prototype.push(PrototypeVersionFile {
+            name,
+            artifact_id: file.artifact_id,
+        });
+    }
     let text = summary
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -1089,9 +1190,131 @@ pub fn submit_requirement(
         at: crate::now_iso(),
         by: actor.id.clone(),
     });
+    if !prototype.is_empty() {
+        snap.requirements[index]
+            .prototype_versions
+            .push(PrototypeVersion {
+                version,
+                files: prototype,
+                created_at: crate::now_iso(),
+                created_by: actor.id.clone(),
+            });
+    }
     snap.requirements[index].status = STATUS_PENDING_REVIEW.to_string();
     snap.requirements[index].in_scope = false;
     snap.requirements[index].updated_at = crate::now_iso();
+    // 提交时定分工：只落用户明确选的人；没选的角色保持待认领。
+    let mut assigned_notices: Vec<(String, &'static str, String, String)> = Vec::new();
+    if let Some(raw) = assignments.designer_id.as_deref() {
+        let id = raw.trim();
+        if !id.is_empty() {
+            let uid = {
+                let user = snap
+                    .active_user(id)
+                    .ok_or_else(|| ApiError::bad("设计负责人不存在或已停用"))?;
+                if !user.can_design() {
+                    return Err(ApiError::bad(format!(
+                        "{} 没有设计身份，不能指派为设计负责人",
+                        user.name
+                    )));
+                }
+                user.id.clone()
+            };
+            if snap.requirements[index].design_status == DESIGN_NONE {
+                return Err(ApiError::conflict("这条需求标记为无需设计"));
+            }
+            snap.requirements[index].designer_id = Some(uid.clone());
+            snap.requirements[index].design_status = DESIGN_DESIGNING.to_string();
+            assigned_notices.push((
+                uid,
+                "design_assigned",
+                format!("{} 指派了设计", snap.requirements[index].code),
+                format!(
+                    "{}「{}」的设计由你负责。",
+                    snap.requirements[index].code, snap.requirements[index].title
+                ),
+            ));
+        }
+    }
+    let mut seen_platforms: Vec<String> = Vec::new();
+    for item in &assignments.dev {
+        let platform_id = item.platform_id.trim().to_string();
+        if platform_id.is_empty() || seen_platforms.iter().any(|id| id == &platform_id) {
+            continue;
+        }
+        check_platform(&snap.requirements[index], &platform_id)?;
+        let (uid, uname, wrong_platform) = {
+            let user = snap
+                .active_user(item.assignee_id.trim())
+                .ok_or_else(|| ApiError::bad("开发负责人不存在或已停用"))?;
+            if !(user.can_dev() || user.can_plan()) {
+                return Err(ApiError::bad(format!(
+                    "{} 没有开发身份，不能指派为开发负责人",
+                    user.name
+                )));
+            }
+            let wrong_platform =
+                !user.platforms.is_empty() && !user.can_plan() && !user.owns_platform(&platform_id);
+            (user.id.clone(), user.name.clone(), wrong_platform)
+        };
+        if wrong_platform {
+            return Err(ApiError::bad(format!(
+                "{} 不负责这个平台，不能指派为开发负责人",
+                uname
+            )));
+        }
+        snap.requirements[index].ensure_dev_tasks();
+        if snap.requirements[index]
+            .dev_tasks
+            .iter()
+            .any(|task| task.platform_id == platform_id && task.status == DEV_DONE)
+        {
+            return Err(ApiError::conflict("开发任务已完成，请先重开再改派"));
+        }
+        if let Some(task) = snap.requirements[index].dev_task_mut(&platform_id) {
+            task.assignee_id = Some(uid.clone());
+            if task.status == DEV_UNASSIGNED {
+                task.status = DEV_ASSIGNED.to_string();
+            }
+        }
+        seen_platforms.push(platform_id.clone());
+        assigned_notices.push((
+            uid,
+            "dev_assigned",
+            format!("{} 指派了开发任务", snap.requirements[index].code),
+            format!(
+                "{}「{}」的 {} 平台开发任务指派给你。",
+                snap.requirements[index].code, snap.requirements[index].title, platform_id
+            ),
+        ));
+    }
+    if let Some(raw) = assignments.tester_id.as_deref() {
+        let id = raw.trim();
+        if !id.is_empty() {
+            let uid = {
+                let user = snap
+                    .active_user(id)
+                    .ok_or_else(|| ApiError::bad("测试负责人不存在或已停用"))?;
+                if !user.can_test() {
+                    return Err(ApiError::bad(format!(
+                        "{} 没有测试身份，不能指派为测试负责人",
+                        user.name
+                    )));
+                }
+                user.id.clone()
+            };
+            snap.requirements[index].tester_id = Some(uid.clone());
+            assigned_notices.push((
+                uid,
+                "test_assigned",
+                format!("{} 指派了测试", snap.requirements[index].code),
+                format!(
+                    "{}「{}」的测试由你负责。",
+                    snap.requirements[index].code, snap.requirements[index].title
+                ),
+            ));
+        }
+    }
     let requirement = snap.requirements[index].clone();
     let reviewers = requirement.reviewer_ids.clone();
     for reviewer in reviewers {
@@ -1106,12 +1329,25 @@ pub fn submit_requirement(
             ),
         );
     }
+    for (user_id, kind, title, body) in assigned_notices {
+        if user_id != actor.id {
+            snap.notify(&user_id, kind, Some(&requirement.id), &title, &body);
+        }
+    }
     snap.push_event(
         Some(&actor.id),
         "requirement.submitted",
         Some(&requirement.id),
         Some(&requirement.iteration_id),
-        json!({"code": requirement.code, "version": version}),
+        json!({
+            "code": requirement.code,
+            "version": version,
+            "designerId": requirement.designer_id,
+            "testerId": requirement.tester_id,
+            "dev": requirement.dev_tasks.iter()
+                .filter_map(|task| task.assignee_id.as_ref().map(|assignee| json!({"platformId": task.platform_id, "assigneeId": assignee})))
+                .collect::<Vec<_>>(),
+        }),
     );
     Ok(requirement)
 }
@@ -1140,9 +1376,14 @@ pub fn review_requirement(
     }
     let reviewers = &snap.requirements[index].reviewer_ids;
     if reviewers.is_empty() {
-        return Err(ApiError::conflict("需求还没有配置会签人，请先在迭代设置或 /req-reviewers 里指定"));
+        return Err(ApiError::conflict(
+            "需求还没有配置会签人，请先在迭代设置或 /req-reviewers 里指定",
+        ));
     }
-    let submitter = snap.requirements[index].versions.last().map(|version| version.by.as_str());
+    let submitter = snap.requirements[index]
+        .versions
+        .last()
+        .map(|version| version.by.as_str());
     if submitter == Some(actor.id.as_str()) && !actor.has_role(ROLE_ADMIN) {
         return Err(ApiError::forbidden("不能评审自己提交的需求"));
     }
@@ -1308,11 +1549,12 @@ pub fn set_reviewers(
         clean.push(id);
     }
     if clean.is_empty() {
-        return Err(ApiError::bad("至少需要一名会签人；留空会让任何负责人一次通过就结束评审"));
+        return Err(ApiError::bad(
+            "至少需要一名会签人；留空会让任何负责人一次通过就结束评审",
+        ));
     }
     let previous = snap.requirements[index].reviewer_ids.clone();
-    let unchanged = previous.len() == clean.len()
-        && previous.iter().all(|id| clean.contains(id));
+    let unchanged = previous.len() == clean.len() && previous.iter().all(|id| clean.contains(id));
     let round = snap.requirements[index].versions.len() as u32;
     // 本轮已经投过 reject 的会签人不能被移出列表：否则负责人先把驳回意见“删掉”，
     // 剩下的会签人全通过时需求就直接变成已通过，评审等于被绕过。
@@ -1396,9 +1638,7 @@ pub fn schedule_requirement(
         "排期",
     )?;
     if !snap.requirements[index].in_scope {
-        return Err(ApiError::conflict(
-            "需求不在本期范围内，先用范围调整纳入",
-        ));
+        return Err(ApiError::conflict("需求不在本期范围内，先用范围调整纳入"));
     }
     let start = match input.start_date.as_deref() {
         Some(value) => Some(validate_date(Some(value), "开始日期")?),
@@ -1495,14 +1735,12 @@ pub fn set_scope(
     }
     let at = crate::now_iso();
     snap.requirements[index].in_scope = input.in_scope;
-    snap.requirements[index]
-        .scope_changes
-        .push(ScopeChange {
-            at: at.clone(),
-            by: actor.id.clone(),
-            in_scope: input.in_scope,
-            reason: reason.to_string(),
-        });
+    snap.requirements[index].scope_changes.push(ScopeChange {
+        at: at.clone(),
+        by: actor.id.clone(),
+        in_scope: input.in_scope,
+        reason: reason.to_string(),
+    });
     snap.requirements[index].status = if input.in_scope {
         if snap.requirements[index].planned_start_date.is_some()
             || snap.requirements[index].planned_end_date.is_some()
@@ -1615,12 +1853,8 @@ pub fn deliver_design(
     if snap.requirements[index].design_status == DESIGN_NONE {
         return Err(ApiError::conflict("该需求标记为无需设计"));
     }
-    if ![
-        DESIGN_DESIGNING,
-        DESIGN_DELIVERED,
-        DESIGN_CHANGES,
-    ]
-    .contains(&snap.requirements[index].design_status.as_str())
+    if ![DESIGN_DESIGNING, DESIGN_DELIVERED, DESIGN_CHANGES]
+        .contains(&snap.requirements[index].design_status.as_str())
     {
         return Err(ApiError::conflict("请先认领设计，再交付"));
     }
@@ -1809,10 +2043,7 @@ pub fn dev_claim(
             actor.name
         )));
     }
-    if !actor.can_plan()
-        && !actor.platforms.is_empty()
-        && !actor.owns_platform(platform_id)
-    {
+    if !actor.can_plan() && !actor.platforms.is_empty() && !actor.owns_platform(platform_id) {
         return Err(ApiError::forbidden(format!(
             "{} 不负责这个平台",
             actor.name
@@ -1922,7 +2153,10 @@ pub fn dev_start(
     snap.requirements[index].in_scope = true;
     snap.requirements[index].updated_at = at;
     let requirement = snap.requirements[index].clone();
-    if first_start && requirement.design_status != DESIGN_DELIVERED && requirement.design_status != DESIGN_NONE {
+    if first_start
+        && requirement.design_status != DESIGN_DELIVERED
+        && requirement.design_status != DESIGN_NONE
+    {
         snap.notify(
             &requirement.owner_id,
             "design_pending",
@@ -1930,7 +2164,11 @@ pub fn dev_start(
             &format!("{} 开发已开始，设计未交付", requirement.code),
             "开发开始后交付的设计会标记为「设计已更新」。",
         );
-        if let Some(designer) = requirement.designer_id.as_deref().filter(|id| *id != requirement.owner_id.as_str()) {
+        if let Some(designer) = requirement
+            .designer_id
+            .as_deref()
+            .filter(|id| *id != requirement.owner_id.as_str())
+        {
             snap.notify(
                 designer,
                 "design_pending",
@@ -2093,6 +2331,51 @@ pub fn dev_reopen(
     Ok(requirement)
 }
 
+/// 认领测试：和设计一样是「这条需求由谁负责测试」的标记，不代替测试轮次。
+pub fn claim_test(
+    snap: &mut Snapshot,
+    actor: &User,
+    reference: &str,
+) -> Result<Requirement, ApiError> {
+    if !actor.can_test() {
+        return Err(ApiError::forbidden(format!(
+            "{} 没有认领测试的权限（需要测试/负责人/管理员身份）",
+            actor.name
+        )));
+    }
+    let index = req_index(snap, reference)?;
+    check_not_creating(&snap.requirements[index], "认领测试")?;
+    ensure_status(
+        &snap.requirements[index],
+        &[
+            STATUS_DEV_DONE,
+            STATUS_TESTING,
+            STATUS_TEST_FAILED,
+            STATUS_TEST_PASSED,
+        ],
+        "认领测试",
+    )?;
+    if let Some(holder) = snap.requirements[index].tester_id.clone() {
+        if holder != actor.id && !actor.can_plan() {
+            return Err(ApiError::conflict(format!(
+                "测试已由 {} 认领",
+                user_name(snap, &holder)
+            )));
+        }
+    }
+    snap.requirements[index].tester_id = Some(actor.id.clone());
+    snap.requirements[index].updated_at = crate::now_iso();
+    let requirement = snap.requirements[index].clone();
+    snap.push_event(
+        Some(&actor.id),
+        "requirement.test_claimed",
+        Some(&requirement.id),
+        Some(&requirement.iteration_id),
+        json!({"tester": actor.id}),
+    );
+    Ok(requirement)
+}
+
 pub fn test_start(
     snap: &mut Snapshot,
     actor: &User,
@@ -2124,6 +2407,10 @@ pub fn test_start(
         bug_url: None,
     });
     snap.requirements[index].status = STATUS_TESTING.to_string();
+    // 没指定测试负责人时，第一个开始测试的人就是这条需求的测试负责人。
+    if snap.requirements[index].tester_id.is_none() {
+        snap.requirements[index].tester_id = Some(actor.id.clone());
+    }
     snap.requirements[index].updated_at = at;
     let requirement = snap.requirements[index].clone();
     snap.notify(
@@ -2150,8 +2437,8 @@ fn clean_http_url(raw: Option<&str>, label: &str) -> Result<Option<String>, ApiE
     if value.len() > 2000 {
         return Err(ApiError::bad(format!("{label}过长（最多 2000 字符）")));
     }
-    let parsed = reqwest::Url::parse(value)
-        .map_err(|_| ApiError::bad(format!("{label}不是合法 URL")))?;
+    let parsed =
+        reqwest::Url::parse(value).map_err(|_| ApiError::bad(format!("{label}不是合法 URL")))?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Err(ApiError::bad(format!("{label}只支持 http/https")));
     }
@@ -2286,11 +2573,7 @@ pub fn test_fail(
     )
 }
 
-pub fn freeze(
-    snap: &mut Snapshot,
-    actor: &User,
-    reference: &str,
-) -> Result<Requirement, ApiError> {
+pub fn freeze(snap: &mut Snapshot, actor: &User, reference: &str) -> Result<Requirement, ApiError> {
     require_plan(actor, "冻结需求的")?;
     let index = req_index(snap, reference)?;
     if snap.requirements[index].status != STATUS_TEST_PASSED {
@@ -2430,9 +2713,9 @@ pub fn create_platform_group(
     let group = PlatformGroup {
         id,
         name,
-        order: input.order.unwrap_or_else(|| {
-            next_order(&snap.groups, |item| item.order)
-        }),
+        order: input
+            .order
+            .unwrap_or_else(|| next_order(&snap.groups, |item| item.order)),
         active: input.active.unwrap_or(true),
         supports_api_doc: input.supports_api_doc.unwrap_or(false),
     };
@@ -2524,7 +2807,8 @@ pub fn create_platform(
         .unwrap_or_else(|| name.clone());
     let order = input.order.unwrap_or_else(|| {
         next_order(
-            &snap.platforms
+            &snap
+                .platforms
                 .iter()
                 .filter(|platform| platform.group_id == group_id)
                 .collect::<Vec<_>>(),
@@ -2599,9 +2883,8 @@ pub fn update_platform(
         snap.platforms[index].lead_ids = lead_ids;
     }
     if input.gitlab_project_id.is_some() {
-        snap.platforms[index].gitlab_project_id = input
-            .gitlab_project_id
-            .filter(|id| !id.trim().is_empty());
+        snap.platforms[index].gitlab_project_id =
+            input.gitlab_project_id.filter(|id| !id.trim().is_empty());
     }
     if input.gitlab_project_path.is_some() {
         snap.platforms[index].gitlab_project_path = input
@@ -2675,11 +2958,7 @@ pub fn complete_onboarding(
         .into_iter()
         .map(|platform| platform.id.clone())
         .collect();
-    let mut allowed_ids: HashSet<String> = snap.users[index]
-        .platforms
-        .iter()
-        .cloned()
-        .collect();
+    let mut allowed_ids: HashSet<String> = snap.users[index].platforms.iter().cloned().collect();
     for platform in active_platforms(snap) {
         if platform.owner_id.as_deref() == Some(actor.id.as_str())
             || platform.lead_ids.iter().any(|id| id == &actor.id)
@@ -2819,7 +3098,15 @@ pub fn create_skill(
             "skill_review_requested",
             None,
             &format!("技能 {name} 等待审核"),
-            &format!("{} 上传了{}技能「{name}」。", actor.name, if scope == "global" { "团队" } else { "个人" }),
+            &format!(
+                "{} 上传了{}技能「{name}」。",
+                actor.name,
+                if scope == "global" {
+                    "团队"
+                } else {
+                    "个人"
+                }
+            ),
         );
     }
     snap.push_event(
@@ -3205,7 +3492,10 @@ fn clean_content_type(raw: &str) -> String {
 }
 
 fn decoded_base64_len(content: &str) -> Result<usize, ApiError> {
-    let compact: String = content.chars().filter(|ch| !ch.is_ascii_whitespace()).collect();
+    let compact: String = content
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .collect();
     if compact.is_empty() || compact.len() % 4 != 0 {
         return Err(ApiError::bad("base64 内容不合法（长度必须是 4 的倍数）"));
     }
@@ -3256,10 +3546,7 @@ pub fn add_artifact(
     // 原型和测试报告会被宿主写进每个人的本机需求目录（mirrorPrototypesForUser），
     // 所以必须和设计稿一样有角色门槛：否则任何登录用户都能往别人的原型目录里写文件，
     // 或者伪造一份“测试通过”的证据。
-    if kind == "prototype"
-        && snap.requirements[index].owner_id != actor.id
-        && !actor.can_plan()
-    {
+    if kind == "prototype" && snap.requirements[index].owner_id != actor.id && !actor.can_plan() {
         return Err(ApiError::forbidden(format!(
             "{} 不是这条需求的产品负责人，不能上传原型",
             actor.name
@@ -3378,7 +3665,10 @@ fn is_requirement_participant(requirement: &Requirement, actor: &User) -> bool {
             .sessions
             .iter()
             .any(|session| session.created_by.as_deref() == Some(actor.id.as_str()))
-        || requirement.reviews.iter().any(|review| review.by == actor.id)
+        || requirement
+            .reviews
+            .iter()
+            .any(|review| review.by == actor.id)
         || requirement.test_runs.iter().any(|run| run.by == actor.id)
 }
 
@@ -3409,7 +3699,12 @@ pub fn get_artifact_for(
     let requirement = snap
         .requirements
         .iter()
-        .find(|requirement| requirement.artifacts.iter().any(|artifact| artifact.id == id))
+        .find(|requirement| {
+            requirement
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.id == id)
+        })
         .ok_or_else(|| ApiError::not_found("附件不存在"))?;
     let shared_kind = matches!(
         requirement
@@ -3432,7 +3727,12 @@ pub fn delete_artifact(snap: &mut Snapshot, actor: &User, id: &str) -> Result<St
     let index = snap
         .requirements
         .iter()
-        .position(|requirement| requirement.artifacts.iter().any(|artifact| artifact.id == id))
+        .position(|requirement| {
+            requirement
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.id == id)
+        })
         .ok_or_else(|| ApiError::not_found("附件不存在"))?;
     check_not_creating(&snap.requirements[index], "删除附件")?;
     let meta = snap.requirements[index]
@@ -3647,7 +3947,11 @@ mod tests {
     fn rejected_reviewer_cannot_be_removed() {
         let mut snap = snapshot_with(STATUS_PENDING_REVIEW, &["S1-001"]);
         // 会签人必须是真实的负责人账号，否则会先被用户存在性校验挡下。
-        snap.users = vec![user("u-owner", &["product"]), user("u-a", &["lead"]), user("u-b", &["lead"])];
+        snap.users = vec![
+            user("u-owner", &["product"]),
+            user("u-a", &["lead"]),
+            user("u-b", &["lead"]),
+        ];
         snap.requirements[0].reviewer_ids = vec!["u-a".to_string(), "u-b".to_string()];
         snap.requirements[0].versions.push(Version {
             version: 1,

@@ -176,6 +176,7 @@ fn base_requirement(id: &str, code: &str, title: &str, iteration_id: &str) -> Re
         platform_ids: vec![],
         owner_id: "lisi".into(),
         designer_id: None,
+        tester_id: None,
         in_scope: false,
         versions: vec![],
         design_versions: vec![],
@@ -195,6 +196,7 @@ fn base_requirement(id: &str, code: &str, title: &str, iteration_id: &str) -> Re
         release: None,
         document: RequirementDocument::default(),
         artifacts: vec![],
+        prototype_versions: vec![],
         create_error: None,
         created_at: "2026-11-16T09:20:00.000Z".into(),
         updated_at: "2026-11-22T02:15:00.000Z".into(),
@@ -607,7 +609,7 @@ pub fn requirements() -> Vec<Requirement> {
 
 fn skill_content(name: &str) -> &'static str {
     match name {
-        "req-submit" => "# 提交需求\n\n1. 确认需求编号。\n2. 调用 `workbench_submit_requirement` 提交并写摘要。\n3. 只汇报工具返回的状态。",
+        "req-submit" => "# 提交需求 / 提交变更\n\n1. 确认需求编号和状态；待评审中再提交会生成新版本（v2、v3…）。\n2. 先给出设计 / 开发 / 测试分工建议并让用户选择；用户说不指定就留空。\n3. 调用 `workbench_submit_requirement` 提交并写摘要，`assignments` 只放用户明确选的人。\n4. 只汇报工具返回的状态、版本号和分工。",
         "req-review" => "# 评审需求\n\n1. 确认需求为待评审。\n2. 向用户确认通过或退回。\n3. 调用 `workbench_review_requirement`。\n4. 多评审人时，全部通过才进入已通过。",
         "req-schedule" => "# 需求排期\n\n1. 确认需求已通过且在本期。\n2. 确认开始/结束日期。\n3. 调用 `workbench_schedule_requirement`。",
         "req-scope" => "# 范围调整\n\n1. 确认纳入还是移出以及原因。\n2. 调用 `workbench_scope_requirement`。\n3. 范围变更会记录历史。",
