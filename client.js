@@ -967,8 +967,15 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .req-link svg { width: 11px; height: 11px; color: var(--text-3); }
 .dsh-wb-design .with-aside { display: grid; grid-template-columns: minmax(0, 1fr) 316px; gap: 22px; align-items: start; }
 .dsh-wb-design .aside-col { position: sticky; top: 0; display: flex; flex-direction: column; gap: 14px; }
-.dsh-wb-design .cardwall { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.dsh-wb-design .dcard2 { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+/* 需求总览是一面扁平的卡片墙：所有卡片同样小，不按区块分组。 */
+.dsh-wb-design .cardwall { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; grid-auto-rows: 1fr; }
+/* 小卡片头只留图标、标题和徽标；长说明和右侧提示收起来，别把标题挤成两行。 */
+.dsh-wb-design .cardwall .dcard2 .ch .t { white-space: nowrap; }
+.dsh-wb-design .cardwall .dcard2:not(.span2) .ch .r .tiny,
+.dsh-wb-design .cardwall .dcard2:not(.span2) .ch .r.tiny { display: none; }
+/* 总述是这页的主内容，单独占满一行，保持原来舒展的阅读宽度。 */
+.dsh-wb-design .cardwall .dcard2.span2 { grid-column: 1 / -1; }
+.dsh-wb-design .dcard2 { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .dsh-wb-design .dcard2.span2 { grid-column: span 2; }
 .dsh-wb-design .dcard2 .ch { display: flex; align-items: center; gap: 8px; }
 .dsh-wb-design .dcard2 .ch .t { font-size: 13px; font-weight: 600; }
@@ -1275,13 +1282,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .dsh-wb-dock-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;z-index:6;cursor:col-resize;touch-action:none}
 .dsh-wb-design .dsh-wb-dock-resize::after{content:'';position:absolute;left:3px;top:0;bottom:0;width:1px;background:transparent;transition:background .15s}
 .dsh-wb-design .dsh-wb-dock-resize:hover::after,.dsh-wb-design .dsh-wb-dock-resize:active::after{background:var(--primary-line,var(--line-3))}
-.dsh-wb-design .dsh-wb-dock-head{flex:none;height:50px;display:flex;align-items:center;gap:9px;padding:0 11px 0 13px;border-bottom:1px solid var(--line-2)}
-.dsh-wb-design .dsh-wb-dock-head .avatar{width:28px;height:28px;font-size:11px}
-.dsh-wb-design .dsh-wb-dock-id{flex:1;min-width:0}
-.dsh-wb-design .dsh-wb-dock-name{display:flex;align-items:center;gap:6px;font-size:var(--fs-12);font-weight:var(--fw-semi);line-height:1.25}
-.dsh-wb-design .dsh-wb-dock-sub{margin-top:2px;font-size:10px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dsh-wb-design .dsh-wb-dock-close{flex:none;width:24px;height:24px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-3);cursor:pointer;font-size:15px;line-height:1}
-.dsh-wb-design .dsh-wb-dock-close:hover{background:var(--surface-2);color:var(--text)}
 .dsh-wb-design .dsh-wb-dock-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .dsh-wb-design .dsh-wb-dock-body > *{flex:1;min-height:0;min-width:0}
 .dsh-wb-design .dsh-wb-dock-body [data-conversation-content]{height:100%}
@@ -1294,6 +1294,11 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .dsh-wb-stage{flex:1;min-height:0;display:flex;flex-direction:column}
 .dsh-wb-design .dsh-wb-stage-body{flex:1;min-height:0;display:flex;flex-direction:column}
 .dsh-wb-design .dsh-wb-stage-body > .dsh-wb-canvas-pane{flex:1;min-height:0}
+/* 非产品负责人看原型画布：同一个画布，只读——收起编辑工具坞、屏头操作和右上导出/外观。 */
+.dsh-wb-design .dsh-wb-canvas-readonly .ddp-dock,
+.dsh-wb-design .dsh-wb-canvas-readonly .ddp-act,
+.dsh-wb-design .dsh-wb-canvas-readonly .ddp-take,
+.dsh-wb-design .dsh-wb-canvas-readonly .ddp-top .tr{display:none}
 /* 画布工具栏和工作台上导航共用一块底板：铺满整行、同样的底色和分隔线，不再浮成深色胶囊。 */
 .dsh-wb-stage .ddp-top{left:0;right:0;top:0;align-items:center;padding:6px 20px;background:color-mix(in srgb,var(--bg) 86%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);z-index:12}
 .dsh-wb-stage .ddp-top>.ddp-isl{background:transparent;box-shadow:none;padding:0;border-radius:0;gap:2px}
@@ -1421,12 +1426,11 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .kv dd{margin:0;color:var(--text-2);display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 .dsh-wb-design .rf-meta .chip,.dsh-wb-design .head-meta .chip{height:20px}
 .dsh-wb-design .rf-meta .assignee b{color:var(--text-2)}
-.dsh-wb-design .dcard2{padding:14px 16px}
-.dsh-wb-design .dcard2 .ch{min-height:24px;margin-bottom:10px}
-.dsh-wb-design .endsec{margin-top:18px}
-.dsh-wb-design .egrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:12px}
+.dsh-wb-design .dcard2 .ch{min-height:22px;margin-bottom:8px}
+/* 端卡片也直接放进卡片墙：没有「涉及端」之类的分组标题。 */
 .dsh-wb-design .ob{min-height:100%}
-.dsh-wb-design .endcard2{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:9px}
+.dsh-wb-design .endcard2{border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:7px;height:100%;min-width:0}
+.dsh-wb-design .endcard2 .kv2{grid-template-columns:52px 1fr;gap:4px 6px;font-size:11.5px}
 .dsh-wb-design .endcard2 .eh{display:flex;align-items:center;gap:8px}
 .dsh-wb-design .endcard2 .eh .nm{font-size:13px;font-weight:var(--fw-semi)}
 .dsh-wb-design .endcard2 .eh .st{margin-left:auto}
@@ -5898,7 +5902,7 @@ window.__ModuleLoader__.load({
       }, { slots: { views: ChatOnlyView } })
     }
 
-    function SessionDock({ ctx, kit, state, requirement, onNewSession, onClose, width = 400, onResizeStart, onResizeReset }) {
+    function SessionDock({ ctx, kit, state, requirement, onNewSession, width = 400, onResizeStart, onResizeReset }) {
       const record = dockSessionOf(requirement, state?.currentUser)
       const sessionId = record?.sessionId ?? ''
       const [reference, setReference] = useState(null)
@@ -5942,23 +5946,6 @@ window.__ModuleLoader__.load({
           onPointerDown: onResizeStart,
           onDoubleClick: onResizeReset,
         }),
-        h('div', { className: 'dsh-wb-dock-head' },
-          h(Avatar, { name: state?.currentUser?.name ?? '' }),
-          h('div', { className: 'dsh-wb-dock-id' },
-            h('div', { className: 'dsh-wb-dock-name' }, '我的会话'),
-            h('div', { className: 'dsh-wb-dock-sub' },
-              record
-                ? `${sessionTypeLabel(record.type)}会话 · ${requirement.code} · 仅自己可见`
-                : `${requirement.code} · 还没有你的会话`),
-          ),
-          h('button', {
-            className: 'dsh-wb-dock-close',
-            type: 'button',
-            title: '收起会话',
-            'aria-label': '收起会话',
-            onClick: onClose,
-          }, '×'),
-        ),
         h('div', { className: 'dsh-wb-dock-body' },
           canEmbed
             ? h(kit.SessionProvider, { session: reference }, kit.renderSlot('workbench.chat', {}))
@@ -6872,7 +6859,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementPageView({ ctx, state, requirement, onOpenSession, onOpenDesign, onOpenTest, onOpenCanvas, canvasReady, onNewSession }) {
+    function RequirementPageView({ ctx, state, requirement, onOpenPrototype, onOpenSession, onOpenDesign, onOpenTest }) {
       usePreviewTickets([requirement.id])
       // 需求页的缩略图直接在弹层里放大看，不再依赖会话右栏。
       const [shotPreview, setShotPreview] = useState(null)
@@ -6903,6 +6890,8 @@ window.__ModuleLoader__.load({
       const testReportArtifacts = artifacts.filter(artifact => artifact.kind === 'test-report')
       const testSession = (requirement.sessions ?? []).find(session => session.type === 'test' && session.sessionId)
       const grouped = groupedPlatforms(state.platforms ?? [], state.platformGroups ?? [], requirement.platformIds)
+      // 涉及端不再按组展示：所有端拉平成一个网格，卡片大小一致。
+      const endPlatforms = grouped.flatMap(entry => entry.items)
       const includedIds = new Set(requirement.platformIds ?? [])
       const excluded = (state.platforms ?? []).filter(item => item.active !== false && !includedIds.has(item.id))
       const document = requirement.document ?? null
@@ -6949,10 +6938,18 @@ window.__ModuleLoader__.load({
       // 不用拿着产品的目录也能看到同一份原型。本机文件只作为旧数据兜底。
       const latestPrototypeArtifacts = new Map()
       for (const artifact of prototypeArtifacts) latestPrototypeArtifacts.set(shortName(artifact.name), artifact)
+      // 打开原型画布要本机绝对路径：服务端附件只有 prototype/xxx.html，按需求文件夹拼回去。
+      const localPathOf = relative => {
+        if (typeof relative !== 'string' || relative === '') return ''
+        if (relative.startsWith('/')) return relative
+        const folder = String(requirement.folderPath ?? '').replace(/\/+$/, '')
+        return folder === '' ? '' : `${folder}/${relative.replace(/^\/+/, '')}`
+      }
       const prototypeItems = latestPrototypeArtifacts.size > 0
         ? [...latestPrototypeArtifacts.values()].map(artifact => ({
             key: artifact.id,
             name: shortName(artifact.name),
+            path: localPathOf(artifact.name),
             src: readyPreviewUrl({ artifactId: artifact.id, name: artifact.name }),
             kind: 'html',
             updatedAt: artifact.createdAt,
@@ -6961,6 +6958,7 @@ window.__ModuleLoader__.load({
         : prototypeFiles.map(file => ({
             key: file.relativePath ?? file.name,
             name: shortName(file.name ?? file.relativePath ?? '原型'),
+            path: file.path ?? localPathOf(file.relativePath ?? ''),
             src: file.relativePath ? readyPreviewUrl({ path: file.relativePath }) : '',
             kind: 'html',
             updatedAt: file.updatedAt,
@@ -6978,13 +6976,17 @@ window.__ModuleLoader__.load({
         try { return new URL(src, hostOrigin).toString() } catch (_) { return src }
       }
       // 缩略图点开后在弹层里看整页：不再依赖会话右栏。
-      const shotTile = ({ key, name, src, kind, note = '' }) => {
+      const shotTile = ({ key, name, src, kind, note = '', onActivate = undefined }) => {
         const open = (event) => {
           if (event !== undefined) event.preventDefault()
           if (src === '') return
           setShotPreview({ key, name, src, kind, note })
         }
-        const openTitle = `放大查看 ${name}`
+        const activate = typeof onActivate === 'function'
+          ? (event) => { if (event !== undefined) event.preventDefault(); onActivate() }
+          : open
+        const inCanvas = typeof onActivate === 'function'
+        const openTitle = inCanvas ? `打开画布 · ${name}` : `放大查看 ${name}`
         return h('div', { className: 'shot', key },
         h('div', { className: 'img is-live' },
           src === ''
@@ -6995,13 +6997,13 @@ window.__ModuleLoader__.load({
           src !== ''
             ? h('a', {
                 className: 'shot-open',
-                href: browserHref(src),
-                target: '_blank',
+                href: inCanvas ? '#' : browserHref(src),
+                target: inCanvas ? undefined : '_blank',
                 rel: 'noopener noreferrer',
                 title: openTitle,
                 'aria-label': openTitle,
-                onClick: open,
-                onAuxClick: open,
+                onClick: activate,
+                onAuxClick: activate,
               })
             : null,
         ),
@@ -7010,11 +7012,11 @@ window.__ModuleLoader__.load({
           src !== ''
             ? h('a', {
                 className: 'shot-link',
-                href: browserHref(src),
-                target: '_blank',
+                href: inCanvas ? '#' : browserHref(src),
+                target: inCanvas ? undefined : '_blank',
                 rel: 'noopener noreferrer',
-                onClick: open,
-                onAuxClick: open,
+                onClick: activate,
+                onAuxClick: activate,
               }, '打开')
             : null,
         ),
@@ -7097,24 +7099,6 @@ window.__ModuleLoader__.load({
               h('span', { className: 'it' }, '更新 ', h('b', null, relativeTime(requirement.updatedAt))),
             ),
           ),
-          h('div', { className: 'page-actions' },
-            canvasReady ? h('button', {
-              className: 'btn btn-sm btn-ghost',
-              type: 'button',
-              disabled: !requirement.folderPath,
-              title: requirement.folderPath ? '为这条需求新建需求、设计、开发或测试会话' : '需求文件夹还没有创建',
-              onClick: () => onNewSession(requirement),
-            }, '新建会话') : null,
-            canvasReady
-              ? h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: onOpenCanvas }, h(DesignIcon, { name: 'workbench' }), '进入画布')
-              : h('button', {
-                  className: 'btn btn-sm btn-primary',
-                  type: 'button',
-                  disabled: !requirement.folderPath,
-                  title: requirement.folderPath ? '先建一个属于你的会话，再进画布' : '需求文件夹还没有创建',
-                  onClick: () => onNewSession(requirement),
-                }, '新建会话并进入画布'),
-          ),
         ),
         h('div', { className: 'banner banner--info', style: { marginBottom: '16px' } },
           h(DesignIcon, { name: 'lock' }),
@@ -7174,6 +7158,10 @@ window.__ModuleLoader__.load({
                     src: item.src,
                     kind: item.kind,
                     note: item.note,
+                    // 原型「打开」直接进画布：产品可编辑，其他角色同一张画布只读。
+                    onActivate: item.path !== '' && typeof onOpenPrototype === 'function'
+                      ? () => onOpenPrototype({ path: item.path, name: item.name })
+                      : undefined,
                   })),
                 ),
             h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '原型文件'),
@@ -7223,18 +7211,11 @@ window.__ModuleLoader__.load({
               ),
             ),
           ),
-        ),
-        grouped.length === 0
-          ? h('div', { className: 'narep', style: { marginBottom: '20px' } }, h(DesignIcon, { name: 'minus' }), '未设置涉及平台。')
-          : grouped.map(entry => h('div', { className: 'endsec', key: entry.group.id },
-              h('div', { className: 'endsec-h' },
-                h('span', { className: 't' }, entry.group.name),
-                h('span', { className: 'n' }, String(entry.items.length)),
-                h('div', { className: 'r', style: { marginLeft: 'auto' } }, h('span', { className: 'tiny muted' }, '负责人 / 时间 / 关键产物 / 依赖')),
-              ),
-              h('div', { className: 'egrid' }, entry.items.map(platformCard)),
-            )),
-        h('div', { className: 'dcard2', key: 'test-card' },
+          endPlatforms.map(platformCard),
+          endPlatforms.length === 0
+            ? h('div', { className: 'narep', style: { margin: 0 } }, h(DesignIcon, { name: 'minus' }), '未设置涉及平台。')
+            : null,
+          h('div', { className: 'dcard2', key: 'test-card' },
           h('div', { className: 'ch' },
             h(DesignIcon, { name: 'shield' }),
             h('span', { className: 't' }, '测试'),
@@ -7268,10 +7249,6 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
-        excluded.length > 0
-          ? h('div', { className: 'narep', style: { marginBottom: '20px' } },
-              h(DesignIcon, { name: 'minus' }), `不涉及：${excluded.map(item => item.name).join('、')}（产品已确认，本需求不改）`)
-          : null,
         h('div', { className: 'dcard2' },
           h('div', { className: 'ch' },
             h(DesignIcon, { name: 'history' }),
@@ -7293,6 +7270,11 @@ window.__ModuleLoader__.load({
                 }),
           ),
         ),
+        ),
+        excluded.length > 0
+          ? h('div', { className: 'narep', style: { marginTop: '12px' } },
+              h(DesignIcon, { name: 'minus' }), `不涉及：${excluded.map(item => item.name).join('、')}（产品已确认，本需求不改）`)
+          : null,
         shotPreview !== null
           ? h(ShotPreviewDialog, { shot: shotPreview, onClose: () => setShotPreview(null) })
           : null,
@@ -7530,9 +7512,9 @@ window.__ModuleLoader__.load({
       const [view, setView] = useState('iterations')
       // 记住迭代区最后停在哪一层（列表 / 迭代详情 / 需求），从别的导航切回来时恢复。
       const [workspaceView, setWorkspaceView] = useState('iterations')
-      const [dockOpen, setDockOpen] = useState(true)
-      // 需求详情里「会话」和「画布」是两层：画布关闭时看需求总览 + 会话坞。
+      // 右侧会话坞常驻；中间画布只有从原型「打开」时才覆盖上来，并记住打开的是哪个文件。
       const [canvasOpen, setCanvasOpen] = useState(false)
+      const [canvasTarget, setCanvasTarget] = useState(null)
       const [shellNode, setShellNode] = useState(null)
       const [flushLeft, setFlushLeft] = useState(false)
       const [selectedRequirementId, setSelectedRequirementId] = useState(null)
@@ -7685,9 +7667,9 @@ window.__ModuleLoader__.load({
           }
           setSelectedRequirementId(requirementId)
           setWorkspaceView('requirement')
-          // 点需求卡先进「需求总述」，会话和画布都要再点一层才进。
-          setDockOpen(false)
+          // 点需求卡先进「需求总述」；画布只在点原型「打开」时覆盖上来。
           setCanvasOpen(false)
+          setCanvasTarget(null)
           setView('requirement')
         } catch (reason) {
           showToast(reason instanceof Error ? reason.message : String(reason), true)
@@ -7703,6 +7685,7 @@ window.__ModuleLoader__.load({
           }
           setWorkspaceView('iteration')
           setCanvasOpen(false)
+          setCanvasTarget(null)
           setView('iteration')
         } catch (reason) {
           showToast(reason instanceof Error ? reason.message : String(reason), true)
@@ -7721,7 +7704,7 @@ window.__ModuleLoader__.load({
           setWorkspaceView('iterations')
           setSelectedRequirementId(null)
           setCanvasOpen(false)
-          setDockOpen(true)
+          setCanvasTarget(null)
           await workbench.reload()
           showToast(`已切换到项目「${target?.name ?? projectId}」`, false)
         } catch (reason) {
@@ -7736,7 +7719,7 @@ window.__ModuleLoader__.load({
           setWorkspaceView('iterations')
           setSelectedRequirementId(null)
           setCanvasOpen(false)
-          setDockOpen(true)
+          setCanvasTarget(null)
         }
         await workbench.reload()
       }, [workbench])
@@ -7745,8 +7728,8 @@ window.__ModuleLoader__.load({
         setDialogOpen(false)
         setSelectedRequirementId(requirement.id)
         setWorkspaceView('requirement')
-        setDockOpen(false)
         setCanvasOpen(false)
+        setCanvasTarget(null)
         await workbench.reload()
         setView('requirement')
       }, [workbench])
@@ -7771,44 +7754,40 @@ window.__ModuleLoader__.load({
         setSessionFor(null)
         setSelectedRequirementId(requirement.id)
         setWorkspaceView('requirement')
-        // 建完会话直接进画布：需求页的主按钮就是这个意思，不用再点一次。
-        setDockOpen(true)
-        setCanvasOpen(true)
+        // 建完会话留在需求总述，右侧会话直接可用；画布仍然从原型「打开」进。
+        setCanvasOpen(false)
+        setCanvasTarget(null)
         await workbench.reload()
       }
 
-      // 面包屑的四个层级：迭代列表 → 迭代详情 → 需求总览 → 会话 / 画布。
+      const openPrototypeCanvas = useCallback((target) => {
+        if (target === null || typeof target.path !== 'string' || target.path === '') return
+        setCanvasOpen(true)
+        setCanvasTarget(target)
+        setView('requirement')
+        setWorkspaceView('requirement')
+      }, [])
+
+      // 面包屑层级：迭代列表 → 迭代详情 → 需求总述 → 画布。
       const goIterationList = useCallback(() => {
         setView('iterations')
         setWorkspaceView('iterations')
         setCanvasOpen(false)
+        setCanvasTarget(null)
       }, [])
 
       const goIterationDetail = useCallback(() => {
         setView('iteration')
         setWorkspaceView('iteration')
         setCanvasOpen(false)
+        setCanvasTarget(null)
       }, [])
 
-      const goRequirementOverview = useCallback(() => {
+      const goRequirement = useCallback(() => {
         setView('requirement')
         setWorkspaceView('requirement')
         setCanvasOpen(false)
-        setDockOpen(false)
-      }, [])
-
-      const goRequirementSession = useCallback(() => {
-        setView('requirement')
-        setWorkspaceView('requirement')
-        setCanvasOpen(false)
-        setDockOpen(true)
-      }, [])
-
-      const goRequirementCanvas = useCallback(() => {
-        setView('requirement')
-        setWorkspaceView('requirement')
-        setDockOpen(true)
-        setCanvasOpen(true)
+        setCanvasTarget(null)
       }, [])
 
       if (workbench.loading && state === null) {
@@ -7882,15 +7861,17 @@ window.__ModuleLoader__.load({
         if (key === 'notifications') { setView('notifications'); return }
       }
       const navActive = view === 'iteration' || view === 'requirement' ? 'iterations' : view
-      // 只要会话坞里有「我自己的会话」且进了画布层，中栏就切成工作画布：产品看原型，设计师看设计稿。
-      const stageActive = view === 'requirement' && selectedRequirement !== null && canvasOpen && dockOpen && dockSessionId !== ''
+      // 右侧会话坞常驻；只有从原型「打开」时，中间才切成画布。没有自己的会话时借用需求主会话
+      // 来承载画布，非产品负责人一律只读。
+      const canvasSid = dockSessionId !== '' ? dockSessionId : (selectedRequirement?.sessionId ?? '')
+      const canvasEditable = selectedRequirement !== null && state.currentUser.id === selectedRequirement.ownerId
+      const stageActive = view === 'requirement' && selectedRequirement !== null && canvasOpen && canvasTarget !== null
       const iterationCrumbs = [
         { key: 'list', label: '迭代列表', onClick: goIterationList },
         activeIteration === null
           ? { key: 'iter', label: '迭代未选择' }
           : { key: 'iter', label: activeIteration.code, mono: true },
       ]
-      const dockLayer = view === 'requirement' && selectedRequirement !== null && dockOpen
       const requirementCrumbs = [
         { key: 'list', label: '迭代列表', onClick: goIterationList },
         activeIteration === null
@@ -7900,14 +7881,11 @@ window.__ModuleLoader__.load({
           key: 'req',
           label: selectedRequirement?.code ?? '需求',
           mono: true,
-          onClick: dockLayer ? goRequirementOverview : undefined,
+          onClick: stageActive ? goRequirement : undefined,
         },
       ]
-      if (dockLayer) {
-        requirementCrumbs.push({ key: 'session', label: '会话', onClick: stageActive ? goRequirementSession : undefined })
-      }
       if (stageActive) {
-        requirementCrumbs.push({ key: 'canvas', label: '画布' })
+        requirementCrumbs.push({ key: 'canvas', label: '原型' })
       }
       // 顶层页只有当前层，保证这条导航栏在所有页面都占同一个位置。
       const sectionCrumbs = {
@@ -7922,14 +7900,6 @@ window.__ModuleLoader__.load({
         : view === 'requirement'
           ? requirementCrumbs
           : [sectionCrumbs[view] ?? sectionCrumbs.iterations]
-      // 会话坞里是哪类会话，中栏就画哪类产物；需求/评审会话回到产品原型。
-      const stageKind = dockRecord?.type === 'design'
-        ? 'design'
-        : dockRecord?.type === 'dev'
-          ? 'dev'
-          : dockRecord?.type === 'test'
-            ? 'test'
-            : 'prototype'
       const requirementMain = selectedRequirement === null
         ? h('div', { className: 'page' },
             h('div', { className: 'empty-page' }, h(DesignIcon, { name: 'inbox', size: 28 }), h('b', null, '需求已不在当前迭代'), h('span', null, '回到迭代列表重新选择。')))
@@ -7937,12 +7907,10 @@ window.__ModuleLoader__.load({
             ctx,
             state,
             requirement: selectedRequirement,
+            onOpenPrototype: openPrototypeCanvas,
             onOpenSession: (sessionId) => openSession(sessionId),
             onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
             onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
-            onOpenCanvas: () => { setDockOpen(true); setCanvasOpen(true) },
-            canvasReady: dockSessionId !== '',
-            onNewSession: (requirement) => setSessionFor({ requirement, stay: true }),
           })
 
       return h('div', { className: `dsh-wb-design${flushLeft ? ' is-flush-left' : ''}`, ref: setShellNode },
@@ -8014,21 +7982,6 @@ window.__ModuleLoader__.load({
                 : null)),
             ),
             h('div', { className: 'spacer' }),
-            view === 'requirement' && selectedRequirement !== null
-              ? h('button', {
-                  className: `dsh-wb-dock-toggle${dockOpen ? ' is-on' : ''}`,
-                  type: 'button',
-                  title: dockOpen ? '收起会话坞' : '打开会话坞',
-                  'aria-pressed': dockOpen,
-                  onClick: () => {
-                    // 关会话坞等于退回需求总览层；再打开回到会话层，不会直接跳回画布。
-                    if (dockOpen) { setDockOpen(false); setCanvasOpen(false) } else { setDockOpen(true) }
-                  },
-                },
-                  h(DesignIcon, { name: 'command' }),
-                  '会话',
-                )
-              : null,
             view === 'iterations'
               ? h('div', { className: 'search', style: { width: '220px' } },
                   h(DesignIcon, { name: 'search' }),
@@ -8064,13 +8017,19 @@ window.__ModuleLoader__.load({
             stageActive
               ? h('div', { className: 'dsh-wb-stage' },
                   h('div', { className: 'dsh-wb-stage-body' },
-                    stageKind === 'design'
-                      ? h(DesignTab, { sid: dockSessionId, ctx, onOpenOverview: () => setCanvasOpen(false) })
-                      : stageKind === 'dev'
-                        ? h(CodeTab, { sid: dockSessionId, ctx })
-                        : stageKind === 'test'
-                          ? h(TestTab, { sid: dockSessionId, ctx })
-                          : h(RequirementTab, { sid: dockSessionId, ctx, briefHidden: true }),
+                    canvasSid === ''
+                      ? h('div', { className: 'dsh-wb-design-msg' },
+                          h('b', null, '还没有可用的会话'),
+                          '右侧先创建你的会话，再打开原型画布。')
+                      : h(DesignStudioCanvas, {
+                          sid: canvasSid,
+                          ctx,
+                          targetPath: canvasTarget.path,
+                          kind: 'prototype',
+                          currentWorkId: selectedRequirement.id,
+                          // 产品负责人可编辑；其他角色看同一张画布，但只读。
+                          readOnly: !canvasEditable,
+                        }),
                   ),
                 )
               : view === 'iterations'
@@ -8138,14 +8097,14 @@ window.__ModuleLoader__.load({
                             onToast: showToast,
                           }),
             ),
-            view === 'requirement' && selectedRequirement !== null && dockOpen
+            // 右侧会话常驻：无论角色、无论有没有自己的会话，都在这条需求旁边。
+            view === 'requirement' && selectedRequirement !== null
               ? h(SessionDock, {
                   ctx,
                   kit,
                   state,
                   requirement: selectedRequirement,
                   onNewSession: () => setSessionFor({ requirement: selectedRequirement, stay: true }),
-                  onClose: () => setDockOpen(false),
                   width: dockWidth,
                   onResizeStart: beginDockResize,
                   onResizeReset: resetDockWidth,
@@ -8837,7 +8796,7 @@ window.__ModuleLoader__.load({
       return groups
     }
 
-    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined, onBack = null }) {
+    function DesignStudioCanvas({ sid, ctx, targetPath, onRefresh, kind = 'prototype', currentWorkId = '', inputActions = undefined, onBack = null, readOnly = false }) {
       const studio = useDesignStudio()
       const t = useMemo(() => (studio.runtime ? studio.runtime.makeT(ctx) : key => key), [studio.runtime, ctx])
       const { error, opening } = useCanvasTarget(sid, targetPath)
@@ -8879,7 +8838,7 @@ window.__ModuleLoader__.load({
       if (!studio.runtime) {
         return h('div', { className: 'dsh-wb-design-msg' }, h('span', { className: 'dsh-wb-spinner' }), '正在加载画布…')
       }
-      return h('div', { className: 'dsh-wb-design-canvas dsh-wb-canvas-studio' },
+      return h('div', { className: `dsh-wb-design-canvas dsh-wb-canvas-studio${readOnly ? ' dsh-wb-canvas-readonly' : ''}` },
         opening ? h('div', { className: 'dsh-wb-canvas-loading' }, '正在打开画布…') : null,
         error !== '' ? h('div', { className: 'dsh-wb-canvas-error' },
           h('b', null, '画布没有打开'),

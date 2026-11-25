@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * 层级导航回归：迭代列表 › 2026-S13 › S13-001 › 会话 › 画布。
+ * 层级导航回归：迭代列表 › 2026-S13 › S13-001 › 原型。
  *
  * 覆盖：
- *   1. 迭代详情 / 需求总览 / 会话 / 画布 四层的面包屑与祖先回跳；
- *   2. 「我的工作台」切回「迭代列表」时恢复上次位置（含画布层）；
- *   3. DSH 侧栏收起后贴边时，顶栏让开 macOS 红绿灯（is-flush-left）。
+ *   1. 迭代详情 / 需求总述 / 原型画布 三层的面包屑与祖先回跳；
+ *   2. 需求页右侧会话坞常驻（没有头部、不能关），任何角色都在；
+ *   3. 原型「打开」直接进画布：产品可编辑，其他角色同一画布只读；
+ *   4. 「我的工作台」切回「迭代列表」时恢复上次位置（含画布层）；
+ *   5. DSH 侧栏收起后贴边时，顶栏让开 macOS 红绿灯（is-flush-left）。
  *
  * 前置：DSH 桌面端已开 9222，插件已安装；服务端在 127.0.0.1:3210。
  */
@@ -70,6 +72,23 @@ async function openWorkbench() {
   await page.locator('.plugnac-project-btn').waitFor({ state: 'visible', timeout: 30000 })
 }
 
+async function switchIdentity(name) {
+  await openWorkbench()
+  const state = await readState().catch(() => null)
+  if (state?.currentUser?.name === name) return
+  await page.getByRole('link', { name: '设置' }).click()
+  await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await waitFor(async () => (await page.locator('.user-row').count()) > 0, '退出后出现登录用户')
+  await page.locator('.user-row').filter({ hasText: name }).first().click()
+  await page.getByRole('button', { name: `以「${name}」身份进入` }).click()
+  await waitFor(async () => (await page.locator('.user-row').count()) === 0, `${name} 登录提交`)
+  await page.waitForTimeout(1500)
+  await openWorkbench()
+  const after = await readState()
+  if (after.currentUser?.name !== name) throw new Error(`身份切换失败，当前是 ${after.currentUser?.name}`)
+  console.log(`身份：${name}`)
+}
+
 const crumbState = () => page.evaluate(() => {
   const nav = document.querySelector('.dsh-wb-contextbar .dsh-wb-crumbs')
   if (!nav) return null
@@ -78,6 +97,7 @@ const crumbState = () => page.evaluate(() => {
     cur: nav.querySelector('.cur')?.innerText.trim() ?? '',
     stage: Boolean(document.querySelector('.dsh-wb-stage')),
     dock: Boolean(document.querySelector('.dsh-wb-dock')),
+    dockHead: Boolean(document.querySelector('.dsh-wb-dock-head')),
   }
 })
 
@@ -116,7 +136,33 @@ async function openRequirementCard(code) {
   const card = page.locator('.req-card').filter({ hasText: code }).first()
   await card.waitFor({ state: 'visible', timeout: 15000 })
   await card.locator('.rc-title').click()
+  await page.locator('.rf-head').waitFor({ state: 'visible', timeout: 15000 })
 }
+
+// 原型卡片的「打开」直接进画布（不是弹大图，也不是跳到别的页面）。
+async function openPrototypeCanvas() {
+  const link = page.locator('.shot3 .shot-link').first()
+  await link.waitFor({ state: 'visible', timeout: 20000 })
+  await link.click()
+  await page.locator('.dsh-wb-stage').waitFor({ state: 'visible', timeout: 25000 })
+}
+
+const canvasState = () => page.evaluate(() => {
+  const stage = document.querySelector('.dsh-wb-stage')
+  if (!stage) return null
+  const studio = stage.querySelector('.dsh-wb-canvas-studio')
+  const display = selector => {
+    const el = studio?.querySelector(selector)
+    return el ? getComputedStyle(el).display : 'absent'
+  }
+  return {
+    readonly: studio?.classList.contains('dsh-wb-canvas-readonly') ?? null,
+    dockDisplay: display('.ddp-dock'),
+    topRightDisplay: display('.ddp-top .tr'),
+    actionDisplay: display('.ddp-act'),
+    topText: (stage.querySelector('.ddp-top')?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 90),
+  }
+})
 
 const iterationCode = '2026-S13'
 
@@ -124,6 +170,7 @@ const iterationCode = '2026-S13'
 await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {})
 await page.waitForTimeout(1200)
 await openWorkbench()
+await switchIdentity('李四')
 await backToList()
 await expectCrumb({ steps: [], cur: '迭代列表' }, '迭代列表层级')
 
@@ -142,11 +189,19 @@ const state = await readState()
 const projectIterationIds = new Set((state.iterations ?? [])
   .filter(iteration => iteration.code === iterationCode)
   .map(iteration => iteration.id))
+const hasPrototype = requirement => (requirement.prototypeFiles ?? []).length > 0
 const target = (state.requirements ?? []).find(requirement =>
   projectIterationIds.has(requirement.iterationId)
-  && (requirement.sessions ?? []).some(session => session.own === true && session.sessionId))
-if (!target) throw new Error(`迭代 ${iterationCode} 里没有当前用户的会话，无法验证画布层`)
-console.log(`身份：${state.currentUser.name}；画布用例需求：${target.code} ${target.title}`)
+  && hasPrototype(requirement)
+  && requirement.sessionId
+  && requirement.ownerId === state.currentUser.id)
+  ?? (state.requirements ?? []).find(requirement =>
+    projectIterationIds.has(requirement.iterationId)
+    && hasPrototype(requirement)
+    && requirement.sessionId)
+if (!target) throw new Error(`迭代 ${iterationCode} 里没有带原型文件的需求，无法验证画布层`)
+const isOwner = target.ownerId === state.currentUser.id
+console.log(`身份：${state.currentUser.name}；画布用例需求：${target.code} ${target.title}（${isOwner ? '负责人' : '非负责人'}）`)
 
 // 1. 迭代详情：迭代列表 › 2026-S13
 await openIterationDetail(iterationCode)
@@ -162,58 +217,53 @@ await expectCrumb({ steps: [], cur: '迭代列表' }, '根节点回列表')
 await assertBarTop('迭代列表')
 console.log('面包屑根节点 → 迭代列表 OK')
 
-// 3. 点需求卡先停在需求总述，不直接进会话/画布
+// 3. 点需求卡停在需求总述：右侧会话坞常驻，但不进画布
 await openIterationDetail(iterationCode)
 await openRequirementCard(target.code)
-await page.locator('.rf-head').waitFor({ state: 'visible', timeout: 15000 })
 await page.waitForTimeout(800)
 if (await page.locator('.dsh-wb-stage').count() > 0) throw new Error('点需求卡不应直接进画布')
 const overviewCrumbs = await expectCrumb({ steps: ['迭代列表', iterationCode], cur: target.code }, '需求总述层级')
-if (overviewCrumbs.dock) throw new Error('点需求卡应停在需求总述，不自动打开会话坞')
+if (!overviewCrumbs.dock) throw new Error('需求总述右侧会话坞应该常驻')
+if (overviewCrumbs.dockHead) throw new Error('会话坞不应该再有头部')
 await assertBarTop('需求总述')
 await page.screenshot({ path: SHOT('crumb-overview') })
 
-// 4. 需求总述 → 画布
-await page.getByRole('button', { name: '进入画布' }).click()
-await page.locator('.dsh-wb-stage').waitFor({ state: 'visible', timeout: 25000 })
+// 4. 原型「打开」→ 同一张画布；产品可编辑
+await openPrototypeCanvas()
 const canvasCrumbs = await expectCrumb({
-  steps: ['迭代列表', iterationCode, target.code, '会话'],
-  cur: '画布',
-}, '画布层级')
-if (!canvasCrumbs.dock) throw new Error('画布层里会话坞应该还开着')
-await assertBarTop('画布')
+  steps: ['迭代列表', iterationCode, target.code],
+  cur: '原型',
+}, '原型画布层级')
+if (!canvasCrumbs.dock) throw new Error('画布层里会话坞应该还在')
+await assertBarTop('原型画布')
 // 画布工具栏自己的「返回」已经去掉，回上层统一走顶栏下的层级导航。
 await page.locator('.dsh-wb-stage .ddp-top').first().waitFor({ state: 'attached', timeout: 20000 }).catch(() => {})
 const canvasToolbar = await page.evaluate(() =>
   (document.querySelector('.dsh-wb-stage .ddp-top')?.innerText ?? '').replace(/\s+/g, ' ').trim())
 if (/返回/.test(canvasToolbar)) throw new Error(`画布工具栏不该再有返回按钮：${canvasToolbar}`)
-await page.screenshot({ path: SHOT('crumb-canvas') })
+const editableCanvas = await canvasState()
+if (isOwner) {
+  if (editableCanvas.readonly !== false) throw new Error('产品（负责人）打开原型应为可编辑画布')
+  if (editableCanvas.dockDisplay === 'none') throw new Error('可编辑画布不应收起底部工具坞')
+} else if (editableCanvas.readonly !== true) {
+  throw new Error('非负责人打开原型应为只读画布')
+}
+await page.screenshot({ path: SHOT('canvas') })
 
-// 5. 画布 → 会话：画布收起，需求总览 + 会话坞
-await clickCrumb('会话')
-await waitFor(async () => (await crumbState())?.stage === false, '退出画布')
-const sessionCrumbs = await expectCrumb({
-  steps: ['迭代列表', iterationCode, target.code],
-  cur: '会话',
-}, '会话层级')
-if (!sessionCrumbs.dock) throw new Error('会话层里会话坞应该开着')
-await page.locator('.rf-head').waitFor({ state: 'visible', timeout: 15000 })
-await page.screenshot({ path: SHOT('crumb-session') })
-
-// 6. 会话 → 需求总述：会话坞收起
+// 5. 画布 → 需求总述：画布收起，会话坞还在
 await clickCrumb(target.code)
-await waitFor(async () => (await crumbState())?.dock === false, '收起会话坞')
-const backToOverview = await expectCrumb({ steps: ['迭代列表', iterationCode], cur: target.code }, '会话回需求总述')
-if (backToOverview.stage) throw new Error('需求总述不应有画布')
+await waitFor(async () => (await crumbState())?.stage === false, '退出画布')
+const backToOverview = await expectCrumb({ steps: ['迭代列表', iterationCode], cur: target.code }, '画布回需求总述')
+if (!backToOverview.dock) throw new Error('回到需求总述后会话坞应该还在')
+await page.locator('.rf-head').waitFor({ state: 'visible', timeout: 15000 })
 
-// 7. 需求总述 → 迭代详情
+// 6. 需求总述 → 迭代详情
 await clickCrumb(iterationCode)
 await page.locator('.head-card').waitFor({ state: 'visible', timeout: 15000 })
 await expectCrumb({ steps: ['迭代列表'], cur: iterationCode }, '需求总述回迭代')
 
-// 8. 位置记忆：需求总述 → 我的工作台 → 迭代列表，回到需求总述
+// 7. 位置记忆：需求总述 → 我的工作台 → 迭代列表，回到需求总述
 await openRequirementCard(target.code)
-await page.locator('.rf-head').waitFor({ state: 'visible', timeout: 15000 })
 await page.getByRole('link', { name: '我的工作台' }).click()
 await page.waitForTimeout(800)
 await expectCrumb({ steps: [], cur: '我的工作台' }, '我的工作台层级')
@@ -221,17 +271,16 @@ await page.getByRole('link', { name: '迭代列表', exact: true }).click()
 await page.locator('.rf-head').waitFor({ state: 'visible', timeout: 10000 })
 await expectCrumb({ steps: ['迭代列表', iterationCode], cur: target.code }, '位置记忆（需求总述）')
 
-// 9. 位置记忆：画布层 → 我的工作台 → 迭代列表，直接回画布
-await page.getByRole('button', { name: '进入画布' }).click()
-await page.locator('.dsh-wb-stage').waitFor({ state: 'visible', timeout: 25000 })
+// 8. 位置记忆：画布层 → 我的工作台 → 迭代列表，直接回画布
+await openPrototypeCanvas()
 await page.getByRole('link', { name: '我的工作台' }).click()
 await page.waitForTimeout(800)
 await page.getByRole('link', { name: '迭代列表', exact: true }).click()
 await page.locator('.dsh-wb-stage').waitFor({ state: 'visible', timeout: 20000 })
-await expectCrumb({ steps: ['迭代列表', iterationCode, target.code, '会话'], cur: '画布' }, '位置记忆（画布）')
+await expectCrumb({ steps: ['迭代列表', iterationCode, target.code], cur: '原型' }, '位置记忆（画布）')
 console.log('我的工作台 → 迭代列表 恢复画布位置 OK')
 
-// 10. 回列表，测红绿灯与宿主按钮让位
+// 9. 回列表，测红绿灯与宿主按钮让位
 await clickCrumb('迭代列表')
 await page.locator('.table-wrap table tbody tr').first().waitFor({ state: 'visible', timeout: 15000 })
 
@@ -293,7 +342,30 @@ await waitFor(async () => {
 }, '点宿主展开按钮后恢复顶栏边距')
 console.log('点宿主「打开侧边栏」恢复侧栏 OK')
 
+// 10. 换成非负责人（设计）：原型「打开」还是同一张画布，但只读。
+await switchIdentity('王五')
+await backToList()
+await openIterationDetail(iterationCode)
+await openRequirementCard(target.code)
+const outsiderOverview = await crumbState()
+if (!outsiderOverview.dock) throw new Error('非负责人进需求总述，会话坞也应该常驻')
+await openPrototypeCanvas()
+const readonlyCrumbs = await expectCrumb({ steps: ['迭代列表', iterationCode, target.code], cur: '原型' }, '非负责人画布层级')
+if (!readonlyCrumbs.dock) throw new Error('非负责人画布层会话坞应该还在')
+const readonlyCanvas = await canvasState()
+if (readonlyCanvas.readonly !== true) throw new Error('非负责人打开原型应为只读画布')
+for (const [key, value] of Object.entries({
+  底部工具坞: readonlyCanvas.dockDisplay,
+  右上外观导出: readonlyCanvas.topRightDisplay,
+  屏头操作: readonlyCanvas.actionDisplay,
+})) {
+  if (value !== 'none' && value !== 'absent') throw new Error(`只读画布不应显示${key}（display=${value}）`)
+}
+console.log('只读画布工具栏：', JSON.stringify(readonlyCanvas))
+await page.screenshot({ path: SHOT('canvas-readonly') })
+await switchIdentity('李四')
+
 if (pageErrors.length > 0) throw new Error(`页面异常：${pageErrors.join(' | ')}`)
 if (consoleErrors.length > 0) console.log('console error（可能来自宿主）:', consoleErrors.slice(0, 5))
-console.log('OK 面包屑、位置记忆与红绿灯让位验证通过')
+console.log('OK 面包屑、位置记忆、原型画布与红绿灯让位验证通过')
 await browser.close()
