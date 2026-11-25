@@ -10564,21 +10564,15 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
       const t = makeT(ctx)
       try { ctx.effect(() => ctx.locale.register(NS, { zh: ZH, en: EN }), 'dsh-workbench canvas: copy') } catch (e) { console.warn('[dsh-workbench] canvas locale', e) }
 
-      /** 打开右侧栏的预览标签；force=false 时只在这个会话正显示在屏幕上时才弹 */
+      /** 打开右侧栏的预览标签；force=false 时只在这个会话正显示在屏幕上时才弹。
+       *  工作台内嵌时画布本身就是目的地，不再有右侧栏。 */
       const open = async (sid, force) => {
+        if (EMBED !== null) return
         try {
           const m = ctx.sidebarRight.mounted
           const onScreen = m && typeof m.getSnapshot === 'function' ? m.getSnapshot() : sid
           if (!force && onScreen !== sid) return
-          let kind = EMBED !== null ? EMBED.kind : KIND
-          // 工作台内嵌时，原型会话和设计会话共用同一个右栏，但属于两个 tab。
-          // 由宿主根据会话记录决定开哪个；宿主拒绝（返回 false）就不弹。
-          if (EMBED !== null && typeof EMBED.openFor === 'function') {
-            const chosen = await EMBED.openFor(sid, Boolean(force))
-            if (chosen === false) return
-            if (typeof chosen === 'string' && chosen !== '') kind = chosen
-          }
-          ctx.sidebarRight.openTab(kind)
+          ctx.sidebarRight.openTab(KIND)
         } catch (e) {
           console.warn('[dsh-workbench] canvas 打不开右侧栏', e)
         }
@@ -10657,14 +10651,17 @@ ${Object.entries(CHIP_ICON).map(([k, d]) => `[data-composer-chip="${chipSrc(k)}"
         priority: EMBED === null ? 100 : 110,
       }, ({ node }) => { const c = chipOf(node.data.text, t); return h('span', { className: 'ddp-pickpill', 'data-pick': node.data.text, 'data-i': c ? c.i : 'pick' }, h('span', null, c ? c.label : t('chipOne'))) })), 'dsh-workbench canvas: chips in messages')
 
-      ctx.effect(() => ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
-        name: 'conversation.session.header.utilities',
-        id: 'dsh-workbench-canvas',
-        priority: EMBED === null ? 0 : 1,
-        order: -10,
-        locale: NS,
-        inject: (sessionId) => ({ sid: sessionId, t, open }),
-      }, HeaderButton)), 'dsh-workbench canvas: header button')
+      // 内嵌到工作台时画布就在主面板里，不再往会话标题栏塞入口按钮。
+      if (EMBED === null) {
+        ctx.effect(() => ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+          name: 'conversation.session.header.utilities',
+          id: 'dsh-workbench-canvas',
+          priority: 0,
+          order: -10,
+          locale: NS,
+          inject: (sessionId) => ({ sid: sessionId, t, open }),
+        }, HeaderButton)), 'dsh-workbench canvas: header button')
+      }
     }
 
     exports.apply = apply

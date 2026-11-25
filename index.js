@@ -1401,8 +1401,8 @@ function makeRoute(local, hostCtx = null) {
         if (!canBump) return json(res, 501, { error: '当前 DSH 版本不支持写入开场白' })
         const kind = body.kind === 'design' ? 'design' : 'requirement'
         const text = kind === 'design'
-          ? '请描述这次要做的设计稿：页面、关键状态和参考风格。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的设计目录 design/，右栏画布直接出图。'
-          : '请描述你的需求。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的原型目录 prototype/，右栏画布直接出图。'
+          ? '请描述这次要做的设计稿：页面、关键状态和参考风格。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的设计目录 design/，画布直接出图。'
+          : '请描述你的需求。\n\n补全后发送，模型会把一屏一个 HTML 写进这条需求的原型目录 prototype/，画布直接出图。'
         const message = {
           id: crypto.randomUUID(),
           role: 'assistant',

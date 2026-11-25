@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({
     let react = null
     try { react = require('react') } catch (_) { react = null }
 
-    const INJECT = ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'conversation']
+    const INJECT = ['slots', 'locale', 'sessions', 'workspaces', 'uiWorkspace', 'layout', 'conversation']
     if (!react) {
       exports.apply = () => {}
       exports.inject = INJECT
@@ -32,14 +32,6 @@ window.__ModuleLoader__.load({
     const SlotKit = react.createContext(null)
 
     const PANEL_ID = 'workbench'
-    const TAB_ID = 'workbench-requirement'
-    const TAB_KIND = 'workbench-requirement'
-    const DESIGN_TAB_ID = 'workbench-design'
-    const DESIGN_TAB_KIND = 'workbench-design'
-    const CODE_TAB_ID = 'workbench-code'
-    const CODE_TAB_KIND = 'workbench-code'
-    const TEST_TAB_ID = 'workbench-test'
-    const TEST_TAB_KIND = 'workbench-test'
     const API = '/dsh-workbench/api/'
     // 桌面端 dsh-app://app 下 Cookie 可能不持久，登录时把 token 存进 localStorage，
     // 之后所有请求带 Authorization: Bearer，服务端两者都接受。
@@ -1962,6 +1954,12 @@ window.__ModuleLoader__.load({
 .dsh-wb-input:focus{border-color:var(--dsw-alias-border-selected);box-shadow:0 0 0 2px var(--dsw-alias-brand-primary-dimmed,rgba(90,140,255,.18))}
 .dsh-wb-dialog-err{margin-top:9px;color:var(--dsw-alias-state-error-primary);font-size:11.5px;line-height:1.45}
 .dsh-wb-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dsh-wb-shot-dialog{width:min(1200px,100%);height:calc(100dvh - 48px);display:flex;flex-direction:column;overflow:hidden;border-radius:var(--dsw-radius-lg,10px);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsw-elevation-prominent,0 24px 70px rgba(0,0,0,.45))}
+.dsh-wb-shot-dialog-head{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.dsh-wb-shot-dialog-head b{font-size:13px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-wb-shot-dialog-body{flex:1;min-height:0;overflow:auto;background:#fff}
+.dsh-wb-shot-dialog-body iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+.dsh-wb-shot-dialog-body img{display:block;max-width:100%;max-height:100%;margin:auto}
 .dsh-wb-auth{height:100%;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;padding:36px 24px;box-sizing:border-box;background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:13px;line-height:1.5}
 .dsh-wb-auth *{box-sizing:border-box}
 .dsh-wb-auth-card{width:min(430px,100%);border:1px solid var(--dsw-alias-border-l1);border-radius:16px;background:var(--dsw-alias-bg-layer-1);box-shadow:var(--dsw-elevation-prominent,0 20px 60px rgba(0,0,0,.22));padding:30px}
@@ -2128,10 +2126,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-canvas-pane{position:relative;display:flex;flex-direction:column;min-height:0}
 .dsh-wb-canvas-content{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
 .dsh-wb-req-brief{flex:none;max-height:34vh;overflow:auto;padding:9px 12px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base);font-size:12px;line-height:1.6}
-.dsh-wb-header-actions{display:flex;align-items:center;gap:2px}
-.dsh-wb-header-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}
-.dsh-wb-header-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
-.dsh-wb-header-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4b7bf5);outline-offset:1px}
 .dsh-wb-readonly{flex:1;min-height:0;overflow:auto;padding:0 12px 16px;background:var(--dsw-alias-bg-base)}
 .dsh-wb-readonly-banner{display:flex;align-items:center;gap:6px;margin:8px 0 10px;padding:7px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1,transparent);font-size:11px;color:var(--dsw-alias-label-secondary)}
 .dsh-wb-readonly-list{display:flex;flex-direction:column;gap:14px}
@@ -2220,10 +2214,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-test-cmds code{padding:1px 5px;border-radius:4px;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.12));font-family:var(--font-mono,ui-monospace,SFMono-Regular,monospace);font-size:10px;color:var(--dsw-alias-label-secondary)}
 .dsh-wb-req-brief-head{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--dsw-alias-label-secondary)}
 .dsh-wb-req-brief-title{font-weight:600;font-size:12px;color:var(--dsw-alias-label-primary)}
-.dsh-wb-brief-nav{display:inline-flex;align-items:center;gap:4px;margin-left:4px}
-.dsh-wb-brief-nav-btn{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border:1px solid var(--dsw-alias-border-l1);border-radius:999px;background:transparent;font-size:10.5px;color:var(--dsw-alias-label-secondary);cursor:pointer}
-.dsh-wb-brief-nav-btn:hover{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.14));color:var(--dsw-alias-label-primary)}
-.dsh-wb-brief-nav-btn .n{font-variant-numeric:tabular-nums;opacity:.7}
 .dsh-wb-req-brief-summary{margin:0 0 6px;font-weight:500;color:var(--dsw-alias-label-primary);white-space:pre-wrap}
 .dsh-wb-req-brief-body{white-space:pre-wrap;color:var(--dsw-alias-label-secondary)}
 .dsh-wb-req-brief details{margin-top:6px;border-top:1px dashed var(--dsw-alias-border-l1);padding-top:6px}
@@ -2729,17 +2719,12 @@ window.__ModuleLoader__.load({
     function resetDataCaches() {
       workbenchStore.requestId += 1
       emitStore(workbenchStore, { state: null, error: null, loading: true })
-      // 预览票据和只读标记都绑在上一个账号上：票据会让宿主按上一个用户的
-      // baseDir 解析本机文件，只读标记会让新账号看到「改为可编辑」。
-      // 不清理，B 在 A 登出后的 120 秒内登录会看到 A 的需求目录。
+      // 预览票据绑在上一个账号上：票据会让宿主按上一个用户的 baseDir 解析
+      // 本机文件。不清理，B 在 A 登出后的 120 秒内登录会看到 A 的需求目录。
       previewTickets.clear()
       previewTicketQueued.clear()
       previewTicketInFlight = null
-      readonlyPreviewKeys.clear()
-      explicitlyOpenedTabs.clear()
-      autoOpenedSessionTabs.clear()
       notifyPreviewTickets()
-      for (const sub of readonlyPreviewSubs) { try { sub() } catch (_) { /* 组件已卸载 */ } }
       // 不能清空 Map：已经挂载的 hook 仍持有旧 store 引用，清空会让它们继续
       // 轮询一个不再被复用的对象，新账号登录后还看得到旧数据。就地把所有
       // store 清空，正在运行的轮询器会用新 token 重新取数。
@@ -3124,138 +3109,6 @@ window.__ModuleLoader__.load({
       } catch (_) { /* the requirement is already unusable; the next poll shows it */ }
     }
 
-    // 需求详情页的「打开」是预览入口：不管当前身份是谁，都进只读面板。
-    // 需要编辑时，面板里给负责人/设计师一个「改为可编辑」按钮切回来。
-    const readonlyPreviewKeys = new Set()
-    const readonlyPreviewSubs = new Set()
-    function setReadonlyPreview(sessionId, kind, on) {
-      const key = `${sessionId}:${kind}`
-      if (on) readonlyPreviewKeys.add(key)
-      else readonlyPreviewKeys.delete(key)
-      for (const sub of readonlyPreviewSubs) { try { sub() } catch (_) { /* 组件已卸载 */ } }
-    }
-    function useReadonlyPreview(sessionId, kind) {
-      const key = `${sessionId}:${kind}`
-      const [, bump] = useState(0)
-      useEffect(() => {
-        const sub = () => bump(n => n + 1)
-        readonlyPreviewSubs.add(sub)
-        return () => { readonlyPreviewSubs.delete(sub) }
-      }, [key])
-      return readonlyPreviewKeys.has(key)
-    }
-
-    function openRightTab(ctx, kind = TAB_KIND) {
-      try { ctx.sidebarRight.openTab(kind) } catch (reason) { console.warn('[dsh-workbench] open tab failed', reason) }
-    }
-
-    // 用户主动打开过右栏的会话：这些会话不再被「进会话自动带出开发/测试面板」
-    // 覆盖，否则从需求页点「打开原型」后会被自动开的开发目录顶掉。
-    const explicitlyOpenedTabs = new Set()
-
-    // 从工作台页面（不属于某个会话）打开右栏时，必须指定挂到哪条需求的会话上；
-    // 否则 openTab 会落到当前聚焦的会话（比如另一条需求的测试会话）。
-    function openRightTabIn(ctx, sessionId, kind = TAB_KIND, options = {}) {
-      if (typeof sessionId !== 'string' || sessionId === '') { openRightTab(ctx, kind); return }
-      if (options.auto !== true) explicitlyOpenedTabs.add(sessionId)
-      if (options.readonly === true) setReadonlyPreview(sessionId, kind, true)
-      else if (options.readonly === false) setReadonlyPreview(sessionId, kind, false)
-      try {
-        if (typeof ctx.sidebarRight?.openTabIn === 'function') ctx.sidebarRight.openTabIn(sessionId, kind)
-        else ctx.sidebarRight.openTab(kind)
-      } catch (reason) { console.warn('[dsh-workbench] open tab failed', reason) }
-    }
-
-    function openDesignTab(ctx) {
-      openRightTab(ctx, DESIGN_TAB_KIND)
-    }
-
-    function openCodeTab(ctx) {
-      openRightTab(ctx, CODE_TAB_KIND)
-    }
-
-    function openTestTab(ctx) {
-      openRightTab(ctx, TEST_TAB_KIND)
-    }
-
-    // 内嵌设计画布只知道“当前会话”，不知道该开需求 tab 还是设计 tab。
-    // 原型会话开需求 tab，设计会话开设计 tab；没有会话记录时按需求处理。
-    async function openWorkbenchTabFor(sessionId) {
-      if (typeof sessionId !== 'string' || sessionId === '') return TAB_KIND
-      const store = requirementStoreFor(sessionId)
-      let requirement = store.snapshot.sid === sessionId ? store.snapshot.requirement : null
-      if (requirement === null) {
-        await reloadRequirementStore(store, sessionId)
-        requirement = store.snapshot.sid === sessionId ? store.snapshot.requirement : null
-      }
-      const sessions = requirement && Array.isArray(requirement.sessions) ? requirement.sessions : []
-      const isDesign = sessions.some(item => item && item.type === 'design' && item.sessionId === sessionId)
-      return isDesign ? DESIGN_TAB_KIND : TAB_KIND
-    }
-
-    function closeOwnTab(ctx, kind = TAB_KIND) {
-      try {
-        const active = ctx.sidebarRight.active?.()
-        if (active && active.kind === kind) {
-          ctx.sidebarRight.close(active.id)
-          return
-        }
-      } catch (_) { /* fall through to collapsing the column */ }
-      try { ctx.sidebarRight.toggleExpanded() } catch (_) { /* ignore */ }
-    }
-
-    // 会话标题右侧的一对入口图标：需求文档 / 设计稿。只有绑定了工作台
-    // 需求的会话才显示，普通 DSH 聊天不打扰。
-    // 每类会话第一次打开时把对应右栏自动带出来；用户手动关掉后不再反复弹。
-    const autoOpenedSessionTabs = new Set()
-
-    function WorkbenchHeaderActions({ sid, ctx }) {
-      const { requirement } = useRequirementForSession(sid)
-      // 开发会话多一个「开发」入口，测试会话多一个「测试」入口；需求和设计
-      // 所有角色都有，只读/可写由各自的 tab 内容决定。
-      const record = requirement === null ? undefined : (requirement.sessions ?? []).find(item => item.sessionId === sid)
-      const type = record?.type ?? ''
-      useEffect(() => {
-        if (requirement === null || record === undefined) return undefined
-        const kind = type === 'dev' ? CODE_TAB_KIND : type === 'test' ? TEST_TAB_KIND : type === 'design' ? DESIGN_TAB_KIND : null
-        if (kind === null) return undefined
-        const key = `${sid}:${type}`
-        if (autoOpenedSessionTabs.has(key)) return undefined
-        autoOpenedSessionTabs.add(key)
-        // 这条会话可能刚被切过来，openTab 会落到「当前聚焦会话」上；显式指定 sid。
-        // 用户已经自己打开过右栏（比如从需求页点「打开原型」）时不要再抢。
-        const timer = setTimeout(() => {
-          if (explicitlyOpenedTabs.has(sid)) return
-          openRightTabIn(ctx, sid, kind, { auto: true })
-        }, 320)
-        return () => clearTimeout(timer)
-      }, [requirement?.id, record?.type, sid, ctx])
-      if (requirement === null) return null
-      const button = (kind, icon, label) => h('button', {
-        className: 'dsh-wb-header-btn',
-        type: 'button',
-        title: label,
-        'aria-label': label,
-        // 会话顶部图标是工作入口：产品/设计师从这里进就是可写画布，
-        // 顺便清掉需求详情页留下的只读标记。
-        onClick: () => openRightTabIn(ctx, sid, kind, { readonly: false }),
-      }, h(DesignIcon, { name: icon, size: 15 }))
-      return h('div', { className: 'dsh-wb-header-actions' },
-        button(TAB_KIND, 'file', '打开需求右栏'),
-        button(DESIGN_TAB_KIND, 'package', '打开设计右栏'),
-        type === 'dev' ? button(CODE_TAB_KIND, 'code', '打开开发右栏') : null,
-        type === 'test' ? button(TEST_TAB_KIND, 'check-circle', '打开测试右栏') : null,
-      )
-    }
-
-    function focusComposer() {
-      setTimeout(() => {
-        // 只找会话输入框。页面上还有搜索/登录/迭代表单的 textarea，全局兜底会抢错焦点。
-        const node = document.querySelector('[data-conversation-composer] textarea, [data-conversation-composer] [contenteditable="true"]')
-        if (node && typeof node.focus === 'function' && node.offsetParent !== null) node.focus()
-      }, 60)
-    }
-
     // ---------------------------------------------------------------------
     // Main panel
     // ---------------------------------------------------------------------
@@ -3600,33 +3453,7 @@ window.__ModuleLoader__.load({
       const openSession = useCallback((sessionId) => {
         if (!sessionId) return
         ctx.uiWorkspace.openSession(sessionId)
-        setTimeout(() => openRightTab(ctx), 250)
       }, [ctx])
-
-      const openPanel = useCallback(() => {
-        if (!requirement.sessionId) return
-        const mounted = ctx.sidebarRight.mounted?.getSnapshot?.()
-        if (mounted === undefined || mounted === null) {
-          ctx.uiWorkspace.openSession(requirement.sessionId)
-          setTimeout(() => openRightTab(ctx), 350)
-          return
-        }
-        openRightTab(ctx)
-      }, [ctx, requirement.sessionId])
-
-      const openDesign = useCallback(() => {
-        if (!requirement.sessionId) return
-        const mounted = ctx.sidebarRight.mounted?.getSnapshot?.()
-        if (mounted === undefined || mounted === null) {
-          ctx.uiWorkspace.openSession(requirement.sessionId)
-          setTimeout(() => openDesignTab(ctx), 350)
-          return
-        }
-        openDesignTab(ctx)
-      }, [ctx, requirement.sessionId])
-
-      const designScreenCount = ((requirement.designScreens?.length ?? 0) + (requirement.designImages?.length ?? 0)) ||
-        (requirement.artifacts ?? []).filter(artifact => artifact.kind === 'design').length
 
       return h('div', { className: 'dsh-wb-detail' },
         h('div', { className: 'dsh-wb-detail-code' }, `${iteration?.code ?? '—'} / ${requirement.code}`),
@@ -3639,7 +3466,7 @@ window.__ModuleLoader__.load({
         ),
         requirement.designUpdatedAt
           ? h('div', { className: 'dsh-wb-notice' },
-              `设计在 ${relativeTime(requirement.designUpdatedAt)} 更新过（d${requirement.designVersions.length}）。研发开始后设计有变更，请同步查看右栏画布。`)
+              `设计在 ${relativeTime(requirement.designUpdatedAt)} 更新过（d${requirement.designVersions.length}）。研发开始后设计有变更，请同步查看画布。`)
           : null,
         h('div', { className: 'dsh-wb-actions' },
           h('button', {
@@ -3656,14 +3483,6 @@ window.__ModuleLoader__.load({
             title: requirement.folderPath ? '为这条需求新建设计、开发、测试或评审会话' : '需求文件夹还没有创建',
             onClick: () => onNewSession(requirement),
           }, '新建会话'),
-          h('button', { className: 'dsh-wb-btn', type: 'button', disabled: !hasLocalSession, onClick: openPanel }, '打开需求'),
-          h('button', {
-            className: 'dsh-wb-btn',
-            type: 'button',
-            disabled: !hasLocalSession || designScreenCount === 0,
-            title: designScreenCount === 0 ? '还没有可预览的设计稿' : `打开设计（${designScreenCount} 个文件）`,
-            onClick: openDesign,
-          }, designScreenCount === 0 ? '打开设计' : `打开设计 · ${designScreenCount}`),
           (requirement.status === 'create_failed' || requirement.status === 'creating')
             ? h('button', { className: 'dsh-wb-btn', type: 'button', disabled: retrying === true, onClick: () => onRetry(requirement) }, retrying === true ? '创建中…' : '重试创建')
             : null,
@@ -4008,8 +3827,6 @@ window.__ModuleLoader__.load({
           const done = await finishRequirementCreation(ctx, requirement, state, brief)
           setStep('打开会话')
           ctx.uiWorkspace.openSession(done.sessionId)
-          focusComposer()
-          setTimeout(() => openRightTab(ctx), 350)
           onToast(`${done.requirement.code} ${done.requirement.title} 已创建`, false)
           onCreated(done.requirement)
         } catch (reason) {
@@ -4285,11 +4102,7 @@ window.__ModuleLoader__.load({
             }),
           })
           // 从会话坞里新建时留在需求页，让会话直接嵌进坞；从其它入口新建仍切到会话。
-          if (stay !== true) {
-            ctx.uiWorkspace.openSession(sessionId)
-            // 设计会话直接落在「设计」画布；产品会话仍落在「需求」原型。
-            setTimeout(() => (type === 'design' ? openDesignTab(ctx) : openRightTab(ctx)), 300)
-          }
+          if (stay !== true) ctx.uiWorkspace.openSession(sessionId)
           onToast(`${requirement.code} 的${sessionTypeLabel(type)}会话已创建`, false)
           onCreated(body.requirement)
           onClose()
@@ -6909,42 +6722,39 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementPageView({ ctx, state, requirement, onBack, onOpenSession, onOpenDesign, onOpenTest, onOpenRequirementTab, onNewSession }) {
-      // 页面上的「打开」统一进右栏只读面板：原型走需求面板，设计稿走设计面板。
-      // 产品/设计师在会话里本来就有可写画布，这里不抢他们的编辑入口。
-      // 右栏只能挂在一条 DSH 会话上。需求页不在会话里，点「打开」要先进入这条
-      // 需求在本机的某条会话，再把对应右栏挂上去；否则面板根本不可见。
-      const openPanel = (kind) => {
-        const local = (requirement.sessions ?? []).filter(session => session.sessionId)
-        // 优先自己名下的会话，其次才是同事的（同一需求里可能有多人的开发/测试会话）。
-        const pick = order => {
-          for (const type of order) {
-            const hits = local.filter(session => session.type === type)
-            const hit = hits.find(session => session.own === true) ?? hits[0]
-            if (hit) return hit.sessionId
-          }
-          return (local.find(session => session.own === true) ?? local[0])?.sessionId ?? requirement.sessionId ?? ''
-        }
-        const target = kind === 'design'
-          ? pick(['design', 'requirement', 'dev', 'test'])
-          : kind === 'test'
-            ? pick(['test', 'requirement', 'dev', 'design'])
-            : pick(['requirement', 'design', 'dev', 'test'])
-        const tabKind = kind === 'design' ? DESIGN_TAB_KIND : kind === 'test' ? TEST_TAB_KIND : TAB_KIND
-        const readonly = kind !== 'test'
-        if (typeof target !== 'string' || target === '') {
-          publishCommandToast({ seq: ++commandToastSeq, name: '打开', kind: 'error', text: '这条需求在本机还没有会话，先新建一个会话再打开右栏。' })
-          return
-        }
-        try { ctx.uiWorkspace.openSession(target) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
-        setTimeout(() => openRightTabIn(ctx, target, tabKind, { readonly }), 400)
-      }
+    // 缩略图放大查看：只在打开时挂载，才能只在弹层存在期间锁滚动/接管焦点。
+    function ShotPreviewDialog({ shot, onClose }) {
+      const modal = useModalBehavior(onClose)
+      return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
+        h('div', { className: 'dsh-wb-shot-dialog', ...modal.dialogProps },
+          h('div', { className: 'dsh-wb-shot-dialog-head' },
+            h('b', { id: modal.titleId }, shot.name),
+            shot.note !== '' ? h('span', { className: 'tiny muted', title: shot.note, style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, shot.note) : null,
+            h('button', { className: 'btn btn-sm btn-ghost', type: 'button', style: { marginLeft: 'auto' }, onClick: onClose }, '关闭'),
+          ),
+          h('div', { className: 'dsh-wb-shot-dialog-body' },
+            shot.kind === 'image'
+              ? h('img', { src: shot.src, alt: shot.name })
+              : h('iframe', {
+                  src: shot.src,
+                  title: shot.name,
+                  sandbox: 'allow-scripts allow-forms allow-modals',
+                  referrerPolicy: 'no-referrer',
+                }),
+          ),
+        ),
+      )
+    }
+
+    function RequirementPageView({ ctx, state, requirement, onBack, onOpenSession, onOpenDesign, onOpenTest, onOpenCanvas, canvasReady, onNewSession }) {
       usePreviewTickets([requirement.id])
+      // 需求页的缩略图直接在弹层里放大看，不再依赖会话右栏。
+      const [shotPreview, setShotPreview] = useState(null)
       const iteration = (state.iterations ?? []).find(item => item.id === requirement.iterationId)
       const artifacts = Array.isArray(requirement.artifacts) ? requirement.artifacts : []
       const designArtifacts = artifacts.filter(artifact => artifact.kind === 'design')
       // 需求全量页是「已沉淀」视图：设计稿只统计服务端交付附件。
-      // 本机 design/ 文件仍可在设计面板预览，但不能在这里冒充已交付版本。
+      // 本机 design/ 文件仍可在设计画布预览，但不能在这里冒充已交付版本。
       const screens = designArtifacts.filter(artifact => /\.html?$/i.test(String(artifact.name || ''))).length
       const designDelivered = requirement.designStatus === 'delivered'
         || (requirement.designVersions ?? []).length > 0
@@ -7031,9 +6841,7 @@ window.__ModuleLoader__.load({
             note: prototypeNotes.get(shortName(file.name ?? file.relativePath)) ?? '',
           }))
       const prototypeScreens = prototypeItems.length
-      // 页面跑在 dsh-app://app 里，直接 target=_blank 打不开；把预览地址换成
-      // 本机 DSH 的 http origin（__DSH_TRANSPORT__.streamBaseUrl），再交给
-      // DSH 右侧栏内置的 browser tab。拿不到时退回系统浏览器。
+      // 页面跑在 dsh-app://app 里，链接用本机 DSH 的 http origin，右键复制仍有意义。
       const hostOrigin = (() => {
         try {
           const base = window.__DSH_TRANSPORT__?.streamBaseUrl
@@ -7043,59 +6851,14 @@ window.__ModuleLoader__.load({
       const browserHref = src => {
         try { return new URL(src, hostOrigin).toString() } catch (_) { return src }
       }
-      const previewToast = text => publishCommandToast({
-        seq: ++commandToastSeq, name: '预览', kind: 'info', text,
-      })
-      // 预览只走 DSH 内置浏览器：外部浏览器拿不到登录态，也会把工作台地址
-      // 带出桌面端。内置 browser tab 打不开时只提示，不退回系统浏览器。
-      const openInBrowser = src => {
-        if (src === '') return
-        const url = browserHref(src)
-        const openTab = () => {
-          const mounted = ctx.sidebarRight?.mounted?.getSnapshot?.()
-          if (mounted === undefined || mounted === null) return false
-          try {
-            if (requirement.sessionId && typeof ctx.sidebarRight?.openTabIn === 'function') {
-              ctx.sidebarRight.openTabIn(requirement.sessionId, 'browser', { params: { url } })
-            } else if (typeof ctx.sidebarRight?.openTab === 'function') {
-              ctx.sidebarRight.openTab('browser', { params: { url } })
-            } else {
-              return false
-            }
-            return true
-          } catch (reason) {
-            console.warn('[dsh-workbench] open browser tab failed', reason)
-            return false
-          }
-        }
-        if (openTab()) return
-        // 需求页是工作台主面板，右侧栏必须挂在一个 DSH 会话上；先打开需求会话再开
-        // 浏览器 tab，等右侧栏挂载好再重试（和“打开设计”走同一条路径）。
-        if (requirement.sessionId) {
-          try { ctx.uiWorkspace.openSession(requirement.sessionId) } catch (reason) {
-            console.warn('[dsh-workbench] open session for browser failed', reason)
-          }
-          let tries = 0
-          const attempt = () => {
-            if (openTab()) return
-            tries += 1
-            if (tries < 20) { setTimeout(attempt, 200); return }
-            previewToast('DSH 内置浏览器没有打开成功，请先在右侧栏打开一个工作台会话再试。')
-          }
-          setTimeout(attempt, 350)
-          return
-        }
-        previewToast('这条需求还没有绑定会话，无法打开 DSH 内置浏览器。')
-      }
-      // 缩略图的「打开」不再另开浏览器 tab：原型进需求右栏、设计稿进设计右栏，
-      // 和顶部图标走同一个只读/可写面板，身份权限也由面板自己判断。
-      const shotTile = ({ key, name, src, kind, note = '', onOpen }) => {
+      // 缩略图点开后在弹层里看整页：不再依赖会话右栏。
+      const shotTile = ({ key, name, src, kind, note = '' }) => {
         const open = (event) => {
           if (event !== undefined) event.preventDefault()
-          if (typeof onOpen === 'function') { onOpen(); return }
-          openInBrowser(src)
+          if (src === '') return
+          setShotPreview({ key, name, src, kind, note })
         }
-        const openTitle = typeof onOpen === 'function' ? `在右栏打开 ${name}` : `在 DSH 浏览器打开 ${name}`
+        const openTitle = `放大查看 ${name}`
         return h('div', { className: 'shot', key },
         h('div', { className: 'img is-live' },
           src === ''
@@ -7167,10 +6930,7 @@ window.__ModuleLoader__.load({
                     href: safeHttpUrl(task?.mrUrl),
                     target: '_blank',
                     rel: 'noopener noreferrer',
-                    title: '在 DSH 浏览器打开 GitLab MR',
-                    onClick: event => {
-                      if (openUrlInDshBrowser(ctx, requirement.sessionId, safeHttpUrl(task?.mrUrl))) event.preventDefault()
-                    },
+                    title: '打开 GitLab MR',
                   }, h(DesignIcon, { name: 'branch', size: 12 }), 'MR !' + (safeHttpUrl(task?.mrUrl).match(/merge_requests\/(\d+)/)?.[1] ?? ''))
                 : task?.status === 'done' ? '开发完成（未提交 MR）' : '等待开发产物',
               safeHttpUrl(task?.pipelineUrl)
@@ -7180,9 +6940,6 @@ window.__ModuleLoader__.load({
                     target: '_blank',
                     rel: 'noopener noreferrer',
                     title: 'GitLab 流水线',
-                    onClick: event => {
-                      if (openUrlInDshBrowser(ctx, requirement.sessionId, safeHttpUrl(task?.pipelineUrl))) event.preventDefault()
-                    },
                   }, h(DesignIcon, { name: 'check-circle', size: 12 }), '流水线')
                 : null,
               task?.branch ? h('span', { className: 'dsh-wb-branch', title: '开发分支' }, task.branch) : null,
@@ -7215,16 +6972,22 @@ window.__ModuleLoader__.load({
           ),
           h('div', { className: 'page-actions' },
             h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: onBack }, h(DesignIcon, { name: 'chev-left' }), '返回迭代'),
-            h('button', {
+            canvasReady ? h('button', {
               className: 'btn btn-sm btn-ghost',
               type: 'button',
               disabled: !requirement.folderPath,
               title: requirement.folderPath ? '为这条需求新建需求、设计、开发或测试会话' : '需求文件夹还没有创建',
               onClick: () => onNewSession(requirement),
-            }, '新建会话'),
-            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenRequirementTab(requirement) }, h(DesignIcon, { name: 'external' }), '需求侧栏') : null,
-            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'package' }), '设计画布') : null,
-            requirement.sessionId ? h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: () => onOpenSession(requirement.sessionId) }, h(DesignIcon, { name: 'workbench' }), '进入会话') : null,
+            }, '新建会话') : null,
+            canvasReady
+              ? h('button', { className: 'btn btn-sm btn-primary', type: 'button', onClick: onOpenCanvas }, h(DesignIcon, { name: 'workbench' }), '进入画布')
+              : h('button', {
+                  className: 'btn btn-sm btn-primary',
+                  type: 'button',
+                  disabled: !requirement.folderPath,
+                  title: requirement.folderPath ? '先建一个属于你的会话，再进画布' : '需求文件夹还没有创建',
+                  onClick: () => onNewSession(requirement),
+                }, '新建会话并进入画布'),
           ),
         ),
         h('div', { className: 'banner banner--info', style: { marginBottom: '16px' } },
@@ -7271,7 +7034,6 @@ window.__ModuleLoader__.load({
                   h(Avatar, { name: owner?.name ?? requirement.ownerId }),
                   owner?.name ?? requirement.ownerId),
                 h('span', { className: 'badge' }, `原型 ${prototypeScreens} 屏`),
-                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', title: '在需求右栏打开原型', onClick: () => openPanel('prototype') }, h(DesignIcon, { name: 'external' }), '打开') : null,
               ),
             ),
             docSummary !== ''
@@ -7286,7 +7048,6 @@ window.__ModuleLoader__.load({
                     src: item.src,
                     kind: item.kind,
                     note: item.note,
-                    onOpen: () => openPanel('prototype'),
                   })),
                 ),
             h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'history', size: 13 }), '原型文件'),
@@ -7307,7 +7068,6 @@ window.__ModuleLoader__.load({
               h('span', { className: 'r' },
                 designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), designer.name) : null,
                 h(StatusChip, { kind: 'design', value: requirement.designStatus }),
-                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-text', type: 'button', title: '在设计右栏打开设计稿', onClick: () => openPanel('design') }, h(DesignIcon, { name: 'external' }), '打开') : null,
               ),
             ),
             designPreviewArtifacts.length === 0
@@ -7322,7 +7082,6 @@ window.__ModuleLoader__.load({
                     src: designPreviewUrlFor(artifact),
                     kind: /^image\//i.test(String(artifact.contentType || '')) ? 'image' : 'html',
                     note: designNotes.get(shortName(artifact.name)) ?? '',
-                    onOpen: () => openPanel('design'),
                   })),
                 ),
             h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'tag', size: 13 }), `设计组件 · ${screens} 屏 · ${designPreviewable} 个可预览`),
@@ -7334,7 +7093,6 @@ window.__ModuleLoader__.load({
             h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' } },
               h('span', { className: 'tiny muted' }, '设计版本历史见设计会话'),
               h('span', { style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-                requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => openPanel('design') }, h(DesignIcon, { name: 'package' }), '在设计右栏打开') : null,
                 requirement.sessionId ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenDesign(requirement) }, h(DesignIcon, { name: 'workbench' }), '进入设计会话') : null,
               ),
             ),
@@ -7359,9 +7117,6 @@ window.__ModuleLoader__.load({
               latestTest
                 ? h(DesignChip, { tone: latestTest.status === 'passed' ? 'done' : latestTest.status === 'failed' ? 'block' : 'warn', glyph: latestTest.status === 'passed' ? '✓' : latestTest.status === 'failed' ? '!' : '◷' }, `测试${TEST_STATUS_LABELS[latestTest.status] ?? latestTest.status}`)
                 : h(DesignChip, { tone: 'idle', glyph: '○' }, '未开始测试'),
-              testReportArtifacts.length > 0
-                ? h('button', { className: 'btn btn-sm btn-text', type: 'button', title: '在测试右栏打开测试证据', onClick: () => openPanel('test') }, h(DesignIcon, { name: 'external' }), '打开')
-                : null,
             ),
           ),
           latestTest === null
@@ -7373,7 +7128,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'sub-label' }, h(DesignIcon, { name: 'file', size: 13 }), `测试证据 · ${testReportArtifacts.length} 份`),
           h('div', null,
             testReportArtifacts.length === 0
-              ? h('div', { className: 'tiny muted' }, '测试报告同步到服务端后显示在这里；也可以在测试右栏直接预览。')
+              ? h('div', { className: 'tiny muted' }, '测试报告同步到服务端后显示在这里。')
               : [...testReportArtifacts].slice(-3).reverse().map(artifact => h('div', { className: 'vline', key: artifact.id },
                   h('span', { className: 'v' }, 'HTML'),
                   h('span', { className: 'd' }, shortName(artifact.name)),
@@ -7381,10 +7136,9 @@ window.__ModuleLoader__.load({
                 )),
           ),
           h('div', { className: 'foot', style: { borderTop: '1px dashed var(--line)', paddingTop: '9px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' } },
-            h('span', { className: 'tiny muted' }, '验收标准与逐轮记录在测试右栏'),
+            h('span', { className: 'tiny muted' }, '验收标准与逐轮记录在测试会话里'),
             h('span', { style: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-              testSession ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => openPanel('test') }, h(DesignIcon, { name: 'shield' }), '进入测试会话') : null,
-              testReportArtifacts.length > 0 ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => openPanel('test') }, h(DesignIcon, { name: 'external' }), '打开测试右栏') : null,
+              testSession ? h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: () => onOpenTest(requirement) }, h(DesignIcon, { name: 'shield' }), '进入测试会话') : null,
             ),
           ),
         ),
@@ -7413,6 +7167,9 @@ window.__ModuleLoader__.load({
                 }),
           ),
         ),
+        shotPreview !== null
+          ? h(ShotPreviewDialog, { shot: shotPreview, onClose: () => setShotPreview(null) })
+          : null,
       )
     }
 
@@ -7727,29 +7484,15 @@ window.__ModuleLoader__.load({
 
       const showToast = useCallback((message, isError) => setToast({ message, isError }), [])
 
-      const openSession = useCallback((sessionId, kind) => {
+      const openSession = useCallback((sessionId) => {
         if (typeof sessionId !== 'string' || sessionId === '') return
         try { ctx.uiWorkspace.openSession(sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
-        // 必须把 tab 挂到目标会话上：openTab 用的是当前聚焦会话，切换还没完成时
-        // 会开到上一条需求的会话里（右栏内容和卡片对不上）。
-        setTimeout(() => openRightTabIn(ctx, sessionId, kind ?? TAB_KIND), 350)
       }, [ctx])
 
       const openSessionFor = useCallback((requirement, kind) => {
         const findSession = type => (requirement.sessions ?? []).find(session => session.type === type && session.sessionId)?.sessionId
-        if (kind === 'design') {
-          openSession(findSession('design') ?? requirement.sessionId, DESIGN_TAB_KIND)
-          return
-        }
-        if (kind === 'test') {
-          openSession(findSession('test') ?? requirement.sessionId, TEST_TAB_KIND)
-          return
-        }
-        if (kind === 'dev') {
-          openSession(findSession('dev') ?? requirement.sessionId, CODE_TAB_KIND)
-          return
-        }
-        openSession(requirement.sessionId, TAB_KIND)
+        const type = kind === 'design' || kind === 'test' || kind === 'dev' ? kind : 'requirement'
+        openSession(findSession(type) ?? requirement.sessionId)
       }, [openSession])
 
       const openRequirement = useCallback(async (requirementId) => {
@@ -7795,7 +7538,6 @@ window.__ModuleLoader__.load({
           showToast(`${done.requirement.code} 已创建`, false)
           await workbench.reload()
           ctx.uiWorkspace.openSession(done.sessionId)
-          setTimeout(() => openRightTab(ctx), 350)
         } catch (reason) {
           await markCreationFailed(requirement, reason)
           showToast(reason instanceof Error ? reason.message : String(reason), true)
@@ -7808,6 +7550,8 @@ window.__ModuleLoader__.load({
       const handleSessionCreated = async (requirement) => {
         setSessionFor(null)
         setSelectedRequirementId(requirement.id)
+        // 建完会话直接进画布：需求页的主按钮就是这个意思，不用再点一次。
+        setDockOpen(true)
         await workbench.reload()
       }
 
@@ -7889,8 +7633,9 @@ window.__ModuleLoader__.load({
             onOpenSession: (sessionId) => openSession(sessionId),
             onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
             onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
-            onOpenRequirementTab: (requirement) => openSessionFor(requirement, 'requirement'),
-            onNewSession: (requirement) => setSessionFor({ requirement, stay: false }),
+            onOpenCanvas: () => setDockOpen(true),
+            canvasReady: dockSessionId !== '',
+            onNewSession: (requirement) => setSessionFor({ requirement, stay: true }),
           })
 
       return h('div', { className: 'dsh-wb-design' },
@@ -8745,8 +8490,6 @@ window.__ModuleLoader__.load({
           return
         }
         try { ctx.uiWorkspace.openSession(work.sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
-        // 打开会话后把对应右栏也带出来，否则用户只看到聊天，不知道画布在哪。
-        setTimeout(() => openRightTabIn(ctx, work.sessionId, kind === 'design' ? DESIGN_TAB_KIND : TAB_KIND), 260)
       }, [ctx, kind])
       if (studio.error) {
         return h('div', { className: 'dsh-wb-design-msg' },
@@ -8836,27 +8579,6 @@ window.__ModuleLoader__.load({
           })
         })
       }
-      // 设计师、开发、测试在各自会话里就能原地切到原型 / 设计稿 / 测试证据，
-      // 不用回研发工作台再找一遍。四个右栏共用这一条导航。
-      const artifacts = Array.isArray(requirement.artifacts) ? requirement.artifacts : []
-      // 同一屏在每次同步时都会追加一条附件，计数按文件名去重，避免「原型 8」这种假数字。
-      const countOf = kind => new Set(artifacts
-        .filter(artifact => artifact.kind === kind && /\.html?$/i.test(String(artifact.name || '')))
-        .map(artifact => String(artifact.name).split('/').pop())).size
-      // 右栏里是跳转入口，原地切到原型 / 设计稿 / 测试证据。
-      const chip = (kind, label, count, tabKind) => h('button', {
-        className: 'dsh-wb-brief-nav-btn',
-        type: 'button',
-        title: `在右栏打开${label}`,
-        onClick: () => openRightTabIn(ctx, sid, tabKind),
-      }, h(DesignIcon, { name: kind, size: 12 }), label, h('span', { className: 'n' }, String(count)))
-      const nav = ctx !== undefined && ctx !== null
-        ? h('div', { className: 'dsh-wb-brief-nav' },
-            chip('workbench', '原型', countOf('prototype'), TAB_KIND),
-            chip('package', '设计稿', countOf('design'), DESIGN_TAB_KIND),
-            chip('shield', '测试证据', countOf('test-report'), TEST_TAB_KIND),
-          )
-        : null
       const quoteBtn = sid !== undefined && sid !== ''
         ? h('button', {
             className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-req-brief-quote',
@@ -8868,7 +8590,6 @@ window.__ModuleLoader__.load({
       const head = h('div', { className: 'dsh-wb-req-brief-head' },
         h('span', { className: 'dsh-wb-req-brief-title' }, '需求说明'),
         summary !== '' ? h('span', null, `需求 v${doc.version ?? 1}`) : null,
-        nav,
         extra,
         quoteBtn,
       )
@@ -8916,7 +8637,7 @@ window.__ModuleLoader__.load({
       // 负责人/设计师从需求详情页点进来也是预览态：告诉他自己有编辑权、怎么切回去，
       // 而不是用「只有…可以修改」把他挡在门外。
       const banner = ownerHint
-        ? `${what}只读预览。你是${who}，点右上角「改为可编辑」回到画布。`
+        ? `${what}只读预览。你是${who}，点上方「改为可编辑」回到画布。`
         : `${what}只读预览：只有${who}可以修改。`
       const quote = (name) => {
         const note = notes.get(name) ?? ''
@@ -9009,48 +8730,8 @@ window.__ModuleLoader__.load({
       }
     }
 
-    // 外部链接（MR、缺陷单）优先丢给 DSH 内置浏览器 tab，和预览保持一致；
-    // 内置 tab 打不开时调用方回落成普通链接。
-    function openUrlInDshBrowser(ctx, sessionId, url) {
-      const href = typeof url === 'string' ? url : ''
-      if (!/^https?:\/\//i.test(href)) return false
-      const openTab = () => {
-        try {
-          if (typeof sessionId === 'string' && sessionId !== '' && typeof ctx.sidebarRight?.openTabIn === 'function') {
-            ctx.sidebarRight.openTabIn(sessionId, 'browser', { params: { url: href } })
-            return true
-          }
-          if (typeof ctx.sidebarRight?.openTab === 'function') {
-            ctx.sidebarRight.openTab('browser', { params: { url: href } })
-            return true
-          }
-        } catch (reason) {
-          console.warn('[dsh-workbench] open browser tab failed', reason)
-        }
-        return false
-      }
-      // 需求详情页不在会话里，右侧栏没有挂载点：先进入这条需求的会话再开浏览器 tab，
-      // 否则 tab 注册成功但看不见（和「打开原型」走同一条路径）。
-      const mounted = ctx.sidebarRight?.mounted?.getSnapshot?.()
-      if (mounted === undefined || mounted === null) {
-        if (typeof sessionId !== 'string' || sessionId === '') return false
-        try { ctx.uiWorkspace.openSession(sessionId) } catch (reason) {
-          console.warn('[dsh-workbench] open session for browser failed', reason)
-        }
-        let tries = 0
-        const attempt = () => {
-          if (openTab()) return
-          tries += 1
-          if (tries < 20) setTimeout(attempt, 200)
-        }
-        setTimeout(attempt, 400)
-        return true
-      }
-      return openTab()
-    }
-
-    // 开发右栏：只读浏览需求目录里的各端代码仓库。开发在会话里改代码，
-    // 右栏看到的是同一份目录，不额外提供写入入口，避免和会话里的改动打架。
+    // 开发画布：只读浏览需求目录里的各端代码仓库。开发在会话里改代码，
+    // 画布看到的是同一份目录，不额外提供写入入口，避免和会话里的改动打架。
     function CodeTab({ sid, ctx }) {
       const { requirement } = useRequirementForSession(sid)
       const { state } = useWorkbench()
@@ -9122,9 +8803,6 @@ window.__ModuleLoader__.load({
                 href: mrUrl,
                 target: '_blank',
                 rel: 'noopener noreferrer',
-                onClick: (event) => {
-                  if (openUrlInDshBrowser(ctx, sid, mrUrl)) event.preventDefault()
-                },
               }, 'MR') : null,
             ),
           )
@@ -9147,7 +8825,7 @@ window.__ModuleLoader__.load({
       if (requirement === null) {
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '这个会话还没有绑定需求'),
-          '从需求卡片新开一个开发会话，右栏就会显示这条需求的代码目录。')
+          '从需求卡片新开一个开发会话，画布就会显示这条需求的代码目录。')
       } else if (err !== '' && file === null && listing === null) {
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '目录读取失败'),
@@ -9281,7 +8959,7 @@ window.__ModuleLoader__.load({
       if (requirement === null) {
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '这个会话还没有绑定需求'),
-          '从需求卡片新开一个测试会话，右栏就会显示这条需求的验收标准和测试记录。')
+          '从需求卡片新开一个测试会话，画布就会显示这条需求的验收标准和测试记录。')
       } else {
         body = h('div', { className: 'dsh-wb-test-body' },
           h('div', { className: `dsh-wb-test-banner is-${latestKind}` },
@@ -9299,9 +8977,6 @@ window.__ModuleLoader__.load({
                         href: latestUrl,
                         target: '_blank',
                         rel: 'noopener noreferrer',
-                        onClick: (event) => {
-                          if (openUrlInDshBrowser(ctx, sid, latestUrl)) event.preventDefault()
-                        },
                       }, ' · 缺陷单')
                     : null,
                 ),
@@ -9425,12 +9100,10 @@ window.__ModuleLoader__.load({
         || (requirement?.artifacts ?? []).some(artifact => artifact.kind === 'prototype' && /\.html?$/i.test(String(artifact.name || '')))
       const sessionRecord = (requirement?.sessions ?? []).find(item => item.sessionId === sid)
       const isDesignSession = sessionRecord?.type === 'design'
-      // 只有产品负责人能改原型；其他角色在同一个右栏里看只读预览。
+      // 只有产品负责人能改原型；其他角色在画布里看只读预览。
       const ownerCanEdit = requirement !== null && requirement !== undefined
         && state?.currentUser?.id === requirement.ownerId
-      // 从需求详情页点「打开」进来的是预览：产品也先只读，要改再点「改为可编辑」。
-      const readonlyPreview = useReadonlyPreview(sid, TAB_KIND)
-      const canEditPrototype = ownerCanEdit && !readonlyPreview
+      const canEditPrototype = ownerCanEdit
       const blank = useBlankCanvas(requirement, blankAttempt, 'prototype', !isDesignSession && canEditPrototype)
       const retryBlank = useCallback(() => setBlankAttempt(n => n + 1), [])
 
@@ -9453,15 +9126,14 @@ window.__ModuleLoader__.load({
       } else if (!canEditPrototype) {
         body = h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
       } else if (isDesignSession) {
-        // 同一个 DSH 会话只能有一个画布目标。设计会话的画布归「设计」面板，
-        // 需求面板再挂一个可写画布会把 design/ 和 prototype/ 抢到同一个预览里。
+        // 同一个 DSH 会话只能有一个画布目标。设计会话的画布归设计画布，
+        // 需求画布不再挂第二张，避免 design/ 和 prototype/ 互相覆盖。
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '这是设计会话'),
-          '设计稿画布在「设计」面板里；需求原型不在这里重复打开，避免两个画布互相覆盖。',
-          h('button', { className: 'dsh-wb-btn dsh-wb-btn--sm', type: 'button', onClick: () => openDesignTab(ctx) }, '打开设计画布'),
+          '设计稿画布在这个会话的设计视图里；需求原型不在这里重复打开，避免两个画布互相覆盖。',
         )
       } else if (blank.path !== '') {
-        // 新建需求后直接开一张空白画布，模型出第一屏时右栏会切到真正的原型目录。
+        // 新建需求后直接开一张空白画布，模型出第一屏时画布会切到真正的原型目录。
         body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id, onBack })
       } else if (blank.error !== '') {
         body = h('div', { className: 'dsh-wb-design-msg' },
@@ -9474,19 +9146,7 @@ window.__ModuleLoader__.load({
       }
 
       const brief = requirement !== null
-        ? h(RequirementBrief, {
-            requirement,
-            sid,
-            ctx,
-            extra: ownerCanEdit && readonlyPreview
-              ? h('button', {
-                  className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
-                  type: 'button',
-                  title: '切回可编辑画布',
-                  onClick: () => setReadonlyPreview(sid, TAB_KIND, false),
-                }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
-              : null,
-          })
+        ? h(RequirementBrief, { requirement, sid, ctx })
         : null
       // 画布页不再挂需求说明的浮层：背景、规则、权限、验收写在每张原型自己的右侧栏里。
       return h('div', { className: 'dsh-wb-design dsh-wb-canvas-pane' },
@@ -9779,14 +9439,11 @@ window.__ModuleLoader__.load({
         : designFiles.length > 0
           ? requirement.folderPath
           : ensuredDesign
-      const backToSession = useCallback(() => { closeOwnTab(ctx, DESIGN_TAB_KIND); focusComposer() }, [ctx])
       // 只有被指派的设计师能改设计稿；其他角色看只读预览。
-      const readonlyPreview = useReadonlyPreview(sid, DESIGN_TAB_KIND)
       const designerCanEdit = requirement !== null && requirement !== undefined
         && state?.currentUser?.id === requirement.designerId
         && isDesignSession
-      // 从需求详情页点「打开」进来的是预览：设计师也先只读。
-      const canEditDesign = designerCanEdit && !readonlyPreview
+      const canEditDesign = designerCanEdit
       const blank = useBlankCanvas(requirement, blankAttempt, 'design', isDesignSession && canEditDesign)
       const retryBlank = useCallback(() => setBlankAttempt(n => n + 1), [])
 
@@ -9819,15 +9476,14 @@ window.__ModuleLoader__.load({
           : h('div', { className: 'dsh-wb-design-msg' },
               h('b', null, '当前会话不是设计会话'),
               designSession
-                ? '这条需求的画布属于设计会话；进入设计会话后再打开设计面板。'
+                ? '这条需求的画布属于设计会话；进入设计会话后再打开设计画布。'
                 : '这条需求还没有设计会话。需要设计时，从研发工作台新建一个设计会话。',
               designSession
                 ? h('button', {
                     className: 'dsh-wb-btn dsh-wb-btn--sm',
                     type: 'button',
                     onClick: () => {
-                      ctx.uiWorkspace.openSession(designSession.sessionId)
-                      setTimeout(() => openRightTabIn(ctx, designSession.sessionId, DESIGN_TAB_KIND), 260)
+                      try { ctx.uiWorkspace.openSession(designSession.sessionId) } catch (reason) { console.warn('[dsh-workbench] open session failed', reason) }
                     },
                   }, '进入设计会话')
                 : null,
@@ -9838,8 +9494,7 @@ window.__ModuleLoader__.load({
         body = h(DeliveredGallery, {
           requirement,
           reload: () => { void reload() },
-          onOpenRequirement: () => openRightTab(ctx),
-          onBackToSession: backToSession,
+          onOpenRequirement: () => { if (typeof onBack === 'function') onBack() },
         })
       } else if (designFiles.length === 0 && blank.path !== '') {
         // 设计会话和需求会话同一套逻辑：没有设计稿时先开一张空白画布。
@@ -9874,22 +9529,9 @@ window.__ModuleLoader__.load({
         })
       }
 
-      // 设计右栏在画布上方保留一条需求摘要，设计师不用切回需求页也能看到要解决的问题。
+      // 设计画布上方保留一条需求摘要，设计师不用切回需求页也能看到要解决的问题。
       const brief = requirement !== null
-        ? h(RequirementBrief, {
-            requirement,
-            compact: true,
-            sid,
-            ctx,
-            extra: designerCanEdit && readonlyPreview
-              ? h('button', {
-                  className: 'dsh-wb-btn dsh-wb-btn--sm dsh-wb-brief-edit',
-                  type: 'button',
-                  title: '切回可编辑画布',
-                  onClick: () => setReadonlyPreview(sid, DESIGN_TAB_KIND, false),
-                }, h(DesignIcon, { name: 'edit', size: 12 }), '改为可编辑')
-              : null,
-          })
+        ? h(RequirementBrief, { requirement, compact: true, sid, ctx })
         : null
       return h('div', { className: 'dsh-wb-design dsh-wb-canvas-pane' },
         claimError !== '' ? h('div', { className: 'dsh-wb-notice is-error' }, claimError) : null,
@@ -10067,8 +9709,8 @@ window.__ModuleLoader__.load({
         label: '研发工作台',
       }, WorkbenchIcon)), 'dsh-workbench: sidebar entry')
 
-      //画布组件以 package-local chunk 懒加载，加载后由它注册文案、点选标签等外围能力；
-      // tab 本身仍由工作台注册，画布与需求上下文在同一个右栏面板里。
+      // 画布组件以 package-local chunk 懒加载，加载后由它注册文案、点选标签等外围能力。
+      // 工作台内嵌模式只提供画布，不再注册 DSH 右侧栏标签。
       ctx.effect(() => {
         let disposed = false
         let attempt = 0
@@ -10079,7 +9721,7 @@ window.__ModuleLoader__.load({
             .then(() => require.async('./client.canvas.js'))
             .then((runtime) => {
               if (disposed || mine !== attempt) return
-              runtime.apply(ctx, { embed: { kind: DESIGN_TAB_KIND, openFor: openWorkbenchTabFor } })
+              runtime.apply(ctx, { embed: { kind: 'workbench' } })
               publishDesignStudio({ runtime, error: null })
             })
             .catch((reason) => {
@@ -10096,67 +9738,6 @@ window.__ModuleLoader__.load({
           publishDesignStudio({ runtime: null, error: null })
         }
       }, 'dsh-workbench: design studio chunk')
-
-      // 需求/设计不再挂在右栏「新建」菜单里和 工作区文件/上下文 抢位置；
-      // 入口放到会话标题右侧的一对图标上，tab 定义仍然保留给 openTab 使用。
-      ctx.effect(() => ctx.sidebarRightTabs.register({
-        id: TAB_ID,
-        kind: TAB_KIND,
-        title: () => '需求',
-        keepMounted: true,
-      }), 'dsh-workbench: requirement tab')
-
-      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
-        name: 'sidebar.right.pane.tab',
-        key: TAB_ID,
-        inject: (sessionId) => ({ sid: sessionId }),
-      }, (props) => h(RequirementTab, { ...props, ctx }))), 'dsh-workbench: requirement tab body')
-
-      ctx.effect(() => ctx.sidebarRightTabs.register({
-        id: DESIGN_TAB_ID,
-        kind: DESIGN_TAB_KIND,
-        title: () => '设计',
-        keepMounted: true,
-      }), 'dsh-workbench: design tab')
-
-      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
-        name: 'sidebar.right.pane.tab',
-        key: DESIGN_TAB_ID,
-        inject: (sessionId) => ({ sid: sessionId }),
-      }, (props) => h(DesignTab, { ...props, ctx }))), 'dsh-workbench: design tab body')
-
-      ctx.effect(() => ctx.sidebarRightTabs.register({
-        id: CODE_TAB_ID,
-        kind: CODE_TAB_KIND,
-        title: () => '开发',
-        keepMounted: true,
-      }), 'dsh-workbench: code tab')
-
-      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
-        name: 'sidebar.right.pane.tab',
-        key: CODE_TAB_ID,
-        inject: (sessionId) => ({ sid: sessionId }),
-      }, (props) => h(CodeTab, { ...props, ctx }))), 'dsh-workbench: code tab body')
-
-      ctx.effect(() => ctx.sidebarRightTabs.register({
-        id: TEST_TAB_ID,
-        kind: TEST_TAB_KIND,
-        title: () => '测试',
-        keepMounted: true,
-      }), 'dsh-workbench: test tab')
-
-      ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
-        name: 'sidebar.right.pane.tab',
-        key: TEST_TAB_ID,
-        inject: (sessionId) => ({ sid: sessionId }),
-      }, (props) => h(TestTab, { ...props, ctx }))), 'dsh-workbench: test tab body')
-
-      ctx.effect(() => ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
-        name: 'conversation.session.header.actions',
-        id: 'dsh-workbench.header-actions',
-        order: 30,
-        inject: (sessionId) => ({ sid: sessionId }),
-      }, (props) => h(WorkbenchHeaderActions, { ...props, ctx }))), 'dsh-workbench: session header actions')
 
       // 会话开场的固定一句：需求会话空白时让宿主写一条真实的 assistant 消息。
       ctx.effect(() => ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
