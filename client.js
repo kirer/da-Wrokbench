@@ -432,7 +432,18 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .crumb .cur { color: var(--text-2); }
 .dsh-wb-design .topbar .spacer { flex: 1; }
 .dsh-wb-design .scroll { overflow: auto; min-height: 0; flex: 1; }
-.dsh-wb-design .page { padding: 22px 28px 40px; max-width: 1240px; }
+/* 所有页面共用同一圈固定边距；宽度跟着窗口走，不再卡最大宽度。 */
+.dsh-wb-design .page { padding: 22px 28px 40px; max-width: none; }
+/* 层级导航固定挂在顶栏下方一条上下等高的窄栏里，所有页面都在同一位置。 */
+.dsh-wb-design .dsh-wb-contextbar { flex: none; display: flex; align-items: center; min-height: 38px; padding: 0 28px; border-bottom: 1px solid var(--line); }
+.dsh-wb-design .dsh-wb-crumbs { display: flex; align-items: center; gap: 1px; min-height: 28px; font-size: var(--fs-12); color: var(--text-3); min-width: 0; }
+.dsh-wb-design .dsh-wb-crumbs .sep { flex: none; width: 12px; height: 12px; color: var(--line-3); }
+.dsh-wb-design .dsh-wb-crumbs .step,
+.dsh-wb-design .dsh-wb-crumbs .cur { display: inline-flex; align-items: center; height: 24px; padding: 0 7px; border: 0; border-radius: var(--r-sm); background: transparent; font: inherit; font-size: var(--fs-12); white-space: nowrap; }
+.dsh-wb-design .dsh-wb-crumbs .step { color: var(--text-3); cursor: pointer; }
+.dsh-wb-design .dsh-wb-crumbs .step:hover { background: var(--surface-2); color: var(--text); }
+.dsh-wb-design .dsh-wb-crumbs .cur { color: var(--text); font-weight: var(--fw-med); }
+.dsh-wb-design .dsh-wb-crumbs .mono { font-family: var(--font-mono); letter-spacing: -.01em; }
 .dsh-wb-design .page-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
 .dsh-wb-design .page-head .ttl-block { min-width: 0; }
 .dsh-wb-design .page-title {
@@ -1030,9 +1041,8 @@ window.__ModuleLoader__.load({
 @media (max-width: 980px){
 .dsh-wb-design .win, .dsh-wb-design .win.has-panel { grid-template-columns: minmax(0, 1fr); }
 .dsh-wb-design .rail, .dsh-wb-design .rpanel { display: none; }
-.dsh-wb-design .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 16px; }
+.dsh-wb-design .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 20px; }
 .dsh-wb-design .plugnac { flex-wrap: wrap; row-gap: 4px; }
-.dsh-wb-design .page { padding: 16px 16px 32px; max-width: 100% !important; }
 .dsh-wb-design .page-head { flex-wrap: wrap; }
 .dsh-wb-design .page-title { font-size: 20px; }
 .dsh-wb-design .kpis, .dsh-wb-design .state-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1259,7 +1269,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .shell > .topbar{flex:none}
 .dsh-wb-design .dsh-wb-shell-body{display:flex;flex:1;min-height:0;min-width:0}
 .dsh-wb-design .dsh-wb-shell-body > .scroll{flex:1;min-width:0;min-height:0;overflow:auto}
-.dsh-wb-design .page{margin:0 auto;width:100%}
+.dsh-wb-design .page{margin:0;width:100%;max-width:none}
 /* 画布页右侧的常驻会话坞：嵌入真实 DSH 会话，随需求切换。 */
 .dsh-wb-design .dsh-wb-dock{position:relative;width:400px;min-width:280px;max-width:62%;flex:none;display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line-2);background:var(--bg-elev)}
 .dsh-wb-design .dsh-wb-dock-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;z-index:6;cursor:col-resize;touch-action:none}
@@ -1288,13 +1298,39 @@ window.__ModuleLoader__.load({
 .dsh-wb-stage .ddp-top{left:0;right:0;top:0;align-items:center;padding:6px 20px;background:color-mix(in srgb,var(--bg) 86%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(8px);z-index:12}
 .dsh-wb-stage .ddp-top>.ddp-isl{background:transparent;box-shadow:none;padding:0;border-radius:0;gap:2px}
 .dsh-wb-stage .ddp-top>.ddp-isl .ddp-btn{height:30px;padding:0 8px;border-radius:var(--r-sm)}
-.dsh-wb-design .topbar .plugnac{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden}
+.dsh-wb-design .topbar{position:relative;z-index:20}
+/* DSH 侧栏收起后插件贴住窗口左边：顶栏让开 macOS 红绿灯和宿主的展开/新建按钮，
+   背景透明、指针穿透，让宿主那组按钮露出来且点得到。 */
+.dsh-wb-design.is-flush-left .topbar{padding-left:180px;background:transparent;backdrop-filter:none;pointer-events:none}
+.dsh-wb-design.is-flush-left .topbar > *{pointer-events:auto}
+.dsh-wb-design .topbar .plugnac{display:flex;align-items:center;gap:7px;min-width:0;overflow:visible}
 .dsh-wb-design .plugnac-title{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-13);font-weight:var(--fw-semi);color:var(--text);white-space:nowrap}
 .dsh-wb-design .plugnac-title svg{width:16px;height:16px;color:var(--text-2)}
 .dsh-wb-design .plugnac-sep{width:1px;height:16px;background:var(--line-2);margin:0 4px;flex:none}
 .dsh-wb-design .plugnac a{height:30px;display:inline-flex;align-items:center;padding:0 9px;border-radius:var(--r-sm);font-size:var(--fs-12);color:var(--text-2);white-space:nowrap;cursor:pointer}
 .dsh-wb-design .plugnac a:hover{background:var(--surface-2);color:var(--text)}
 .dsh-wb-design .plugnac a.active{background:var(--surface-2);color:var(--text);font-weight:var(--fw-med)}
+/* 项目切换：顶栏品牌位就是入口，下拉里切项目、建项目、改名字。 */
+.dsh-wb-design .plugnac-project{position:relative;flex:none}
+.dsh-wb-design .plugnac-project-btn{border:1px solid transparent;background:transparent;border-radius:var(--r-sm);height:32px;padding:0 8px;font:inherit;cursor:pointer;max-width:260px}
+.dsh-wb-design .plugnac-project-btn:hover{background:var(--surface-2);border-color:var(--line)}
+.dsh-wb-design .plugnac-project-btn.is-open{background:var(--surface-2);border-color:var(--line-2)}
+.dsh-wb-design .plugnac-project-btn .plugnac-project-name{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-wb-design .plugnac-project-btn .chev{width:13px;height:13px;color:var(--text-3);flex:none;transition:transform .16s ease}
+.dsh-wb-design .plugnac-project-btn.is-open .chev{transform:rotate(180deg)}
+.dsh-wb-design .dsh-wb-project-menu{position:absolute;top:calc(100% + 8px);left:0;z-index:71;width:300px;padding:6px;border:1px solid var(--line-2);border-radius:var(--r-md);background:var(--surface);box-shadow:var(--shadow-2);display:flex;flex-direction:column;gap:2px}
+.dsh-wb-design .dsh-wb-project-menu-head{padding:6px 9px 4px;font-size:var(--fs-11);color:var(--text-3);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dsh-wb-design .dsh-wb-project-item{display:flex;align-items:center;gap:8px;width:100%;height:34px;padding:0 9px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-2);font:inherit;font-size:var(--fs-12);text-align:left;cursor:pointer}
+.dsh-wb-design .dsh-wb-project-item:hover{background:var(--surface-2);color:var(--text)}
+.dsh-wb-design .dsh-wb-project-item.is-current{background:var(--surface-2);color:var(--text);font-weight:var(--fw-med)}
+.dsh-wb-design .dsh-wb-project-check{width:14px;height:14px;flex:none;color:var(--primary)}
+.dsh-wb-design .dsh-wb-project-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dsh-wb-design .dsh-wb-project-count{font-size:10px;color:var(--text-3);white-space:nowrap}
+.dsh-wb-design .dsh-wb-project-menu-sep{height:1px;background:var(--line);margin:4px 2px;flex:none}
+.dsh-wb-design .dsh-wb-project-action{display:flex;align-items:center;gap:8px;width:100%;height:32px;padding:0 9px;border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-2);font:inherit;font-size:var(--fs-12);text-align:left;cursor:pointer}
+.dsh-wb-design .dsh-wb-project-action:hover{background:var(--surface-2);color:var(--text)}
+.dsh-wb-design .dsh-wb-project-action svg{width:14px;height:14px;color:var(--text-3)}
+.dsh-wb-design .dsh-wb-project-menu-empty{padding:10px;color:var(--text-3);font-size:12px}
 .dsh-wb-design .topbar .avatar{margin-right:2px}
 .dsh-wb-design .topbar .identity{cursor:pointer;border:1px solid transparent;padding:3px 7px;border-radius:var(--r-sm);background:transparent}
 .dsh-wb-design .topbar .identity:hover{background:var(--surface-2);border-color:var(--line)}
@@ -2313,8 +2349,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-empty--page{margin-top:10px;border:1px dashed var(--dsw-alias-border-l2);border-radius:10px;background:var(--dsw-alias-bg-layer-1);padding:46px 20px}
 .dsh-wb-detail-head{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px}
 .dsh-wb-detail-head-main{min-width:0;flex:1}
-.dsh-wb-back{height:26px;padding:0 7px;margin:0 0 7px -7px;border:0;border-radius:5px;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11px;cursor:pointer}
-.dsh-wb-back:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dsh-wb-detail-code-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px}
 .dsh-wb-detail-code{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-size:11px;color:var(--dsw-alias-label-tertiary)}
 .dsh-wb-detail-meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--dsw-alias-label-tertiary)}
@@ -3840,7 +3874,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
           h('h2', { id: modal.titleId }, '新建需求'),
-          h('p', null, `迭代 ${state.iteration.code} · 填需求名称；可选的简报会写进需求文档，创建后直接按文档出原型。`),
+          h('p', null, `迭代 ${state.iteration?.code ?? '—'} · 填需求名称；可选的简报会写进需求文档，创建后直接按文档出原型。`),
           h('input', {
             ref: inputRef,
             className: 'dsh-wb-input',
@@ -3881,6 +3915,78 @@ window.__ModuleLoader__.load({
       return `${match[1]}${String(Number(digits) + 1).padStart(digits.length, '0')}`
     }
 
+    function ProjectDialog({ project, onClose, onSubmit, onToast }) {
+      const editing = Boolean(project)
+      const [name, setName] = useState(project?.name ?? '')
+      const [description, setDescription] = useState(project?.description ?? '')
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const nameRef = useRef(null)
+      const modal = useModalBehavior(onClose, !busy)
+
+      useEffect(() => {
+        nameRef.current?.focus()
+        nameRef.current?.select?.()
+      }, [])
+
+      const submit = useCallback(async () => {
+        if (busy || name.trim() === '') return
+        setBusy(true)
+        setError('')
+        try {
+          const body = editing
+            ? await api(`projects/${encodeURIComponent(project.id)}`, {
+                method: 'POST',
+                body: JSON.stringify({ name: name.trim(), description: description.trim() }),
+              })
+            : await api('projects', {
+                method: 'POST',
+                body: JSON.stringify({ name: name.trim(), description: description.trim() }),
+              })
+          onToast(editing ? '项目已更新' : `项目「${body.project?.name ?? name.trim()}」已创建并切换`, false)
+          onSubmit(body.project ?? null, editing)
+          onClose()
+        } catch (reason) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+          setBusy(false)
+        }
+      }, [busy, name, description, editing, project, onSubmit, onToast, onClose])
+
+      return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
+        h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
+          h('h2', { id: modal.titleId }, editing ? `项目设置 · ${project.name}` : '新建项目'),
+          h('p', null, editing
+            ? '改名只影响展示，项目下的迭代、需求和会话都保持不变。'
+            : '项目是迭代的上一层：新建后自动切换过去，之后建的迭代都挂在这个项目下。'),
+          h('div', { style: { display: 'grid', gap: '8px' } },
+            h('input', {
+              ref: nameRef,
+              className: 'dsh-wb-input',
+              value: name,
+              placeholder: '项目名称，例如 会员增长',
+              maxLength: 40,
+              disabled: busy,
+              onChange: event => setName(event.target.value),
+            }),
+            h('input', {
+              className: 'dsh-wb-input',
+              value: description,
+              placeholder: '一句话说明（可选）',
+              maxLength: 120,
+              disabled: busy,
+              onChange: event => setDescription(event.target.value),
+            }),
+          ),
+          error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
+          h('div', { className: 'dsh-wb-dialog-actions' },
+            h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: onClose }, '取消'),
+            h('button', { className: 'dsh-wb-btn dsh-wb-btn--primary', type: 'button', disabled: busy || name.trim() === '', onClick: () => { void submit() } },
+              busy ? '保存中…' : editing ? '保存' : '创建项目'),
+          ),
+        ),
+      )
+    }
+
     function CreateIterationDialog({ state, onClose, onReload, onToast }) {
       const [code, setCode] = useState(() => suggestIterationCode(state.iterations))
       const [name, setName] = useState('')
@@ -3900,7 +4006,7 @@ window.__ModuleLoader__.load({
         try {
           await api('iterations', {
             method: 'POST',
-            body: JSON.stringify({ code: code.trim(), name: name.trim(), startDate, endDate }),
+            body: JSON.stringify({ code: code.trim(), name: name.trim(), startDate, endDate, projectId: state.project?.id }),
           })
           // 迭代目录就是之后需求会话的工作区，建迭代时先把目录落好。
           await ensureChildDirectory(state.baseDir, code.trim())
@@ -3911,12 +4017,12 @@ window.__ModuleLoader__.load({
           setError(reason instanceof Error ? reason.message : String(reason))
           setBusy(false)
         }
-      }, [busy, code, name, startDate, endDate, onReload, onToast, onClose, state.baseDir])
+      }, [busy, code, name, startDate, endDate, onReload, onToast, onClose, state.baseDir, state.project])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
           h('h2', { id: modal.titleId }, '新建迭代'),
-          h('p', null, '创建后自动切换到新迭代，并在当前用户的顶级文件夹下建同名目录。需求编号使用迭代编码的短码。'),
+          h('p', null, `在「${state.project?.name ?? '当前项目'}」下新建迭代。创建后自动切换到新迭代，并在当前用户的顶级文件夹下建同名目录。需求编号使用迭代编码的短码。`),
           h('div', { style: { display: 'grid', gap: '8px' } },
             h('input', {
               ref: codeRef,
@@ -4508,7 +4614,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'info' }, h('div', { className: 't' }, title), h('div', { className: 'd' }, desc)),
         h('span', { className: `switch${on ? ' on' : ''}`, style: disabled ? { opacity: .6, pointerEvents: 'none' } : undefined, title: disabled ? '当前版本由服务端统一配置' : undefined }),
       )
-      return h('div', { className: 'page', style: { maxWidth: '1000px' } },
+      return h('div', { className: 'page' },
         h('div', { className: 'page-head' },
           h('div', { className: 'ttl-block' },
             h('h1', { className: 'page-title' }, '设置'),
@@ -5396,7 +5502,7 @@ window.__ModuleLoader__.load({
                   canEditSelected ? h('button', { className: 'btn btn-sm', type: 'button', disabled: busy !== '', onClick: () => { setMode('version'); setForm(current => ({ ...current, content: latest?.content ?? '', summary: '' })) } }, '上传新版本') : null,
                 ),
               )
-      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+      return h('div', { className: 'page' },
         h('div', { className: 'page-head' },
           h('div', { className: 'ttl-block' },
             h('h1', { className: 'page-title' }, '技能库'),
@@ -6234,8 +6340,11 @@ window.__ModuleLoader__.load({
     }
 
     function IterationListView({ state, query, onQuery, filter, onFilter, sort, onSort, onOpen, onCreate, canCreate }) {
+      const projectId = state.project?.id ?? state.currentProjectId ?? null
       const entries = [...(state.iterations ?? [])]
         .filter(iteration => iteration.archived !== true)
+        // 导航是 项目 → 迭代 → 需求：迭代列表只展示当前项目下的迭代。
+        .filter(iteration => projectId === null || iteration.projectId === projectId)
         .map(iteration => ({ iteration, requirements: iterationRequirements(state, iteration.id) }))
       const uid = state.currentUser.id
       const normalized = query.trim().toLowerCase()
@@ -6279,7 +6388,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'page-head' },
           h('div', { className: 'ttl-block' },
             h('h1', { className: 'page-title' }, '迭代'),
-            h('div', { className: 'page-sub' }, `共 ${entries.length} 个迭代 · 我参与 ${mine} 个 · 进行中 ${active} 个 · 本月封板 ${closed} 个`),
+            h('div', { className: 'page-sub' }, `${state.project?.name ?? '当前项目'} · 共 ${entries.length} 个迭代 · 我参与 ${mine} 个 · 进行中 ${active} 个 · 本月封板 ${closed} 个`),
           ),
           canCreate ? h('div', { className: 'page-actions' },
             h('button', { className: 'btn btn-primary', type: 'button', onClick: onCreate },
@@ -6316,7 +6425,7 @@ window.__ModuleLoader__.load({
         ordered.length === 0
           ? h('div', { className: 'empty-page' },
               h(DesignIcon, { name: normalized !== '' ? 'search' : 'iter', size: 28 }),
-              h('b', null, normalized !== '' ? '没有匹配的迭代' : '还没有迭代'),
+              h('b', null, normalized !== '' ? '没有匹配的迭代' : '这个项目还没有迭代'),
               h('span', null, normalized !== '' ? '换一个关键词或筛选条件。' : canCreate ? '点右上「新建迭代」开始。' : '等负责人创建迭代后再来。'),
             )
           : h('div', { className: 'table-wrap' },
@@ -6528,7 +6637,24 @@ window.__ModuleLoader__.load({
         .slice(0, 7)
     }
 
-    function IterationDetailView({ state, requirements, onBack, onCreateRequirement, onOpenSettings, canCreate, canConfig, onOpenRequirement, onOpenSession, onOpenDesign }) {
+    // 层级导航：迭代列表 › 2026-S13 › S13-001 › 会话 › 画布。
+    // 祖先层都能点回，当前层加粗；「迭代列表」永远回到扁平列表。
+    function Breadcrumbs({ items }) {
+      return h('nav', { className: 'dsh-wb-crumbs', 'aria-label': '层级导航' },
+        items.map((item, index) => {
+          const last = index === items.length - 1
+          const className = `${last || typeof item.onClick !== 'function' ? 'cur' : 'step'}${item.mono ? ' mono' : ''}`
+          return h(react.Fragment, { key: item.key ?? `${index}-${item.label}` },
+            index > 0 ? h(DesignIcon, { name: 'chev-right', className: 'sep' }) : null,
+            last || typeof item.onClick !== 'function'
+              ? h('span', { className, 'aria-current': last ? 'page' : undefined }, item.label)
+              : h('button', { className, type: 'button', onClick: item.onClick }, item.label),
+          )
+        }),
+      )
+    }
+
+    function IterationDetailView({ state, requirements, onCreateRequirement, onOpenSettings, canCreate, canConfig, onOpenRequirement, onOpenSession, onOpenDesign }) {
       const [reqFilter, setReqFilter] = useState('all')
       const iteration = state.iteration
       const owner = state.users.find(user => user.id === iteration.ownerId)
@@ -6555,11 +6681,11 @@ window.__ModuleLoader__.load({
         if (Number.isNaN(startTime) || Number.isNaN(endTime)) return '待定'
         return shortDay(new Date(startTime + (endTime - startTime) * (fraction / 100)).toISOString())
       })
-      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+      return h('div', { className: 'page' },
         h('div', { className: 'head-card' },
           h('div', { className: 'lft' },
             h('div', { className: 'code-line' },
-              h('a', { className: 'code', href: '#', onClick: event => { event.preventDefault(); onBack() } }, iteration.code),
+              h('a', { className: 'code', href: '#', onClick: event => event.preventDefault() }, iteration.code),
               h(DesignChip, { tone: phaseChipTone(phase), glyph: phase === '已封板' ? '✓' : phase === '规划中' ? '○' : '◐' }, phase),
               risk.count > 0 ? h(DesignChip, { tone: 'warn', glyph: '◷' }, risk.text) : null,
             ),
@@ -6746,7 +6872,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementPageView({ ctx, state, requirement, onBack, onOpenSession, onOpenDesign, onOpenTest, onOpenCanvas, canvasReady, onNewSession }) {
+    function RequirementPageView({ ctx, state, requirement, onOpenSession, onOpenDesign, onOpenTest, onOpenCanvas, canvasReady, onNewSession }) {
       usePreviewTickets([requirement.id])
       // 需求页的缩略图直接在弹层里放大看，不再依赖会话右栏。
       const [shotPreview, setShotPreview] = useState(null)
@@ -6953,7 +7079,7 @@ window.__ModuleLoader__.load({
           ),
         )
       }
-      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+      return h('div', { className: 'page' },
         h('div', { className: 'rf-head' },
           h('div', { className: 'lft' },
             h('div', { className: 'l1' },
@@ -6963,6 +7089,7 @@ window.__ModuleLoader__.load({
             ),
             h('h1', null, requirement.title),
             h('div', { className: 'rf-meta' },
+              h('span', { className: 'it' }, '项目 ', h('b', null, state.project?.name ?? '—')),
               h('span', { className: 'it' }, '迭代 ', h('b', null, iteration ? `${iteration.code} ${iteration.name}` : '未归属')),
               h('span', { className: 'it' }, '产品 ', h('span', { className: 'assignee' }, h(Avatar, { name: owner?.name ?? requirement.ownerId }), h('b', null, owner?.name ?? requirement.ownerId))),
               h('span', { className: 'it' }, '设计 ', designer ? h('span', { className: 'assignee' }, h(Avatar, { name: designer.name }), h('b', null, designer.name)) : h('span', { className: 'muted' }, requirement.designStatus === 'not_needed' ? '无需设计' : '未认领')),
@@ -6971,7 +7098,6 @@ window.__ModuleLoader__.load({
             ),
           ),
           h('div', { className: 'page-actions' },
-            h('button', { className: 'btn btn-sm btn-ghost', type: 'button', onClick: onBack }, h(DesignIcon, { name: 'chev-left' }), '返回迭代'),
             canvasReady ? h('button', {
               className: 'btn btn-sm btn-ghost',
               type: 'button',
@@ -7175,7 +7301,14 @@ window.__ModuleLoader__.load({
 
     function MyWorkbenchView({ state, filter, onFilter, onOpenRequirement, onOpenSession, onOpenDesign }) {
       const uid = state.currentUser.id
+      const projectId = state.project?.id ?? state.currentProjectId ?? null
+      // 我的工作台跟着当前项目走，切项目后只看这个项目里的待办。
+      const projectIterations = new Set((state.iterations ?? [])
+        .filter(iteration => projectId === null || iteration.projectId === projectId)
+        .map(iteration => iteration.id))
       const mine = (state.requirements ?? []).filter(requirement =>
+        projectIterations.has(requirement.iterationId)
+      ).filter(requirement =>
         requirement.ownerId === uid ||
         requirement.designerId === uid ||
         (requirement.reviewerIds ?? []).includes(uid) ||
@@ -7215,11 +7348,11 @@ window.__ModuleLoader__.load({
         if ((requirement.devTasks ?? []).some(task => task.assigneeId === uid)) roles.push('开发')
         return roles.length === 0 ? ['关注'] : roles
       }
-      return h('div', { className: 'page', style: { maxWidth: '1180px' } },
+      return h('div', { className: 'page' },
         h('div', { className: 'page-head' },
           h('div', { className: 'ttl-block' },
             h('h1', { className: 'page-title' }, '我的工作台'),
-            h('div', { className: 'page-sub' }, `${state.currentUser.name} · ${mine.length} 项 · ${todo.length} 待处理 · ${active.length} 进行中`),
+            h('div', { className: 'page-sub' }, `${state.project?.name ?? '当前项目'} · ${state.currentUser.name} · ${mine.length} 项 · ${todo.length} 待处理 · ${active.length} 进行中`),
           ),
         ),
         h('p', { className: 'filter-note' }, '需求、设计任务、待办合并为一份清单，按需求去重——一眼看清「这条需求里我是谁、要做什么」。'),
@@ -7336,7 +7469,7 @@ window.__ModuleLoader__.load({
         if (/change|update|moved/.test(kind)) return { name: 'edit', color: 'var(--amber)' }
         return { name: 'bell', color: 'var(--text-2)' }
       }
-      return h('div', { className: 'page', style: { maxWidth: '920px' } },
+      return h('div', { className: 'page' },
         h('div', { className: 'page-head' },
           h('div', { className: 'ttl-block' },
             h('h1', { className: 'page-title' }, '通知中心'),
@@ -7395,7 +7528,13 @@ window.__ModuleLoader__.load({
     function WorkbenchPage({ ctx, auth, kit }) {
       const workbench = useWorkbench()
       const [view, setView] = useState('iterations')
+      // 记住迭代区最后停在哪一层（列表 / 迭代详情 / 需求），从别的导航切回来时恢复。
+      const [workspaceView, setWorkspaceView] = useState('iterations')
       const [dockOpen, setDockOpen] = useState(true)
+      // 需求详情里「会话」和「画布」是两层：画布关闭时看需求总览 + 会话坞。
+      const [canvasOpen, setCanvasOpen] = useState(false)
+      const [shellNode, setShellNode] = useState(null)
+      const [flushLeft, setFlushLeft] = useState(false)
       const [selectedRequirementId, setSelectedRequirementId] = useState(null)
       const [iterationQuery, setIterationQuery] = useState('')
       const [iterationFilter, setIterationFilter] = useState('all')
@@ -7408,6 +7547,8 @@ window.__ModuleLoader__.load({
       const [adminOpen, setAdminOpen] = useState(false)
       const [iterationOpen, setIterationOpen] = useState(false)
       const [iterationManageOpen, setIterationManageOpen] = useState(false)
+      const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+      const [projectDialog, setProjectDialog] = useState(null)
       const [sessionFor, setSessionFor] = useState(null)
       const [toast, setToast] = useState(null)
       const [retrying, setRetrying] = useState('')
@@ -7421,12 +7562,50 @@ window.__ModuleLoader__.load({
       const dockSessionId = dockRecord?.sessionId ?? ''
       const dockWidthRef = useRef(dockWidth)
       const dockDownAt = useRef(0)
+      const projectMenuRef = useRef(null)
 
       useEffect(() => {
         if (toast === null || toast.isError) return undefined
         const timer = setTimeout(() => setToast(null), 3600)
         return () => clearTimeout(timer)
       }, [toast])
+
+      // 项目下拉：点外面或按 Esc 收起，不用额外铺一层遮罩挡住页面。
+      useEffect(() => {
+        if (!projectMenuOpen) return undefined
+        const onPointerDown = (event) => {
+          if (projectMenuRef.current !== null && !projectMenuRef.current.contains(event.target)) {
+            setProjectMenuOpen(false)
+          }
+        }
+        const onKeyDown = (event) => {
+          if (event.key === 'Escape') setProjectMenuOpen(false)
+        }
+        document.addEventListener('pointerdown', onPointerDown)
+        document.addEventListener('keydown', onKeyDown)
+        return () => {
+          document.removeEventListener('pointerdown', onPointerDown)
+          document.removeEventListener('keydown', onKeyDown)
+        }
+      }, [projectMenuOpen])
+
+      // DSH 侧栏收起后，插件会贴到窗口左上角；macOS 的红绿灯会盖住项目入口。
+      // 以插件根节点的左边界判断是否贴边，只有桌面端才让出这一块。
+      useEffect(() => {
+        if (shellNode === null) return undefined
+        const measure = () => {
+          const left = shellNode.getBoundingClientRect().left
+          setFlushLeft(window.location.protocol === 'dsh-app:' && left < 40)
+        }
+        measure()
+        const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null
+        observer?.observe(shellNode)
+        window.addEventListener('resize', measure)
+        return () => {
+          observer?.disconnect()
+          window.removeEventListener('resize', measure)
+        }
+      }, [shellNode])
 
       useEffect(() => { dockWidthRef.current = dockWidth }, [dockWidth])
 
@@ -7500,11 +7679,15 @@ window.__ModuleLoader__.load({
         const target = (state.requirements ?? []).find(item => item.id === requirementId)
         if (!target) { showToast('这条需求不在当前可见范围', true); return }
         try {
-          if (target.iterationId !== state.iteration.id) {
+          if (state.iteration === null || target.iterationId !== state.iteration.id) {
             await api(`iterations/${encodeURIComponent(target.iterationId)}/select`, { method: 'POST', body: '{}' })
             await workbench.reload()
           }
           setSelectedRequirementId(requirementId)
+          setWorkspaceView('requirement')
+          // 点需求卡先进「需求总述」，会话和画布都要再点一层才进。
+          setDockOpen(false)
+          setCanvasOpen(false)
           setView('requirement')
         } catch (reason) {
           showToast(reason instanceof Error ? reason.message : String(reason), true)
@@ -7514,19 +7697,56 @@ window.__ModuleLoader__.load({
       const openIteration = useCallback(async (iterationId) => {
         if (state === null) return
         try {
-          if (iterationId !== state.iteration.id) {
+          if (state.iteration === null || iterationId !== state.iteration.id) {
             await api(`iterations/${encodeURIComponent(iterationId)}/select`, { method: 'POST', body: '{}' })
             await workbench.reload()
           }
+          setWorkspaceView('iteration')
+          setCanvasOpen(false)
           setView('iteration')
         } catch (reason) {
           showToast(reason instanceof Error ? reason.message : String(reason), true)
         }
       }, [state, showToast, workbench])
 
+      const switchProject = useCallback(async (projectId) => {
+        if (state === null) return
+        setProjectMenuOpen(false)
+        if (projectId === (state.project?.id ?? state.currentProjectId)) return
+        const target = (state.projects ?? []).find(project => project.id === projectId)
+        try {
+          await api(`projects/${encodeURIComponent(projectId)}/select`, { method: 'POST', body: '{}' })
+          // 切项目等于换一棵树：先离开详情页，再清掉选中需求、回到迭代列表。
+          setView('iterations')
+          setWorkspaceView('iterations')
+          setSelectedRequirementId(null)
+          setCanvasOpen(false)
+          setDockOpen(true)
+          await workbench.reload()
+          showToast(`已切换到项目「${target?.name ?? projectId}」`, false)
+        } catch (reason) {
+          showToast(reason instanceof Error ? reason.message : String(reason), true)
+        }
+      }, [state, showToast, workbench])
+
+      const handleProjectSubmitted = useCallback(async (project, editing) => {
+        if (!editing) {
+          // 新建项目后服务端已经把当前项目切过去：直接落到新项目的迭代列表。
+          setView('iterations')
+          setWorkspaceView('iterations')
+          setSelectedRequirementId(null)
+          setCanvasOpen(false)
+          setDockOpen(true)
+        }
+        await workbench.reload()
+      }, [workbench])
+
       const handleCreated = useCallback(async (requirement) => {
         setDialogOpen(false)
         setSelectedRequirementId(requirement.id)
+        setWorkspaceView('requirement')
+        setDockOpen(false)
+        setCanvasOpen(false)
         await workbench.reload()
         setView('requirement')
       }, [workbench])
@@ -7550,10 +7770,46 @@ window.__ModuleLoader__.load({
       const handleSessionCreated = async (requirement) => {
         setSessionFor(null)
         setSelectedRequirementId(requirement.id)
+        setWorkspaceView('requirement')
         // 建完会话直接进画布：需求页的主按钮就是这个意思，不用再点一次。
         setDockOpen(true)
+        setCanvasOpen(true)
         await workbench.reload()
       }
+
+      // 面包屑的四个层级：迭代列表 → 迭代详情 → 需求总览 → 会话 / 画布。
+      const goIterationList = useCallback(() => {
+        setView('iterations')
+        setWorkspaceView('iterations')
+        setCanvasOpen(false)
+      }, [])
+
+      const goIterationDetail = useCallback(() => {
+        setView('iteration')
+        setWorkspaceView('iteration')
+        setCanvasOpen(false)
+      }, [])
+
+      const goRequirementOverview = useCallback(() => {
+        setView('requirement')
+        setWorkspaceView('requirement')
+        setCanvasOpen(false)
+        setDockOpen(false)
+      }, [])
+
+      const goRequirementSession = useCallback(() => {
+        setView('requirement')
+        setWorkspaceView('requirement')
+        setCanvasOpen(false)
+        setDockOpen(true)
+      }, [])
+
+      const goRequirementCanvas = useCallback(() => {
+        setView('requirement')
+        setWorkspaceView('requirement')
+        setDockOpen(true)
+        setCanvasOpen(true)
+      }, [])
 
       if (workbench.loading && state === null) {
         return h('div', { className: 'dsh-wb-design' },
@@ -7588,7 +7844,14 @@ window.__ModuleLoader__.load({
         )
       }
 
-      const requirements = state.requirements.filter(item => item.iterationId === state.iteration.id)
+      // 导航是 项目 → 迭代 → 需求：当前项目下没有迭代时 state.iteration 为空，页面仍要能正常渲染。
+      const currentProject = state.project ?? (state.projects ?? []).find(project => project.id === state.currentProjectId) ?? null
+      const activeIteration = state.iteration ?? null
+      const requirements = activeIteration === null
+        ? []
+        : state.requirements.filter(item => item.iterationId === activeIteration.id)
+      const projectIterationCount = (projectId) => (state.iterations ?? [])
+        .filter(iteration => iteration.projectId === projectId && iteration.archived !== true).length
       // 新建迭代是负责人/管理员的动作；新建需求是产品/管理员的动作。
       // 负责人只做评审、排期、指派和封板，不再显示「新建需求」。
       const roles = state.currentUser.roles ?? []
@@ -7607,13 +7870,58 @@ window.__ModuleLoader__.load({
       const onNav = (key) => {
         if (key === 'skills') { setView('skills'); return }
         if (key === 'settings') { setView('settings'); return }
-        if (key === 'iterations') { setView('iterations'); return }
+        if (key === 'iterations') {
+          // 从「我的工作台」等顶层页切回来时，回到迭代区上次待的位置，不总是打回列表。
+          // 想回扁平列表就点面包屑根节点。
+          if (workspaceView === 'requirement' && selectedRequirement !== null) { setView('requirement'); return }
+          if (workspaceView !== 'iterations' && activeIteration !== null) { setView('iteration'); return }
+          setView('iterations')
+          return
+        }
         if (key === 'my') { setView('my'); return }
         if (key === 'notifications') { setView('notifications'); return }
       }
       const navActive = view === 'iteration' || view === 'requirement' ? 'iterations' : view
-      // 只要会话坞里有「我自己的会话」，中栏就切成工作画布：产品看原型，设计师看设计稿。
-      const stageActive = view === 'requirement' && selectedRequirement !== null && dockOpen && dockSessionId !== ''
+      // 只要会话坞里有「我自己的会话」且进了画布层，中栏就切成工作画布：产品看原型，设计师看设计稿。
+      const stageActive = view === 'requirement' && selectedRequirement !== null && canvasOpen && dockOpen && dockSessionId !== ''
+      const iterationCrumbs = [
+        { key: 'list', label: '迭代列表', onClick: goIterationList },
+        activeIteration === null
+          ? { key: 'iter', label: '迭代未选择' }
+          : { key: 'iter', label: activeIteration.code, mono: true },
+      ]
+      const dockLayer = view === 'requirement' && selectedRequirement !== null && dockOpen
+      const requirementCrumbs = [
+        { key: 'list', label: '迭代列表', onClick: goIterationList },
+        activeIteration === null
+          ? { key: 'iter', label: '迭代未归属' }
+          : { key: 'iter', label: activeIteration.code, mono: true, onClick: goIterationDetail },
+        {
+          key: 'req',
+          label: selectedRequirement?.code ?? '需求',
+          mono: true,
+          onClick: dockLayer ? goRequirementOverview : undefined,
+        },
+      ]
+      if (dockLayer) {
+        requirementCrumbs.push({ key: 'session', label: '会话', onClick: stageActive ? goRequirementSession : undefined })
+      }
+      if (stageActive) {
+        requirementCrumbs.push({ key: 'canvas', label: '画布' })
+      }
+      // 顶层页只有当前层，保证这条导航栏在所有页面都占同一个位置。
+      const sectionCrumbs = {
+        iterations: { key: 'list', label: '迭代列表' },
+        my: { key: 'my', label: '我的工作台' },
+        skills: { key: 'skills', label: '技能库' },
+        settings: { key: 'settings', label: '设置' },
+        notifications: { key: 'notifications', label: '通知' },
+      }
+      const currentCrumbs = view === 'iteration'
+        ? iterationCrumbs
+        : view === 'requirement'
+          ? requirementCrumbs
+          : [sectionCrumbs[view] ?? sectionCrumbs.iterations]
       // 会话坞里是哪类会话，中栏就画哪类产物；需求/评审会话回到产品原型。
       const stageKind = dockRecord?.type === 'design'
         ? 'design'
@@ -7629,20 +7937,70 @@ window.__ModuleLoader__.load({
             ctx,
             state,
             requirement: selectedRequirement,
-            onBack: () => setView('iteration'),
             onOpenSession: (sessionId) => openSession(sessionId),
             onOpenDesign: (requirement) => openSessionFor(requirement, 'design'),
             onOpenTest: (requirement) => openSessionFor(requirement, 'test'),
-            onOpenCanvas: () => setDockOpen(true),
+            onOpenCanvas: () => { setDockOpen(true); setCanvasOpen(true) },
             canvasReady: dockSessionId !== '',
             onNewSession: (requirement) => setSessionFor({ requirement, stay: true }),
           })
 
-      return h('div', { className: 'dsh-wb-design' },
+      return h('div', { className: `dsh-wb-design${flushLeft ? ' is-flush-left' : ''}`, ref: setShellNode },
         h('div', { className: 'shell' },
           h('header', { className: 'topbar' },
             h('div', { className: 'plugnac' },
-              h('span', { className: 'plugnac-title' }, h(DesignIcon, { name: 'workbench' }), '研发工作台'),
+              h('div', { className: 'plugnac-project', ref: projectMenuRef },
+                h('button', {
+                  className: `plugnac-title plugnac-project-btn${projectMenuOpen ? ' is-open' : ''}`,
+                  type: 'button',
+                  title: '切换项目',
+                  'aria-haspopup': 'menu',
+                  'aria-expanded': projectMenuOpen,
+                  onClick: () => setProjectMenuOpen(value => !value),
+                },
+                  h(DesignIcon, { name: 'folder' }),
+                  h('span', { className: 'plugnac-project-name' }, currentProject?.name ?? '未选择项目'),
+                  h(DesignIcon, { name: 'chev-down', className: 'chev' }),
+                ),
+                projectMenuOpen
+                  ? h('div', { className: 'dsh-wb-project-menu', role: 'menu', 'aria-label': '切换项目' },
+                      h('div', { className: 'dsh-wb-project-menu-head' },
+                        h('span', null, '项目'),
+                        h('span', null, `共 ${(state.projects ?? []).length} 个`),
+                      ),
+                      (state.projects ?? []).length === 0
+                        ? h('div', { className: 'dsh-wb-project-menu-empty' }, '还没有项目')
+                        : (state.projects ?? []).map(project => h('button', {
+                            key: project.id,
+                            className: `dsh-wb-project-item${project.id === state.currentProjectId ? ' is-current' : ''}`,
+                            type: 'button',
+                            role: 'menuitemradio',
+                            'aria-checked': project.id === state.currentProjectId,
+                            onClick: () => { void switchProject(project.id) },
+                          },
+                            h('span', { className: 'dsh-wb-project-check' },
+                              project.id === state.currentProjectId ? h(DesignIcon, { name: 'check' }) : null),
+                            h('span', { className: 'dsh-wb-project-label' }, project.name),
+                            h('span', { className: 'dsh-wb-project-count' }, `${projectIterationCount(project.id)} 个迭代`),
+                          )),
+                      canCreateIteration ? h('div', { className: 'dsh-wb-project-menu-sep' }) : null,
+                      canCreateIteration
+                        ? h('button', {
+                            className: 'dsh-wb-project-action',
+                            type: 'button',
+                            onClick: () => { setProjectMenuOpen(false); setProjectDialog({ project: null }) },
+                          }, h(DesignIcon, { name: 'plus' }), '新建项目')
+                        : null,
+                      canCreateIteration && currentProject
+                        ? h('button', {
+                            className: 'dsh-wb-project-action',
+                            type: 'button',
+                            onClick: () => { setProjectMenuOpen(false); setProjectDialog({ project: currentProject }) },
+                          }, h(DesignIcon, { name: 'settings' }), '重命名当前项目')
+                        : null,
+                    )
+                  : null,
+              ),
               h('span', { className: 'plugnac-sep' }),
               navItems.map(([key, label]) => h('a', {
                 key,
@@ -7662,7 +8020,10 @@ window.__ModuleLoader__.load({
                   type: 'button',
                   title: dockOpen ? '收起会话坞' : '打开会话坞',
                   'aria-pressed': dockOpen,
-                  onClick: () => setDockOpen(value => !value),
+                  onClick: () => {
+                    // 关会话坞等于退回需求总览层；再打开回到会话层，不会直接跳回画布。
+                    if (dockOpen) { setDockOpen(false); setCanvasOpen(false) } else { setDockOpen(true) }
+                  },
                 },
                   h(DesignIcon, { name: 'command' }),
                   '会话',
@@ -7691,6 +8052,8 @@ window.__ModuleLoader__.load({
               h(DesignIcon, { name: 'chev-down', className: 'chev' }),
             ),
           ),
+          // 页面层级固定在顶栏下这一条，跨页面不换位置。
+          h('div', { className: 'dsh-wb-contextbar' }, h(Breadcrumbs, { items: currentCrumbs })),
           h('div', { className: 'dsh-wb-shell-body' },
             h('div', { className: stageActive ? 'scroll is-stage' : 'scroll' },
             workbench.error !== null && workbench.error !== ''
@@ -7700,15 +8063,14 @@ window.__ModuleLoader__.load({
               : null,
             stageActive
               ? h('div', { className: 'dsh-wb-stage' },
-                  // 不再单独做一条阶段栏：画布自己的工具栏就是这一屏的顶栏。
                   h('div', { className: 'dsh-wb-stage-body' },
                     stageKind === 'design'
-                      ? h(DesignTab, { sid: dockSessionId, ctx, onBack: () => setDockOpen(false) })
+                      ? h(DesignTab, { sid: dockSessionId, ctx, onOpenOverview: () => setCanvasOpen(false) })
                       : stageKind === 'dev'
                         ? h(CodeTab, { sid: dockSessionId, ctx })
                         : stageKind === 'test'
                           ? h(TestTab, { sid: dockSessionId, ctx })
-                          : h(RequirementTab, { sid: dockSessionId, ctx, briefHidden: true, onBack: () => setDockOpen(false) }),
+                          : h(RequirementTab, { sid: dockSessionId, ctx, briefHidden: true }),
                   ),
                 )
               : view === 'iterations'
@@ -7725,10 +8087,16 @@ window.__ModuleLoader__.load({
                   canCreate: canCreateIteration,
                 })
               : view === 'iteration'
-                ? h(IterationDetailView, {
+                ? activeIteration === null
+                  ? h('div', { className: 'page' },
+                      h('div', { className: 'empty-page' },
+                        h(DesignIcon, { name: 'iter', size: 28 }),
+                        h('b', null, '这个项目还没有迭代'),
+                        h('span', null, canCreateIteration ? '点上方项目菜单回到迭代列表，再新建迭代。' : '等负责人创建迭代后再来。'),
+                      ))
+                  : h(IterationDetailView, {
                     state,
                     requirements,
-                    onBack: () => setView('iterations'),
                     onCreateRequirement: () => setDialogOpen(true),
                     onOpenSettings: () => setIterationManageOpen(true),
                     canCreate: canCreateRequirement,
@@ -7790,6 +8158,12 @@ window.__ModuleLoader__.load({
           state,
           onClose: () => setDialogOpen(false),
           onCreated: handleCreated,
+          onToast: showToast,
+        }) : null,
+        projectDialog !== null ? h(ProjectDialog, {
+          project: projectDialog.project,
+          onClose: () => setProjectDialog(null),
+          onSubmit: (project, editing) => { void handleProjectSubmitted(project, editing) },
           onToast: showToast,
         }) : null,
         iterationOpen ? h(CreateIterationDialog, {
@@ -9087,7 +9461,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function RequirementTab({ sid, ctx, inputActions, briefHidden = false, onBack = null }) {
+    function RequirementTab({ sid, ctx, inputActions, briefHidden = false }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -9118,10 +9492,10 @@ window.__ModuleLoader__.load({
         )
       } else if (requirement === null) {
         // 这个会话还没有关联需求：仍然给画布的首页。
-        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: '', onRefresh: () => { void reload() }, onBack })
+        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: '', onRefresh: () => { void reload() } })
       } else if (hasPrototype) {
         body = canEditPrototype
-          ? h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: prototypePath, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id, onBack })
+          ? h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: prototypePath, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
           : h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
       } else if (!canEditPrototype) {
         body = h(ReadonlyPreviewPanel, { requirement, kind: 'prototype', sid, ctx, ownerHint: ownerCanEdit })
@@ -9134,7 +9508,7 @@ window.__ModuleLoader__.load({
         )
       } else if (blank.path !== '') {
         // 新建需求后直接开一张空白画布，模型出第一屏时画布会切到真正的原型目录。
-        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id, onBack })
+        body = h(DesignStudioCanvas, { sid, ctx, inputActions, targetPath: blank.path, onRefresh: () => { void reload() }, kind: 'prototype', currentWorkId: requirement.id })
       } else if (blank.error !== '') {
         body = h('div', { className: 'dsh-wb-design-msg' },
           h('b', null, '空白画布没有创建'),
@@ -9415,7 +9789,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function DesignTab({ sid, ctx, inputActions, briefHidden = false, onBack = null }) {
+    function DesignTab({ sid, ctx, inputActions, briefHidden = false, onOpenOverview = null }) {
       const { requirement, loading, error, reload } = useRequirementForSession(sid)
       const { state } = useWorkbench()
       const actorId = state?.currentUser?.id ?? ''
@@ -9494,7 +9868,7 @@ window.__ModuleLoader__.load({
         body = h(DeliveredGallery, {
           requirement,
           reload: () => { void reload() },
-          onOpenRequirement: () => { if (typeof onBack === 'function') onBack() },
+          onOpenRequirement: () => { if (typeof onOpenOverview === 'function') onOpenOverview() },
         })
       } else if (designFiles.length === 0 && blank.path !== '') {
         // 设计会话和需求会话同一套逻辑：没有设计稿时先开一张空白画布。
@@ -9506,7 +9880,6 @@ window.__ModuleLoader__.load({
           kind: 'design',
           currentWorkId: requirement.id,
           onRefresh: () => { void reload() },
-          onBack,
         })
       } else if (designFiles.length === 0 && blank.error !== '') {
         body = h('div', { className: 'dsh-wb-design-msg' },
@@ -9525,7 +9898,6 @@ window.__ModuleLoader__.load({
           kind: 'design',
           currentWorkId: requirement.id,
           onRefresh: () => { void reload() },
-          onBack,
         })
       }
 

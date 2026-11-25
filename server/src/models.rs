@@ -75,6 +75,8 @@ pub struct User {
     pub department_ids: Vec<String>,
     #[serde(default)]
     pub current_iteration_id: Option<String>,
+    #[serde(default)]
+    pub current_project_id: Option<String>,
 }
 
 impl User {
@@ -137,8 +139,25 @@ impl User {
                 "folderConfigured": self.folder_configured,
             },
             "currentIterationId": self.current_iteration_id,
+            "currentProjectId": self.current_project_id,
         })
     }
+}
+
+/// 项目是迭代的上层分组：一个项目下可以有多个迭代，切换项目即切换迭代范围。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub owner_id: Option<String>,
+    #[serde(default)]
+    pub archived: bool,
+    #[serde(default)]
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +198,8 @@ pub struct Platform {
 #[serde(rename_all = "camelCase")]
 pub struct Iteration {
     pub id: String,
+    #[serde(default)]
+    pub project_id: Option<String>,
     pub code: String,
     pub short_code: String,
     pub name: String,

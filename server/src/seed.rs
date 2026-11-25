@@ -1,6 +1,24 @@
 use crate::models::*;
 use serde_json::json;
 
+pub const DEFAULT_PROJECT_ID: &str = "project-default";
+
+/// 旧数据库没有项目时也用它兜底：所有已有迭代自动归到「研发项目」。
+pub fn default_project() -> Project {
+    Project {
+        id: DEFAULT_PROJECT_ID.to_string(),
+        name: "研发项目".to_string(),
+        description: "默认项目，可在项目菜单里重命名。".to_string(),
+        owner_id: Some("zhangsan".to_string()),
+        archived: false,
+        created_at: "2026-11-01T08:00:00.000Z".to_string(),
+    }
+}
+
+pub fn projects() -> Vec<Project> {
+    vec![default_project()]
+}
+
 pub fn users() -> Vec<User> {
     let ids = [
         ("zhangsan", "张三", vec![ROLE_LEAD], vec![]),
@@ -45,6 +63,7 @@ pub fn users() -> Vec<User> {
                 title: None,
                 department_ids: Vec::new(),
                 current_iteration_id: Some("iteration-2026-s11".to_string()),
+                current_project_id: Some(DEFAULT_PROJECT_ID.to_string()),
             }
         })
         .collect()
@@ -115,6 +134,7 @@ pub fn iterations() -> Vec<Iteration> {
     vec![
         Iteration {
             id: "iteration-2026-s11".into(),
+            project_id: Some(DEFAULT_PROJECT_ID.into()),
             code: "2026-S11".into(),
             short_code: "S11".into(),
             name: "双十一会员增长".into(),
@@ -129,6 +149,7 @@ pub fn iterations() -> Vec<Iteration> {
         },
         Iteration {
             id: "iteration-2026-s12".into(),
+            project_id: Some(DEFAULT_PROJECT_ID.into()),
             code: "2026-S12".into(),
             short_code: "S12".into(),
             name: "双十二会员增长".into(),

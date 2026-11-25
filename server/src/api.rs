@@ -754,20 +754,23 @@ async fn get_state(
         .ok_or_else(|| ApiError::unauthorized("账号不存在"))?;
     let mut iterations = snapshot.iterations.clone();
     iterations.sort_by(|a, b| b.code.cmp(&a.code));
-    let current = snapshot
-        .iterations
+    let project = snapshot.active_project(&actor).cloned();
+    let current = snapshot.active_iteration(&actor);
+    let projects = snapshot
+        .projects
         .iter()
-        .find(|iteration| {
-            Some(&iteration.id) == actor.current_iteration_id.as_ref() && !iteration.archived
-        })
-        .or_else(|| snapshot.iterations.iter().find(|iteration| !iteration.archived))
-        .or_else(|| snapshot.iterations.first());
+        .filter(|project| !project.archived)
+        .cloned()
+        .collect::<Vec<_>>();
     let mut requirements = snapshot.requirements.clone();
     requirements.sort_by(|a, b| a.code.cmp(&b.code));
     Ok(Json(json!({
-        "version": 4,
+        "version": 5,
         "currentUser": actor.private_json(),
         "users": snapshot.users.iter().map(|user| user.public_json()).collect::<Vec<_>>(),
+        "project": project,
+        "projects": projects,
+        "currentProjectId": project.as_ref().map(|project| project.id.clone()),
         "iteration": current,
         "iterations": iterations,
         "currentIterationId": current.map(|iteration| iteration.id.clone()),
@@ -799,6 +802,47 @@ async fn requirement_by_session(
         })
         .cloned();
     Ok(Json(json!({ "requirement": requirement })))
+}
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
+async fn create_project(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Json(input): Json<domain::ProjectInput>,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let project = mutate(&state, |snapshot| {
+        domain::create_project(snapshot, &actor, input)
+    })
+    .await?;
+    Ok((StatusCode::CREATED, Json(json!({ "project": project }))))
+}
+
+async fn update_project(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+    Json(input): Json<domain::ProjectInput>,
+) -> Result<Json<Value>, ApiError> {
+    let project = mutate(&state, |snapshot| {
+        domain::update_project(snapshot, &actor, &id, input)
+    })
+    .await?;
+    Ok(Json(json!({ "project": project })))
+}
+
+async fn select_project(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let project = mutate(&state, |snapshot| {
+        domain::select_project(snapshot, &actor, &id)
+    })
+    .await?;
+    Ok(Json(json!({ "project": project })))
 }
 
 // ---------------------------------------------------------------------------
@@ -2029,6 +2073,7 @@ async fn admin_dingtalk_sync(
                     title: org.title.clone(),
                     department_ids: org.department_ids.clone(),
                     current_iteration_id: None,
+                    current_project_id: None,
                 });
                 created += 1;
             }
@@ -2269,6 +2314,9 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(auth_logout))
         .route("/onboarding/complete", post(onboarding_complete))
         .route("/state", get(get_state))
+        .route("/projects", post(create_project))
+        .route("/projects/{id}", post(update_project))
+        .route("/projects/{id}/select", post(select_project))
         .route("/iterations", post(create_iteration))
         .route("/iterations/{id}", post(update_iteration))
         .route("/iterations/{id}/select", post(select_iteration))

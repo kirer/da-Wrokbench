@@ -11,6 +11,8 @@ pub struct Snapshot {
     pub users: Vec<User>,
     pub groups: Vec<PlatformGroup>,
     pub platforms: Vec<Platform>,
+    #[serde(default)]
+    pub projects: Vec<Project>,
     pub iterations: Vec<Iteration>,
     pub requirements: Vec<Requirement>,
     pub skills: Vec<Skill>,
@@ -42,12 +44,74 @@ impl Snapshot {
         self.iterations.iter().find(|iteration| iteration.id == id)
     }
 
+    pub fn project(&self, id: &str) -> Option<&Project> {
+        self.projects.iter().find(|project| project.id == id)
+    }
+
+    pub fn active_project(&self, actor: &User) -> Option<&Project> {
+        let selected = actor
+            .current_project_id
+            .as_deref()
+            .and_then(|id| self.project(id))
+            .filter(|project| !project.archived);
+        selected
+            .or_else(|| self.projects.iter().find(|project| !project.archived))
+            .or_else(|| self.projects.first())
+    }
+
     pub fn active_iteration(&self, actor: &User) -> Option<&Iteration> {
+        let project = self.active_project(actor);
+        let in_project = |iteration: &&Iteration| {
+            if iteration.archived {
+                return false;
+            }
+            match project {
+                Some(project) => iteration.project_id.as_deref() == Some(project.id.as_str()),
+                None => true,
+            }
+        };
         let selected = actor
             .current_iteration_id
             .as_deref()
-            .and_then(|id| self.iteration(id));
-        selected.or_else(|| self.iterations.iter().find(|item| !item.archived))
+            .and_then(|id| self.iteration(id))
+            .filter(|iteration| in_project(iteration));
+        // 只在当前项目里兜底：项目还没有迭代时就是没有当前迭代，不能落到别的项目去。
+        selected.or_else(|| {
+            self.iterations
+                .iter()
+                .filter(in_project)
+                .max_by(|left, right| left.code.cmp(&right.code))
+        })
+    }
+
+    /// 老数据库没有 projects 表数据：内存里补一个默认项目，把没有归属的迭代挂上去。
+    /// 下一次 save_snapshot 会把这个归属写回数据库。
+    pub fn ensure_projects(&mut self) {
+        if self.projects.is_empty() {
+            self.projects.push(seed::default_project());
+        }
+        let ids: Vec<String> = self.projects.iter().map(|project| project.id.clone()).collect();
+        let fallback = self.projects[0].id.clone();
+        for iteration in &mut self.iterations {
+            let known = iteration
+                .project_id
+                .as_deref()
+                .map(|id| ids.iter().any(|known| known == id))
+                .unwrap_or(false);
+            if !known {
+                iteration.project_id = Some(fallback.clone());
+            }
+        }
+        for user in &mut self.users {
+            let known = user
+                .current_project_id
+                .as_deref()
+                .map(|id| ids.iter().any(|known| known == id))
+                .unwrap_or(false);
+            if !known {
+                user.current_project_id = Some(fallback.clone());
+            }
+        }
     }
 
     pub fn requirement_index(&self, reference: &str) -> Option<usize> {
@@ -181,6 +245,10 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             id TEXT PRIMARY KEY,
             data TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            data TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS iterations (
             id TEXT PRIMARY KEY,
             data TEXT NOT NULL
@@ -233,6 +301,7 @@ pub fn seed_snapshot() -> Snapshot {
         users: seed::users(),
         groups: seed::platform_groups(),
         platforms: seed::platforms(),
+        projects: seed::projects(),
         iterations: seed::iterations(),
         requirements: seed::requirements(),
         skills: seed::skills(),
@@ -338,10 +407,11 @@ fn load_rows<T: DeserializeOwned>(conn: &Connection, table: &str) -> rusqlite::R
 }
 
 pub fn load_snapshot(conn: &Connection) -> rusqlite::Result<Snapshot> {
-    Ok(Snapshot {
+    let mut snapshot = Snapshot {
         users: load_rows(conn, "users")?,
         groups: load_rows(conn, "platform_groups")?,
         platforms: load_rows(conn, "platforms")?,
+        projects: load_rows(conn, "projects")?,
         iterations: load_rows(conn, "iterations")?,
         requirements: load_rows(conn, "requirements")?,
         skills: load_rows(conn, "skills")?,
@@ -350,7 +420,9 @@ pub fn load_snapshot(conn: &Connection) -> rusqlite::Result<Snapshot> {
         pending_events: Vec::new(),
         pending_notifications: Vec::new(),
         artifact_contents: load_rows(conn, "artifact_contents")?,
-    })
+    };
+    snapshot.ensure_projects();
+    Ok(snapshot)
 }
 
 pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Result<()> {
@@ -376,6 +448,14 @@ pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Re
             "INSERT INTO platforms(id, data) VALUES(?1, ?2)
              ON CONFLICT(id) DO UPDATE SET data = excluded.data",
             params![platform.id, data],
+        )?;
+    }
+    for project in &snapshot.projects {
+        let data = serde_json::to_string(project).unwrap_or_default();
+        conn.execute(
+            "INSERT INTO projects(id, data) VALUES(?1, ?2)
+             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+            params![project.id, data],
         )?;
     }
     for iteration in &snapshot.iterations {

@@ -304,6 +304,139 @@ fn check_not_creating(requirement: &Requirement, action: &str) -> Result<(), Api
 }
 
 // ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectInput {
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+pub fn create_project(
+    snap: &mut Snapshot,
+    actor: &User,
+    input: ProjectInput,
+) -> Result<Project, ApiError> {
+    require_plan(actor, "创建项目的")?;
+    let name = input.name.unwrap_or_default().trim().to_string();
+    if name.is_empty() {
+        return Err(ApiError::bad("项目名称不能为空"));
+    }
+    if name.chars().count() > 40 {
+        return Err(ApiError::bad("项目名称长度不能超过 40"));
+    }
+    if snap
+        .projects
+        .iter()
+        .any(|project| !project.archived && project.name.eq_ignore_ascii_case(&name))
+    {
+        return Err(ApiError::conflict(format!("项目「{name}」已存在")));
+    }
+    let project = Project {
+        id: format!("project-{}", uuid::Uuid::new_v4()),
+        name,
+        description: input
+            .description
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+        owner_id: Some(actor.id.clone()),
+        archived: false,
+        created_at: crate::now_iso(),
+    };
+    snap.projects.push(project.clone());
+    if let Some(user) = snap.users.iter_mut().find(|user| user.id == actor.id) {
+        user.current_project_id = Some(project.id.clone());
+        user.current_iteration_id = None;
+    }
+    snap.push_event(
+        Some(&actor.id),
+        "project.created",
+        None,
+        Some(&project.id),
+        json!({"name": project.name}),
+    );
+    Ok(project)
+}
+
+pub fn update_project(
+    snap: &mut Snapshot,
+    actor: &User,
+    id: &str,
+    input: ProjectInput,
+) -> Result<Project, ApiError> {
+    require_plan(actor, "编辑项目的")?;
+    let index = snap
+        .projects
+        .iter()
+        .position(|project| project.id == id)
+        .ok_or_else(|| ApiError::not_found("项目不存在"))?;
+    if let Some(name) = input.name {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(ApiError::bad("项目名称不能为空"));
+        }
+        if name.chars().count() > 40 {
+            return Err(ApiError::bad("项目名称长度不能超过 40"));
+        }
+        if snap
+            .projects
+            .iter()
+            .any(|project| project.id != id && !project.archived && project.name.eq_ignore_ascii_case(name))
+        {
+            return Err(ApiError::conflict(format!("项目「{name}」已存在")));
+        }
+        snap.projects[index].name = name.to_string();
+    }
+    if let Some(description) = input.description {
+        snap.projects[index].description = description.trim().to_string();
+    }
+    let project = snap.projects[index].clone();
+    snap.push_event(
+        Some(&actor.id),
+        "project.updated",
+        None,
+        Some(&project.id),
+        json!({"name": project.name}),
+    );
+    Ok(project)
+}
+
+/// 切换当前项目：顺手把不属于该项目的当前迭代清掉，避免“项目 A 下选中项目 B 的迭代”。
+pub fn select_project(
+    snap: &mut Snapshot,
+    actor: &User,
+    id: &str,
+) -> Result<Project, ApiError> {
+    let project = snap
+        .projects
+        .iter()
+        .find(|project| project.id == id && !project.archived)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("项目不存在或已归档"))?;
+    // 以快照里的当前用户为准：令牌里的 current_iteration_id 是登录时的旧值。
+    let current_iteration_id = snap
+        .users
+        .iter()
+        .find(|user| user.id == actor.id)
+        .and_then(|user| user.current_iteration_id.clone());
+    let keep_iteration = current_iteration_id
+        .as_deref()
+        .and_then(|id| snap.iterations.iter().find(|iteration| iteration.id == id))
+        .map(|iteration| iteration.project_id.as_deref() == Some(project.id.as_str()))
+        .unwrap_or(false);
+    if let Some(user) = snap.users.iter_mut().find(|user| user.id == actor.id) {
+        user.current_project_id = Some(project.id.clone());
+        if !keep_iteration {
+            user.current_iteration_id = None;
+        }
+    }
+    Ok(project)
+}
+
+// ---------------------------------------------------------------------------
 // Iterations
 // ---------------------------------------------------------------------------
 
@@ -317,6 +450,8 @@ pub struct IterationInput {
     pub start_date: Option<String>,
     pub end_date: Option<String>,
     pub reviewer_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub project_id: Option<String>,
 }
 
 pub fn create_iteration(
@@ -371,8 +506,21 @@ pub fn create_iteration(
     if reviewer_ids.is_empty() {
         reviewer_ids.push(actor.id.clone());
     }
+    // 迭代挂在项目下：默认落在当前项目，也允许显式指定（用于把迭代建到别的项目里）。
+    let project = match input.project_id.as_deref() {
+        Some(id) if !id.trim().is_empty() => snap
+            .project(id)
+            .filter(|project| !project.archived)
+            .cloned()
+            .ok_or_else(|| ApiError::not_found("项目不存在或已归档"))?,
+        _ => snap
+            .active_project(actor)
+            .cloned()
+            .ok_or_else(|| ApiError::conflict("还没有项目，请先创建项目"))?,
+    };
     let iteration = Iteration {
         id: format!("iteration-{}", uuid::Uuid::new_v4()),
+        project_id: Some(project.id.clone()),
         code: code.clone(),
         short_code: unique_short_code(snap, &code),
         name: input
@@ -394,13 +542,14 @@ pub fn create_iteration(
     snap.iterations.push(iteration.clone());
     if let Some(user) = snap.users.iter_mut().find(|user| user.id == actor.id) {
         user.current_iteration_id = Some(iteration.id.clone());
+        user.current_project_id = Some(project.id.clone());
     }
     snap.push_event(
         Some(&actor.id),
         "iteration.created",
         None,
         Some(&iteration.id),
-        json!({"code": iteration.code, "name": iteration.name}),
+        json!({"code": iteration.code, "name": iteration.name, "projectId": project.id}),
     );
     Ok(iteration)
 }
@@ -486,6 +635,9 @@ pub fn select_iteration(
         .ok_or_else(|| ApiError::not_found("迭代不存在或已归档"))?;
     if let Some(user) = snap.users.iter_mut().find(|user| user.id == actor.id) {
         user.current_iteration_id = Some(iteration.id.clone());
+        if iteration.project_id.is_some() {
+            user.current_project_id = iteration.project_id.clone();
+        }
     }
     Ok(iteration)
 }

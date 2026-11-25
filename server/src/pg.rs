@@ -113,8 +113,9 @@ pub async fn load(pool: &Pool) -> Result<(i64, Snapshot), ApiError> {
         .map_err(|error| internal(format!("读取 Postgres 状态失败：{error}")))?;
     let version: i64 = row.get(0);
     let data: Value = row.get(1);
-    let snapshot: Snapshot = serde_json::from_value(data)
+    let mut snapshot: Snapshot = serde_json::from_value(data)
         .map_err(|error| internal(format!("解析 Postgres 状态失败：{error}")))?;
+    snapshot.ensure_projects();
     Ok((version, snapshot))
 }
 
@@ -143,8 +144,9 @@ where
         Some(row) => {
             let version: i64 = row.get(0);
             let data: Value = row.get(1);
-            let snapshot = serde_json::from_value(data)
+            let mut snapshot: Snapshot = serde_json::from_value(data)
                 .map_err(|error| internal(format!("解析 Postgres 状态失败：{error}")))?;
+            snapshot.ensure_projects();
             (version, snapshot)
         }
         None => {
