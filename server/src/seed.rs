@@ -64,6 +64,8 @@ pub fn users() -> Vec<User> {
                 department_ids: Vec::new(),
                 current_iteration_id: Some("iteration-2026-s11".to_string()),
                 current_project_id: Some(DEFAULT_PROJECT_ID.to_string()),
+                disabled_by_admin: false,
+                name_by_admin: false,
             }
         })
         .collect()
@@ -145,6 +147,7 @@ pub fn iterations() -> Vec<Iteration> {
             owner_id: Some("zhangsan".into()),
             reviewer_ids: vec!["zhangsan".into()],
             archived: false,
+            closed_at: None,
             created_at: "2026-11-01T09:00:00.000Z".into(),
         },
         Iteration {
@@ -160,6 +163,7 @@ pub fn iterations() -> Vec<Iteration> {
             owner_id: Some("zhangsan".into()),
             reviewer_ids: vec!["zhangsan".into(), "admin".into()],
             archived: false,
+            closed_at: None,
             created_at: "2026-11-21T08:00:00.000Z".into(),
         },
     ]
@@ -248,6 +252,7 @@ fn dev_task(
         status: status.into(),
         started_at: started_at.map(String::from),
         finished_at: finished_at.map(String::from),
+        estimate_days: None,
         branch: if status == DEV_DONE {
             Some(format!("feature/{platform_id}-s11"))
         } else {
@@ -280,7 +285,12 @@ fn dev_task(
 pub fn requirements() -> Vec<Requirement> {
     let mut out = Vec::new();
 
-    let mut r1 = base_requirement("req-seed-001", "S11-001", "会员积分改版", "iteration-2026-s11");
+    let mut r1 = base_requirement(
+        "req-seed-001",
+        "S11-001",
+        "会员积分改版",
+        "iteration-2026-s11",
+    );
     r1.status = STATUS_IN_PROGRESS.into();
     r1.design_status = DESIGN_DELIVERED.into();
     r1.platform_ids = vec![
@@ -292,12 +302,24 @@ pub fn requirements() -> Vec<Requirement> {
     r1.designer_id = Some("wangwu".into());
     r1.in_scope = true;
     r1.versions = vec![
-        version(1, "初始需求：积分获取、抵扣与过期规则", "2026-11-16T09:20:00.000Z"),
-        version(2, "补充抵扣上限 20%，新增积分明细入口", "2026-11-20T15:10:00.000Z"),
+        version(
+            1,
+            "初始需求：积分获取、抵扣与过期规则",
+            "2026-11-16T09:20:00.000Z",
+        ),
+        version(
+            2,
+            "补充抵扣上限 20%，新增积分明细入口",
+            "2026-11-20T15:10:00.000Z",
+        ),
     ];
     r1.design_versions = vec![
         design_version(1, "积分首页与明细页初稿", "2026-11-17T07:40:00.000Z"),
-        design_version(2, "积分明细页补充抵扣上限与过期提示", "2026-11-21T09:10:00.000Z"),
+        design_version(
+            2,
+            "积分明细页补充抵扣上限与过期提示",
+            "2026-11-21T09:10:00.000Z",
+        ),
     ];
     r1.design_delivered_at = Some("2026-11-17T07:40:00.000Z".into());
     r1.design_updated_at = Some("2026-11-21T09:10:00.000Z".into());
@@ -337,7 +359,12 @@ pub fn requirements() -> Vec<Requirement> {
     )];
     out.push(r1);
 
-    let mut r2 = base_requirement("req-seed-002", "S11-002", "积分规则说明页", "iteration-2026-s11");
+    let mut r2 = base_requirement(
+        "req-seed-002",
+        "S11-002",
+        "积分规则说明页",
+        "iteration-2026-s11",
+    );
     r2.status = STATUS_PENDING_REVIEW.into();
     r2.design_status = DESIGN_NONE.into();
     r2.platform_ids = vec!["goods-server".into(), "web".into()];
@@ -348,7 +375,12 @@ pub fn requirements() -> Vec<Requirement> {
     )];
     out.push(r2);
 
-    let mut r3 = base_requirement("req-seed-003", "S11-003", "会员中心改版", "iteration-2026-s11");
+    let mut r3 = base_requirement(
+        "req-seed-003",
+        "S11-003",
+        "会员中心改版",
+        "iteration-2026-s11",
+    );
     r3.status = STATUS_TEST_FAILED.into();
     r3.design_status = DESIGN_DELIVERED.into();
     r3.platform_ids = vec!["user-server".into(), "ios".into(), "android".into()];
@@ -403,7 +435,12 @@ pub fn requirements() -> Vec<Requirement> {
     }];
     out.push(r3);
 
-    let mut r4 = base_requirement("req-seed-004", "S11-004", "积分商城入口", "iteration-2026-s11");
+    let mut r4 = base_requirement(
+        "req-seed-004",
+        "S11-004",
+        "积分商城入口",
+        "iteration-2026-s11",
+    );
     r4.status = STATUS_SCHEDULED.into();
     r4.platform_ids = vec!["trade-server".into(), "web".into()];
     r4.in_scope = true;
@@ -428,7 +465,12 @@ pub fn requirements() -> Vec<Requirement> {
     ];
     out.push(r4);
 
-    let mut r5 = base_requirement("req-seed-005", "S11-005", "会员等级体系", "iteration-2026-s11");
+    let mut r5 = base_requirement(
+        "req-seed-005",
+        "S11-005",
+        "会员等级体系",
+        "iteration-2026-s11",
+    );
     r5.status = STATUS_BACKLOG.into();
     r5.design_status = DESIGN_DELIVERED.into();
     r5.platform_ids = vec!["goods-server".into(), "miniprogram".into()];
@@ -458,14 +500,24 @@ pub fn requirements() -> Vec<Requirement> {
     }];
     out.push(r5);
 
-    let mut r6 = base_requirement("req-seed-006", "S11-006", "积分过期提醒", "iteration-2026-s11");
+    let mut r6 = base_requirement(
+        "req-seed-006",
+        "S11-006",
+        "积分过期提醒",
+        "iteration-2026-s11",
+    );
     r6.design_status = DESIGN_UNCLAIMED.into();
     r6.platform_ids = vec!["user-server".into(), "web".into()];
     r6.created_at = "2026-11-22T01:30:00.000Z".into();
     r6.updated_at = "2026-11-22T01:30:00.000Z".into();
     out.push(r6);
 
-    let mut r7 = base_requirement("req-seed-007", "S11-007", "会员权益说明", "iteration-2026-s11");
+    let mut r7 = base_requirement(
+        "req-seed-007",
+        "S11-007",
+        "会员权益说明",
+        "iteration-2026-s11",
+    );
     r7.status = STATUS_TEST_PASSED.into();
     r7.design_status = DESIGN_DELIVERED.into();
     r7.platform_ids = vec!["trade-server".into(), "web".into()];
@@ -513,7 +565,12 @@ pub fn requirements() -> Vec<Requirement> {
     }];
     out.push(r7);
 
-    let mut r8 = base_requirement("req-seed-008", "S11-008", "会员日投放页", "iteration-2026-s11");
+    let mut r8 = base_requirement(
+        "req-seed-008",
+        "S11-008",
+        "会员日投放页",
+        "iteration-2026-s11",
+    );
     r8.status = STATUS_RELEASED.into();
     r8.design_status = DESIGN_DELIVERED.into();
     r8.platform_ids = vec![
@@ -585,7 +642,12 @@ pub fn requirements() -> Vec<Requirement> {
     });
     out.push(r8);
 
-    let mut r9 = base_requirement("req-seed-s12-001", "S12-001", "双十二会场", "iteration-2026-s12");
+    let mut r9 = base_requirement(
+        "req-seed-s12-001",
+        "S12-001",
+        "双十二会场",
+        "iteration-2026-s12",
+    );
     r9.status = STATUS_PENDING_REVIEW.into();
     r9.platform_ids = vec!["trade-server".into(), "web".into(), "ios".into()];
     r9.versions = vec![version(
@@ -618,13 +680,13 @@ fn skill_content(name: &str) -> &'static str {
         "iteration-plan" => "# 迭代排期\n\n调用 `workbench_iteration_status` 概览，再逐条评审、排期、调整范围。",
         "iteration-edit" => "# 迭代管理\n\n调用 `workbench_iteration_update` 修改名称、状态、日期或会签人；结束后提醒归档。",
         "design-claim" => "# 认领设计\n\n调用 `workbench_claim_design`；已有其他设计负责人时会被拒绝。",
-        "design-start" => "# 开始设计\n\n1. 调用 `workbench_design_context`。\n2. 认领设计。\n3. 在需求文件夹里产出 HTML 设计稿并预览自查。",
+        "design-start" => "# 开始设计\n\n1. 调用 `workbench_design_context` 读取需求、设计状态和已有文件。\n2. 调用 `workbench_claim_design` 认领设计（已有其他设计负责人时会被拒绝）。\n3. 在需求文件夹里产出 HTML 设计稿并预览自查。",
         "design-deliver" => "# 交付设计\n\n1. 确认需求文件夹和设计文件。\n2. 调用 `workbench_deliver_design`。\n3. 开发开始后交付会标记设计已更新。",
-        "dev-assign" => "# 指派开发\n\n调用 `workbench_dev_assign`，传平台和开发负责人；开发负责人也可自行认领。",
-        "dev-start" => "# 开始开发\n\n调用 `workbench_dev_start`；服务端记录真实开发开始时间，用于判断晚到设计。",
-        "dev-finish" => "# 完成开发\n\n调用 `workbench_dev_finish`；服务端生成 Mock MR 与流水线状态，全部平台完成后进入待测试。",
-        "test-verify" => "# 测试验证\n\n1. 调用 `workbench_test_start` 开始测试。\n2. 通过用 `workbench_test_pass`，失败用 `workbench_test_fail` 并写缺陷链接。",
-        "release-freeze" => "# 冻结与发布\n\n测试通过后调用 `workbench_freeze`；发布时调用 `workbench_release` 记录版本号。",
+        "dev-assign" => "# 指派开发\n\n调用 `workbench_dev_action`，action 传 assign，并给出 platformId 和 assigneeId；开发负责人也可以用 action 为 claim 自行认领。",
+        "dev-start" => "# 开始开发\n\n调用 `workbench_dev_action`，action 传 start 并给出 platformId；服务端记录真实开发开始时间，用于判断晚到设计。",
+        "dev-finish" => "# 完成开发\n\n调用 `workbench_dev_action`，action 传 finish 并给出 platformId，note 写改动说明。配置了 GitLab 时会创建分支和合并请求；没配置时只记录完成。全部平台完成后需求进入待测试。",
+        "test-verify" => "# 测试验证\n\n1. 调用 `workbench_test_action`，action 传 claim 认领测试，再传 start 开始测试。\n2. 通过用 action 为 pass；不通过用 action 为 fail，note 写明失败原因，bugUrl 填缺陷链接。",
+        "release-freeze" => "# 冻结与发布\n\n调用 `workbench_release_action`：测试通过后 action 传 freeze；发布时传 release 并给出 version。",
         _ => "# 技能\n\n按描述执行。",
     }
 }
@@ -808,7 +870,17 @@ pub fn skills() -> Vec<Skill> {
     out
 }
 
-pub fn notifications() -> Vec<(String, String, String, Option<String>, String, String, bool)> {
+// 种子按列顺序返回元组；字段含义写在函数内的注释里，类型别名只为可读性。
+type NotificationSeed = (String, String, String, Option<String>, String, String, bool);
+type EventSeed = (
+    Option<String>,
+    String,
+    Option<String>,
+    Option<String>,
+    serde_json::Value,
+);
+
+pub fn notifications() -> Vec<NotificationSeed> {
     // user_id, at, kind, requirement_id, title, body, read
     vec![
         (
@@ -859,7 +931,7 @@ pub fn notifications() -> Vec<(String, String, String, Option<String>, String, S
     ]
 }
 
-pub fn events_seed() -> Vec<(Option<String>, String, Option<String>, Option<String>, serde_json::Value)> {
+pub fn events_seed() -> Vec<EventSeed> {
     vec![
         (
             Some("lisi".into()),
@@ -883,4 +955,55 @@ pub fn events_seed() -> Vec<(Option<String>, String, Option<String>, Option<Stri
             json!({"note": "iOS 权益页切换账号后闪退"}),
         ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// host 插件（index.js）实际注册的工作台工具。技能文本里只能引用这些名字，
+    /// 否则模型会去调一个不存在的工具。改工具名时这里要一起改。
+    const KNOWN_TOOLS: &[&str] = &[
+        "workbench_assignment_options",
+        "workbench_claim_design",
+        "workbench_deliver_design",
+        "workbench_design_context",
+        "workbench_dev_action",
+        "workbench_iteration_status",
+        "workbench_iteration_update",
+        "workbench_move_requirement",
+        "workbench_release_action",
+        "workbench_requirement_status",
+        "workbench_review_requirement",
+        "workbench_schedule_requirement",
+        "workbench_scope_requirement",
+        "workbench_set_reviewers",
+        "workbench_submit_requirement",
+        "workbench_test_action",
+        "workbench_update_document",
+    ];
+
+    #[test]
+    fn skill_texts_only_reference_registered_tools() {
+        let mut checked = 0;
+        for skill in skills() {
+            let name = skill.name.as_str();
+            let text = skill
+                .latest()
+                .map(|version| version.content.as_str())
+                .unwrap_or_default();
+            let mut unknown = Vec::new();
+            for word in text.split(|ch: char| !(ch.is_ascii_alphanumeric() || ch == '_')) {
+                if word.starts_with("workbench_") && !KNOWN_TOOLS.contains(&word) {
+                    unknown.push(word.to_string());
+                }
+            }
+            assert!(
+                unknown.is_empty(),
+                "技能 {name} 引用了未注册的工具：{unknown:?}"
+            );
+            checked += 1;
+        }
+        assert!(checked >= 10, "expected the seeded skills to be inspected");
+    }
 }

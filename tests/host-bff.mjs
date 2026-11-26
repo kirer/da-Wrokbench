@@ -121,7 +121,7 @@ try {
   process.env.WORKBENCH_SERVER_URL = BASE
   process.env.WORKBENCH_INTERNAL_TOKEN = 'dsh-workbench-poc-internal-token'
 
-  const mod = await import('../index.js')
+  const mod = await import('../plugin/index.js')
   const local = mod.__test.loadLocal()
   const handler = mod.__test.makeRoute(local)
   const server = http.createServer((req, res) => { handler(req, res) })
@@ -245,6 +245,28 @@ try {
       && (sessionRecord.data?.requirement?.sessions ?? []).some(item => item.folderPath === sessionRoot),
     sessionRecord.text,
   )
+  // 本机校验必须先于服务端创建：越界的目录被拒绝后，服务端不能多出一条孤儿会话记录。
+  const sessionsBefore = (sessionRecord.data?.requirement?.sessions ?? []).length
+  const escaped = await jsonFetch(`/dsh-workbench/api/requirements/${encodeURIComponent(createdRequirement.id)}/sessions`, {
+    method: 'POST',
+    cookie: lisiCookie,
+    headers: browserLoginHeaders,
+    body: { type: 'requirement', label: '越界会话', dshSessionId: 'bff-escaped-session', folderPath: os.tmpdir() },
+  })
+  check('越界目录的会话被拒绝', escaped.status === 403, `HTTP ${escaped.status} ${escaped.text.slice(0, 80)}`)
+  const afterEscaped = await jsonFetch('/dsh-workbench/api/state', { cookie: lisiCookie })
+  const afterEscapedRequirement = (afterEscaped.data?.requirements ?? []).find(item => item.id === createdRequirement.id)
+  check(
+    '被拒绝的会话不在服务端留下记录',
+    (afterEscapedRequirement?.sessions ?? []).length === sessionsBefore,
+    `expected ${sessionsBefore} sessions, got ${(afterEscapedRequirement?.sessions ?? []).length}`,
+  )
+  // 写操作之后 /state 必须立刻反映新数据，不能返回写之前缓存的旧快照。
+  check(
+    '写操作后 state 立即反映新会话',
+    (afterEscapedRequirement?.sessions ?? []).some(item => item.label === '需求会话'),
+    JSON.stringify((afterEscapedRequirement?.sessions ?? []).map(item => item.label)),
+  )
   const claimOwn = await jsonFetch('/dsh-workbench/api/sessions/claim', {
     method: 'POST', cookie: lisiCookie, body: { sessionId: 'bff-dsh-session' }, headers: { origin: bff.base },
   })
@@ -286,7 +308,9 @@ try {
   const webhook = await jsonFetch('/dsh-workbench/api/webhooks/gitlab', { cookie: lisiCookie })
   check('浏览器代理禁止访问 webhooks', webhook.status === 403, `HTTP ${webhook.status}`)
   const put = await jsonFetch('/dsh-workbench/api/state', { method: 'PUT', cookie: lisiCookie, body: {} })
-  check('代理只允许 GET/HEAD/POST', put.status === 405, `HTTP ${put.status}`)
+  check('代理只允许 GET/HEAD/POST/DELETE', put.status === 405, `HTTP ${put.status}`)
+  const remove = await jsonFetch('/dsh-workbench/api/requirements/bff-missing', { method: 'DELETE', cookie: lisiCookie })
+  check('DELETE 会转发到服务端（不存在的需求返回 404）', remove.status === 404, `HTTP ${remove.status}`)
 
   console.log('== 预览票据 ==')
   const ticketAnonymous = await jsonFetch('/dsh-workbench/api/preview-ticket', {
@@ -380,6 +404,48 @@ try {
     method: 'POST', cookie: lisiCookie, body: { topLevelFolder: '/', platformIds: [], activeRole: null }, headers: { origin: bff.base },
   })
   check('禁止把文件系统根目录设为顶级文件夹', rootFolder.status === 403, `HTTP ${rootFolder.status}`)
+
+  console.log('== 删除需求时的本机清理 ==')
+  const doomed = await jsonFetch('/dsh-workbench/api/requirements', {
+    method: 'POST', cookie: lisiCookie, headers: browserLoginHeaders, body: { title: '待删除需求' },
+  })
+  check('可创建待删除需求', doomed.status === 201, doomed.text)
+  const doomedId = doomed.data?.requirement?.id ?? ''
+  const doomedState = await jsonFetch('/dsh-workbench/api/state', { cookie: lisiCookie })
+  const doomedFolder = String((doomedState.data?.requirements ?? []).find(item => item.id === doomedId)?.folderPath ?? '')
+  fs.mkdirSync(path.join(doomedFolder, 'prototype'), { recursive: true })
+  fs.writeFileSync(path.join(doomedFolder, 'prototype', 'index.html'), '<html></html>')
+  check('待删除需求已有本机原型', doomedFolder !== '' && fs.existsSync(path.join(doomedFolder, 'prototype', 'index.html')), doomedFolder)
+  const sibling = path.join(path.dirname(doomedFolder), '别人的需求')
+  fs.mkdirSync(sibling, { recursive: true })
+  fs.writeFileSync(path.join(sibling, 'keep.txt'), 'keep')
+  const doomedDelete = await jsonFetch(`/dsh-workbench/api/requirements/${encodeURIComponent(doomedId)}`, {
+    method: 'DELETE', cookie: lisiCookie, headers: { origin: bff.base },
+  })
+  check('删除需求成功', doomedDelete.status === 200, doomedDelete.text)
+  check('需求目录随需求一起删除', !fs.existsSync(doomedFolder), doomedFolder)
+  check(
+    '删除结果带清理明细',
+    Array.isArray(doomedDelete.data?.deletedFolders) && doomedDelete.data.deletedFolders.includes(doomedFolder),
+    JSON.stringify(doomedDelete.data?.deletedFolders),
+  )
+  check('删除不影响同级的其他目录', fs.existsSync(path.join(sibling, 'keep.txt')), sibling)
+
+  // 用户手工改过目录名时不能替人做主：目录留着，删除结果里也不报失败。
+  const renamed = await jsonFetch('/dsh-workbench/api/requirements', {
+    method: 'POST', cookie: lisiCookie, headers: browserLoginHeaders, body: { title: '改过名的需求' },
+  })
+  const renamedId = renamed.data?.requirement?.id ?? ''
+  const renamedState = await jsonFetch('/dsh-workbench/api/state', { cookie: lisiCookie })
+  const renamedFolder = String((renamedState.data?.requirements ?? []).find(item => item.id === renamedId)?.folderPath ?? '')
+  const customFolder = path.join(path.dirname(renamedFolder), '我自己起的名字')
+  fs.mkdirSync(renamedFolder, { recursive: true })
+  fs.renameSync(renamedFolder, customFolder)
+  fs.writeFileSync(path.join(customFolder, 'keep.txt'), 'keep')
+  const renamedDelete = await jsonFetch(`/dsh-workbench/api/requirements/${encodeURIComponent(renamedId)}`, {
+    method: 'DELETE', cookie: lisiCookie, headers: { origin: bff.base },
+  })
+  check('改名后的目录不随需求删除', renamedDelete.status === 200 && fs.existsSync(path.join(customFolder, 'keep.txt')), customFolder)
 
   console.log()
   if (fail !== 0) {

@@ -5,8 +5,6 @@
 # 用法：
 #   bash tools/reset-workbench-test-data.sh
 #   WORKBENCH_BASE="$HOME/DSH-Workbench" PORT=3210 bash tools/reset-workbench-test-data.sh
-#
-# 备份：~/.dsh/backups/workbench-reset-<时间>/
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,8 +16,6 @@ BASE_URL="http://127.0.0.1:$PORT"
 DB="${DATABASE_PATH:-$RUNTIME/server/workbench.db}"
 SERVER_BIN="${WORKBENCH_SERVER_BIN:-$REPO_ROOT/server/target/debug/dsh-workbench-server}"
 CDP_URL="${CDP_URL:-http://127.0.0.1:9222}"
-STAMP="$(date +%Y%m%d-%H%M%S)"
-BACKUP="$HOME_DIR/.dsh/backups/workbench-reset-$STAMP"
 SESSION_ROOT="$HOME_DIR/.dsh/sessions"
 WORKSPACE_JSON="$HOME_DIR/.dsh/storages/workspace.json"
 CANVAS_STATE="$HOME_DIR/.dsh/dsh-workbench/canvas"
@@ -29,32 +25,38 @@ LOCAL_MAP="$HOME_DIR/.dsh/cache/dsh-workbench-poc/local.json"
 say() { printf '\n[reset] %s\n' "$*"; }
 die() { printf '\n[reset] 失败：%s\n' "$*" >&2; exit 1; }
 
+# 边界保护：脚本会直接删除，路径必须在动手之前就确认不能是根目录 / HOME / ~/.dsh。
+# 任何一项不合规都直接退出，绝不带着半截路径去 rm / find -delete。
+check_path() {
+  local label="$1" value="$2"
+  case "$value" in
+    /*) ;;
+    *) die "$label 必须是绝对路径：$value" ;;
+  esac
+  case "/$value/" in
+    */../*) die "$label 不能包含 ..：$value" ;;
+  esac
+  [ "$value" != "/" ] || die "$label 不能是根目录"
+  [ "$value" != "$HOME_DIR" ] || die "$label 不能是 HOME"
+  [ "$value" != "$HOME_DIR/.dsh" ] || die "$label 不能是 ~/.dsh"
+}
+check_path WORKBENCH_BASE "$BASE"
+check_path WORKBENCH_RUNTIME "$RUNTIME"
+check_path DATABASE_PATH "$DB"
+case "$DB" in
+  *.db) ;;
+  *) die "DATABASE_PATH 必须以 .db 结尾：$DB" ;;
+esac
+case "$DB" in
+  /dev/*) die "DATABASE_PATH 不能指向 /dev：$DB" ;;
+esac
+
 # 边界保护：BASE 必须是 HOME 下的子目录，不能是 HOME 本身或根目录
 case "$BASE" in
   "$HOME_DIR"/*) ;;
   *) die "WORKBENCH_BASE 必须是 $HOME_DIR 下的子目录：$BASE" ;;
 esac
-[ "$BASE" != "$HOME_DIR" ] || die "WORKBENCH_BASE 不能是 HOME"
 [ -n "${BASE#/}" ] || die "WORKBENCH_BASE 不能是根目录"
-
-say "备份到 $BACKUP"
-mkdir -p "$BACKUP/server" "$BACKUP/dsh" "$BACKUP/dsh-workbench" "$BACKUP/cache"
-backup_path() {
-  local src="$1" dest="$2"
-  [ -e "$src" ] || return 0
-  mkdir -p "$(dirname "$dest")"
-  cp -R "$src" "$dest"
-}
-backup_path "$DB" "$BACKUP/server/workbench.db"
-backup_path "$DB-wal" "$BACKUP/server/workbench.db-wal"
-backup_path "$DB-shm" "$BACKUP/server/workbench.db-shm"
-backup_path "$BASE" "$BACKUP/DSH-Workbench"
-backup_path "$RUNTIME/workbench" "$BACKUP/runtime-workbench"
-backup_path "$CANVAS_STATE/works.json" "$BACKUP/dsh-workbench/canvas/works.json"
-backup_path "$CANVAS_STATE/gallery-state.json" "$BACKUP/dsh-workbench/canvas/gallery-state.json"
-backup_path "$CACHE_DIR" "$BACKUP/cache/dsh-workbench"
-backup_path "$LOCAL_MAP" "$BACKUP/cache/dsh-workbench-poc/local.json"
-backup_path "$WORKSPACE_JSON" "$BACKUP/dsh/workspace.json"
 
 say "退出 DSH 桌面端"
 osascript -e 'quit app "DeepSeek Harness"' >/dev/null 2>&1 || true
@@ -141,9 +143,8 @@ SERVER_LOG="$RUNTIME/server/server.log"
   DATABASE_PATH="$DB" PORT="$PORT" nohup "$SERVER_BIN" >>"$SERVER_LOG" 2>&1 &
   echo $! > "$RUNTIME/server/server.pid"
 )
-curl -sf --retry 60 --retry-delay 1 --retry-connrefused "$BASE_URL/health" > "$BACKUP/health.json" \
+curl -sf --retry 60 --retry-delay 1 --retry-connrefused "$BASE_URL/health" >/dev/null \
   || { tail -40 "$SERVER_LOG" >&2; die "服务端没有在 $BASE_URL 起来"; }
-cat "$BACKUP/health.json"; echo
 
 say "启动 DSH 桌面端（调试端口 9222）"
 open -n -a "DeepSeek Harness" --args --remote-debugging-port=9222
@@ -151,6 +152,5 @@ curl -sf --retry 40 --retry-delay 1 --retry-connrefused "$CDP_URL/json/version" 
   || die "桌面端没有开放调试端口 $CDP_URL"
 
 say "完成"
-say "备份：$BACKUP"
 say "数据库：$DB（重启后由服务端写入种子数据）"
-say "下一步：node e2e/check-online-education.mjs（结构全流程）或 node e2e/desktop-s13.mjs --preflight"
+say "下一步：按 TESTING.md 逐角色验收"

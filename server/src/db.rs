@@ -54,9 +54,8 @@ impl Snapshot {
             .as_deref()
             .and_then(|id| self.project(id))
             .filter(|project| !project.archived);
-        selected
-            .or_else(|| self.projects.iter().find(|project| !project.archived))
-            .or_else(|| self.projects.first())
+        // 只会落到未归档的项目上；全部归档时就是没有当前项目。
+        selected.or_else(|| self.projects.iter().find(|project| !project.archived))
     }
 
     pub fn active_iteration(&self, actor: &User) -> Option<&Iteration> {
@@ -102,7 +101,14 @@ impl Snapshot {
             .iter()
             .map(|project| project.id.clone())
             .collect();
-        let fallback = self.projects[0].id.clone();
+        // 兜底项目只认未归档的；上面已经保证至少有一个项目。
+        let fallback = self
+            .projects
+            .iter()
+            .find(|project| !project.archived)
+            .unwrap_or(&self.projects[0])
+            .id
+            .clone();
         for iteration in &mut self.iterations {
             let known = iteration
                 .project_id
@@ -236,7 +242,7 @@ pub fn open(path: &str) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
-fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
+pub(crate) fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         r#"
         CREATE TABLE IF NOT EXISTS users (
@@ -297,6 +303,10 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE TABLE IF NOT EXISTS artifact_contents (
             id TEXT PRIMARY KEY,
             data TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS webhook_deliveries (
+            delivery TEXT PRIMARY KEY,
+            seen_at TEXT NOT NULL
         );
         "#,
     )
@@ -359,16 +369,16 @@ fn seed_if_empty(conn: &Connection) -> rusqlite::Result<()> {
 
 // Postgres 使用单个 JSONB 快照；把本轮变更追加到历史数组并分配自增 id。
 pub fn append_pending(snapshot: &mut Snapshot) {
-    let mut next_event = snapshot
+    let first_event_id = snapshot
         .events
         .iter()
         .map(|item| item.id)
         .max()
         .unwrap_or(0)
         + 1;
-    for draft in snapshot.pending_events.drain(..) {
+    for (offset, draft) in snapshot.pending_events.drain(..).enumerate() {
         snapshot.events.push(Event {
-            id: next_event,
+            id: first_event_id + offset as i64,
             at: crate::now_iso(),
             actor_id: draft.actor_id,
             kind: draft.kind,
@@ -376,18 +386,17 @@ pub fn append_pending(snapshot: &mut Snapshot) {
             iteration_id: draft.iteration_id,
             payload: draft.payload,
         });
-        next_event += 1;
     }
-    let mut next_notification = snapshot
+    let first_notification_id = snapshot
         .notifications
         .iter()
         .map(|item| item.id)
         .max()
         .unwrap_or(0)
         + 1;
-    for draft in snapshot.pending_notifications.drain(..) {
+    for (offset, draft) in snapshot.pending_notifications.drain(..).enumerate() {
         snapshot.notifications.push(Notification {
-            id: next_notification,
+            id: first_notification_id + offset as i64,
             user_id: draft.user_id,
             at: crate::now_iso(),
             kind: draft.kind,
@@ -396,7 +405,32 @@ pub fn append_pending(snapshot: &mut Snapshot) {
             body: draft.body,
             read: false,
         });
-        next_notification += 1;
+    }
+    // Postgres 把整份状态存成一个 JSONB：数组只增不减会让每次读写越来越重。
+    // 上限和 SQLite 表的裁剪保持一致（见 prune_append_only_tables）。
+    if snapshot.events.len() > 20_000 {
+        let excess = snapshot.events.len() - 20_000;
+        snapshot.events.drain(..excess);
+    }
+    let mut read_per_user: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut remove = std::collections::HashSet::new();
+    for notification in snapshot.notifications.iter().rev() {
+        if !notification.read {
+            continue;
+        }
+        let count = read_per_user
+            .entry(notification.user_id.clone())
+            .or_insert(0);
+        *count += 1;
+        if *count > 500 {
+            remove.insert(notification.id);
+        }
+    }
+    if !remove.is_empty() {
+        snapshot
+            .notifications
+            .retain(|item| !remove.contains(&item.id));
     }
 }
 
@@ -416,8 +450,22 @@ fn load_rows<T: DeserializeOwned>(conn: &Connection, table: &str) -> rusqlite::R
     Ok(out)
 }
 
+/// 只读接口用：不加载附件正文。正文可能很大，/state 每次轮询都读一遍纯属浪费。
+/// 写路径必须用 [`load_snapshot`]：保存时按快照做差集，缺了正文会把附件行删掉。
+pub fn load_snapshot_without_contents(conn: &Connection) -> rusqlite::Result<Snapshot> {
+    let mut snapshot = load_snapshot_inner(conn, false)?;
+    snapshot.ensure_projects();
+    Ok(snapshot)
+}
+
 pub fn load_snapshot(conn: &Connection) -> rusqlite::Result<Snapshot> {
-    let mut snapshot = Snapshot {
+    let mut snapshot = load_snapshot_inner(conn, true)?;
+    snapshot.ensure_projects();
+    Ok(snapshot)
+}
+
+fn load_snapshot_inner(conn: &Connection, with_contents: bool) -> rusqlite::Result<Snapshot> {
+    let snapshot = Snapshot {
         users: load_rows(conn, "users")?,
         groups: load_rows(conn, "platform_groups")?,
         platforms: load_rows(conn, "platforms")?,
@@ -429,10 +477,28 @@ pub fn load_snapshot(conn: &Connection) -> rusqlite::Result<Snapshot> {
         notifications: Vec::new(),
         pending_events: Vec::new(),
         pending_notifications: Vec::new(),
-        artifact_contents: load_rows(conn, "artifact_contents")?,
+        artifact_contents: if with_contents {
+            load_rows(conn, "artifact_contents")?
+        } else {
+            Vec::new()
+        },
     };
-    snapshot.ensure_projects();
     Ok(snapshot)
+}
+
+/// 按 id 读取单个附件正文，配合 [`load_snapshot_without_contents`] 使用。
+pub fn artifact_content(conn: &Connection, id: &str) -> rusqlite::Result<Option<String>> {
+    use rusqlite::OptionalExtension;
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT data FROM artifact_contents WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(raw
+        .and_then(|json| serde_json::from_str::<ArtifactContent>(&json).ok())
+        .map(|content| content.content))
 }
 
 // SQLite 后端按快照重建数据，但增量保存不会自动删除已经不在快照里的行。
@@ -544,7 +610,34 @@ pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Re
             params![skill.id, data],
         )?;
     }
+    // 按 artifact_contents 的当前快照做差集同步：
+    // 1. 删除已被单独 delete_artifact 移出快照的正文行，避免重启复活或膨胀；
+    // 2. 跳过库里已存在的 UUID 行（附件正文创建后不可变），避免每次普通保存全量重写大文件。
+    let keep_artifacts: std::collections::HashSet<&str> = snapshot
+        .artifact_contents
+        .iter()
+        .map(|artifact| artifact.id.as_str())
+        .collect();
+    let mut existing_artifacts = std::collections::HashSet::new();
+    {
+        let mut statement = conn.prepare("SELECT id FROM artifact_contents")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        for row in rows {
+            existing_artifacts.insert(row?);
+        }
+    }
+    for existing_id in &existing_artifacts {
+        if !keep_artifacts.contains(existing_id.as_str()) {
+            conn.execute(
+                "DELETE FROM artifact_contents WHERE id = ?1",
+                params![existing_id],
+            )?;
+        }
+    }
     for artifact in &snapshot.artifact_contents {
+        if existing_artifacts.contains(&artifact.id) {
+            continue;
+        }
         let data = serde_json::to_string(artifact).unwrap_or_default();
         conn.execute(
             "INSERT INTO artifact_contents(id, data) VALUES(?1, ?2)
@@ -553,11 +646,25 @@ pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Re
         )?;
     }
     for event in snapshot.pending_events.drain(..) {
+        let now = crate::now_iso();
+        if event.kind.starts_with("integration.gitlab") {
+            if let Some(delivery) = event
+                .payload
+                .get("delivery")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.is_empty())
+            {
+                conn.execute(
+                    "INSERT OR IGNORE INTO webhook_deliveries(delivery, seen_at) VALUES(?1, ?2)",
+                    params![delivery, &now],
+                )?;
+            }
+        }
         conn.execute(
             "INSERT INTO events(at, actor_id, type, requirement_id, iteration_id, payload)
              VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
             params![
-                crate::now_iso(),
+                now,
                 event.actor_id,
                 event.kind,
                 event.requirement_id,
@@ -580,7 +687,67 @@ pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Re
             ],
         )?;
     }
+    prune_append_only_tables(conn)?;
     Ok(())
+}
+
+/// 追加型表只增不减，跑久了会一直变大。按行数上限删最老的：
+/// 通知每人 500 条、事件（含审计）20000 条、Webhook 投递记录 20000 条。
+/// 未读通知不删，避免把还没看到的提醒清掉。
+fn prune_append_only_tables(conn: &Connection) -> rusqlite::Result<()> {
+    // 只在确实有超量行时才执行删除：平时是一次带索引的 COUNT，不做写操作。
+    let overflow: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM (
+             SELECT user_id FROM notifications WHERE read = 1
+             GROUP BY user_id HAVING COUNT(*) > 500
+         )",
+        [],
+        |row| row.get(0),
+    )?;
+    if overflow > 0 {
+        conn.execute(
+            "DELETE FROM notifications WHERE read = 1 AND id IN (
+                 SELECT id FROM (
+                     SELECT id, ROW_NUMBER() OVER (
+                         PARTITION BY user_id ORDER BY id DESC
+                     ) AS position
+                     FROM notifications WHERE read = 1
+                 ) WHERE position > 500
+             )",
+            [],
+        )?;
+    }
+    conn.execute(
+        "DELETE FROM events WHERE id <= (SELECT MAX(id) FROM events) - 20000",
+        [],
+    )?;
+    conn.execute(
+        "DELETE FROM webhook_deliveries WHERE rowid <= (SELECT MAX(rowid) FROM webhook_deliveries) - 20000",
+        [],
+    )?;
+    Ok(())
+}
+
+pub fn find_user(conn: &Connection, id: &str) -> rusqlite::Result<Option<User>> {
+    use rusqlite::OptionalExtension;
+    let raw: Option<String> = conn
+        .query_row("SELECT data FROM users WHERE id = ?1", params![id], |row| {
+            row.get(0)
+        })
+        .optional()?;
+    Ok(raw.and_then(|json| serde_json::from_str::<User>(&json).ok()))
+}
+
+pub fn has_webhook_delivery(conn: &Connection, delivery: &str) -> rusqlite::Result<bool> {
+    if delivery.is_empty() {
+        return Ok(false);
+    }
+    let exists: i64 = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE delivery = ?1)",
+        params![delivery],
+        |row| row.get(0),
+    )?;
+    Ok(exists != 0)
 }
 
 pub fn notifications_for(

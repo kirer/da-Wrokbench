@@ -1,5 +1,5 @@
 use crate::db::{self, Snapshot};
-use crate::domain::{self, ApiError};
+use crate::domain::{self, valid_role, ApiError};
 use crate::gitlab;
 use crate::models::*;
 use axum::extract::{FromRequestParts, Path, Query, State};
@@ -201,10 +201,10 @@ async fn read_snapshot(state: &AppState) -> Result<Snapshot, ApiError> {
             let conn = db.lock().map_err(|_| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")
             })?;
-            Ok(db::load_snapshot(&conn)?)
+            Ok(db::load_snapshot_without_contents(&conn)?)
         }
         Store::Postgres(pool) => {
-            let (_, snapshot) = crate::pg::load(pool).await?;
+            let (_, snapshot) = crate::pg::load(pool, false).await?;
             Ok(snapshot)
         }
     }
@@ -232,8 +232,29 @@ where
 }
 
 async fn find_user(state: &AppState, id: &str) -> Result<Option<User>, ApiError> {
-    let snapshot = read_snapshot(state).await?;
-    Ok(snapshot.users.into_iter().find(|user| user.id == id))
+    match &state.store {
+        Store::Sqlite(_) => {
+            let conn = lock_sqlite(state)?;
+            Ok(db::find_user(&conn, id)?)
+        }
+        Store::Postgres(pool) => {
+            let (_, snapshot) = crate::pg::load(pool, false).await?;
+            Ok(snapshot.users.into_iter().find(|user| user.id == id))
+        }
+    }
+}
+
+async fn webhook_delivery_seen(state: &AppState, delivery: &str) -> Result<bool, ApiError> {
+    if delivery.is_empty() {
+        return Ok(false);
+    }
+    match &state.store {
+        Store::Sqlite(_) => {
+            let conn = lock_sqlite(state)?;
+            Ok(db::has_webhook_delivery(&conn, delivery)?)
+        }
+        Store::Postgres(_) => Ok(false),
+    }
 }
 
 async fn notifications_for(
@@ -368,6 +389,10 @@ impl FromRequestParts<AppState> for AuthUser {
         .map_err(|_| ApiError::unauthorized("登录已过期，请重新登录"))?;
         if !data.claims.jti.is_empty() && state.is_revoked(&data.claims.jti, unix_now()) {
             return Err(ApiError::unauthorized("登录已失效，请重新登录"));
+        }
+        // 切换登录方式后，旧方式签发的令牌不能再当有效凭据用（两种方式共用同一个密钥）。
+        if data.claims.provider != state.config.auth_provider {
+            return Err(ApiError::unauthorized("登录方式已变更，请重新登录"));
         }
         let user = find_user(state, &data.claims.sub)
             .await?
@@ -765,6 +790,37 @@ async fn onboarding_complete(
 }
 
 // ---------------------------------------------------------------------------
+// Experience
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExperienceBody {
+    #[serde(default)]
+    query: String,
+    #[serde(default)]
+    exclude: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+/// 只读：从现有需求/分工里聚合每个人的经历，并按一段需求描述找相似的历史需求。
+async fn experience_report(
+    State(state): State<AppState>,
+    AuthUser(_actor): AuthUser,
+    Json(input): Json<ExperienceBody>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = read_snapshot(&state).await?;
+    let query: String = input.query.chars().take(4000).collect();
+    Ok(Json(crate::experience::report(
+        &snapshot,
+        query.trim(),
+        input.exclude.as_deref().unwrap_or(""),
+        input.limit.unwrap_or(5),
+    )))
+}
+
+// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
@@ -773,9 +829,10 @@ async fn get_state(
     AuthUser(actor): AuthUser,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = read_snapshot(&state).await?;
-    let notifications = notifications_for(&state, &actor.id, 50).await?;
+    let all_notifications = notifications_for(&state, &actor.id, 500).await?;
     let unread = unread_notifications(&state, &actor.id).await?;
-    let notification_groups = notification_groups(&state, &actor.id).await?;
+    let notification_groups = build_notification_groups(&snapshot, &all_notifications);
+    let notifications: Vec<_> = all_notifications.into_iter().take(50).collect();
     let actor = snapshot
         .user(&actor.id)
         .cloned()
@@ -815,6 +872,8 @@ async fn get_state(
         "unreadNotificationCount": unread,
         "notificationGroups": notification_groups,
         "serverTime": crate::now_iso(),
+        // 没接 GitLab 时 MR / 流水线是演示数据，前端据此把它标成“演示”，不做可点的真链接。
+        "gitlabConfigured": gitlab::configured(&state.config),
     })))
 }
 
@@ -1094,6 +1153,12 @@ struct SubmitBody {
     /// 当前每个屏的附件 ID 传上来。
     #[serde(default)]
     prototype: Vec<crate::models::PrototypeVersionFile>,
+    /// 提交时确认的涉及端；省略表示不改。
+    #[serde(default)]
+    platform_ids: Option<Vec<String>>,
+    /// 这条需求不需要设计交付时传 true；传 false 撤销「无需设计」。
+    #[serde(default)]
+    design_not_needed: Option<bool>,
     /// 提交时定下的分工（设计 / 各端开发 / 测试），都可省略。
     #[serde(default)]
     assignments: Option<domain::SubmitAssignments>,
@@ -1112,6 +1177,8 @@ async fn submit_requirement(
             &id,
             input.summary.as_deref(),
             input.prototype,
+            input.platform_ids,
+            input.design_not_needed,
             input.assignments.unwrap_or_default(),
         )
     })
@@ -1191,6 +1258,18 @@ async fn design_claim(
     Ok(Json(json!({ "requirement": requirement })))
 }
 
+async fn design_reset(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let requirement = mutate(&state, |snapshot| {
+        domain::reset_design(snapshot, &actor, &id)
+    })
+    .await?;
+    Ok(Json(json!({ "requirement": requirement })))
+}
+
 async fn design_deliver(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
@@ -1236,7 +1315,21 @@ async fn get_artifact(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let snapshot = read_snapshot(&state).await?;
-    let (artifact, content) = domain::get_artifact_for(&snapshot, &actor, &id)?;
+    let artifact = domain::artifact_for(&snapshot, &actor, &id)?;
+    let content = match &state.store {
+        Store::Sqlite(_) => {
+            let conn = lock_sqlite(&state)?;
+            db::artifact_content(&conn, &id)?
+        }
+        Store::Postgres(pool) => {
+            let (_, full) = crate::pg::load(pool, true).await?;
+            full.artifact_contents
+                .iter()
+                .find(|item| item.id == id)
+                .map(|item| item.content.clone())
+        }
+    }
+    .ok_or_else(|| ApiError::not_found("附件内容不存在"))?;
     Ok(Json(json!({ "artifact": artifact, "content": content })))
 }
 
@@ -1305,7 +1398,19 @@ async fn dev_start(
             .cloned()
         {
             let branch = gitlab::branch_name(&requirement.code, &input.platform_id);
-            match gitlab::create_branch(&state.config, &platform, &branch).await {
+            let branch_result = match tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                gitlab::create_branch(&state.config, &platform, &branch),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(_) => Err(ApiError::new(
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "GitLab 创建分支超时",
+                )),
+            };
+            match branch_result {
                 Ok(()) => {
                     mutate(&state, |snapshot| {
                         if let Some(index) = snapshot
@@ -1331,7 +1436,11 @@ async fn dev_start(
                     })
                     .await?;
                 }
-                Err(error) => integration_warning = json!(error.message),
+                Err(error) => {
+                    // 上游原文只进服务端日志，不回传给客户端，也不写进任务备注。
+                    tracing::warn!("GitLab 调用失败：{}", error.message);
+                    integration_warning = json!("GitLab 同步失败，请联系负责人检查集成配置");
+                }
             }
         }
     }
@@ -1345,13 +1454,12 @@ async fn dev_start(
                 .position(|item| item.id == requirement.id)
             {
                 if let Some(task) = snapshot.requirements[index].dev_task_mut(&input.platform_id) {
-                    task.note = format!(
-                        "{} GitLab 同步失败：{}",
-                        task.note,
-                        integration_warning.as_str().unwrap_or("")
-                    )
-                    .trim()
-                    .to_string();
+                    // 同一步骤只记一次提示，重试不会把备注越拼越长。
+                    if !task.note.contains("GitLab 创建分支失败") {
+                        task.note = format!("{} GitLab 创建分支失败", task.note.trim_end())
+                            .trim()
+                            .to_string();
+                    }
                 }
             }
             Ok(snapshot
@@ -1363,11 +1471,14 @@ async fn dev_start(
         })
         .await?
     };
+    // GitLab 成功时分支 / MR / 流水线是在上面另一次 mutate 里写入的，
+    // 手里的 requirement 还是调用前的克隆：返回前必须重新读一次。
+    let requirement_id = requirement.id.clone();
     let requirement = read_snapshot(&state)
         .await?
         .requirements
         .into_iter()
-        .find(|item| item.id == requirement.id)
+        .find(|item| item.id == requirement_id)
         .unwrap_or(requirement);
     Ok(Json(json!({
         "requirement": requirement,
@@ -1409,20 +1520,34 @@ async fn dev_finish(
             } else {
                 note
             };
-            match gitlab::create_merge_request(
-                &state.config,
-                &platform,
-                &branch,
-                &title,
-                &description,
+            let mr_result = match tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                gitlab::create_merge_request(
+                    &state.config,
+                    &platform,
+                    &branch,
+                    &title,
+                    &description,
+                ),
             )
             .await
             {
+                Ok(result) => result,
+                Err(_) => Err(ApiError::new(
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "GitLab 创建 MR 超时",
+                )),
+            };
+            match mr_result {
                 Ok(mr) => {
-                    let pipeline = gitlab::latest_pipeline(&state.config, &platform, &branch)
-                        .await
-                        .ok()
-                        .flatten();
+                    let pipeline = tokio::time::timeout(
+                        std::time::Duration::from_secs(8),
+                        gitlab::latest_pipeline(&state.config, &platform, &branch),
+                    )
+                    .await
+                    .ok()
+                    .and_then(|res| res.ok())
+                    .flatten();
                     mutate(&state, |snapshot| {
                         if let Some(index) = snapshot
                             .requirements
@@ -1457,7 +1582,11 @@ async fn dev_finish(
                     })
                     .await?;
                 }
-                Err(error) => integration_warning = json!(error.message),
+                Err(error) => {
+                    // 上游原文只进服务端日志，不回传给客户端，也不写进任务备注。
+                    tracing::warn!("GitLab 调用失败：{}", error.message);
+                    integration_warning = json!("GitLab 同步失败，请联系负责人检查集成配置");
+                }
             }
         }
     }
@@ -1471,13 +1600,12 @@ async fn dev_finish(
                 .position(|item| item.id == requirement.id)
             {
                 if let Some(task) = snapshot.requirements[index].dev_task_mut(&platform_id) {
-                    task.note = format!(
-                        "{} GitLab 同步失败：{}",
-                        task.note,
-                        integration_warning.as_str().unwrap_or("")
-                    )
-                    .trim()
-                    .to_string();
+                    // 同一步骤只记一次提示，重试不会把备注越拼越长。
+                    if !task.note.contains("GitLab 创建合并请求失败") {
+                        task.note = format!("{} GitLab 创建合并请求失败", task.note.trim_end())
+                            .trim()
+                            .to_string();
+                    }
                 }
             }
             Ok(snapshot
@@ -1489,11 +1617,14 @@ async fn dev_finish(
         })
         .await?
     };
+    // GitLab 成功时分支 / MR / 流水线是在上面另一次 mutate 里写入的，
+    // 手里的 requirement 还是调用前的克隆：返回前必须重新读一次。
+    let requirement_id = requirement.id.clone();
     let requirement = read_snapshot(&state)
         .await?
         .requirements
         .into_iter()
-        .find(|item| item.id == requirement.id)
+        .find(|item| item.id == requirement_id)
         .unwrap_or(requirement);
     Ok(Json(json!({
         "requirement": requirement,
@@ -1720,6 +1851,16 @@ async fn list_skills(
         .skills
         .into_iter()
         .filter(|skill| actor.can_plan() || skill.scope == "global" || skill.owner_id == actor.id)
+        // 别人还没通过审核的版本不能带正文下发：未审核内容不应对其他成员可见。
+        .map(|mut skill| {
+            if actor.can_plan() || skill.owner_id == actor.id {
+                return skill;
+            }
+            skill
+                .versions
+                .retain(|version| version.decision.as_deref() == Some("approved"));
+            skill
+        })
         .collect();
     skills.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(Json(json!({ "skills": skills })))
@@ -1812,9 +1953,11 @@ async fn list_notifications(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
 ) -> Result<Json<Value>, ApiError> {
-    let items = notifications_for(&state, &actor.id, 100).await?;
+    let all_notifications = notifications_for(&state, &actor.id, 500).await?;
+    let snapshot = read_snapshot(&state).await?;
     let unread = unread_notifications(&state, &actor.id).await?;
-    let groups = notification_groups(&state, &actor.id).await?;
+    let groups = build_notification_groups(&snapshot, &all_notifications);
+    let items: Vec<_> = all_notifications.into_iter().take(100).collect();
     Ok(Json(json!({
         "notifications": items,
         "unreadNotificationCount": unread,
@@ -1824,9 +1967,7 @@ async fn list_notifications(
 
 /// 按需求聚合通知，供客户端做「全部 / 某个需求」筛选。未绑定需求的通知
 /// 归入 `system` 组。
-async fn notification_groups(state: &AppState, user_id: &str) -> Result<Vec<Value>, ApiError> {
-    let items = notifications_for(state, user_id, 500).await?;
-    let snapshot = read_snapshot(state).await?;
+fn build_notification_groups(snapshot: &Snapshot, items: &[Notification]) -> Vec<Value> {
     struct Group {
         key: String,
         requirement_id: Option<String>,
@@ -1838,7 +1979,7 @@ async fn notification_groups(state: &AppState, user_id: &str) -> Result<Vec<Valu
         latest_title: String,
     }
     let mut groups: Vec<Group> = Vec::new();
-    for item in &items {
+    for item in items {
         let key = item
             .requirement_id
             .clone()
@@ -1879,7 +2020,7 @@ async fn notification_groups(state: &AppState, user_id: &str) -> Result<Vec<Valu
             .cmp(&a.unread)
             .then_with(|| b.latest_at.cmp(&a.latest_at))
     });
-    Ok(groups
+    groups
         .into_iter()
         .map(|group| {
             json!({
@@ -1893,7 +2034,7 @@ async fn notification_groups(state: &AppState, user_id: &str) -> Result<Vec<Valu
                 "latestTitle": group.latest_title,
             })
         })
-        .collect())
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -1907,7 +2048,7 @@ async fn read_notifications(
     AuthUser(actor): AuthUser,
     Json(input): Json<ReadNotificationsBody>,
 ) -> Result<Json<Value>, ApiError> {
-    if input.ids.as_ref().map_or(false, |ids| ids.len() > 200) {
+    if input.ids.as_ref().is_some_and(|ids| ids.len() > 200) {
         return Err(ApiError::bad("一次最多标记 200 条通知为已读"));
     }
     mark_notifications_read(&state, &actor.id, input.ids.as_deref()).await?;
@@ -1988,13 +2129,6 @@ fn require_admin(actor: &User) -> Result<(), ApiError> {
     }
 }
 
-fn valid_role(role: &str) -> bool {
-    matches!(
-        role,
-        ROLE_LEAD | ROLE_PRODUCT | ROLE_DESIGN | ROLE_DEV | ROLE_QA | ROLE_ADMIN
-    )
-}
-
 async fn admin_update_user(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
@@ -2008,6 +2142,7 @@ async fn admin_update_user(
             .iter()
             .position(|user| user.id == id)
             .ok_or_else(|| ApiError::not_found("用户不存在"))?;
+        let before = snapshot.users[index].clone();
         if let Some(roles) = input.roles {
             if roles.iter().any(|role| !valid_role(role)) {
                 return Err(ApiError::bad("包含未知角色"));
@@ -2022,9 +2157,26 @@ async fn admin_update_user(
             if name.is_empty() {
                 return Err(ApiError::bad("姓名不能为空"));
             }
+            if name.chars().count() > 60 {
+                return Err(ApiError::bad("姓名长度不能超过 60"));
+            }
+            if name.chars().any(char::is_control) {
+                return Err(ApiError::bad("姓名不能包含控制字符"));
+            }
             snapshot.users[index].name = name;
+            snapshot.users[index].name_by_admin = true;
         }
         if let Some(platforms) = input.platforms {
+            let valid_ids: HashSet<&str> = snapshot
+                .platforms
+                .iter()
+                .map(|platform| platform.id.as_str())
+                .collect();
+            for pid in &platforms {
+                if !valid_ids.contains(pid.as_str()) {
+                    return Err(ApiError::bad(format!("包含未知平台「{pid}」")));
+                }
+            }
             snapshot.users[index].platforms = platforms;
         }
         if let Some(active) = input.active {
@@ -2032,12 +2184,20 @@ async fn admin_update_user(
                 return Err(ApiError::bad("不能停用自己的账号"));
             }
             snapshot.users[index].active = active;
+            snapshot.users[index].disabled_by_admin = !active;
         }
         if let Some(role) = input.active_role {
             if !role.is_empty() && !valid_role(&role) {
                 return Err(ApiError::bad("未知角色"));
             }
+            if !role.is_empty() && !snapshot.users[index].roles.contains(&role) {
+                return Err(ApiError::bad("当前启用角色必须包含在成员角色中"));
+            }
             snapshot.users[index].active_role = if role.is_empty() { None } else { Some(role) };
+        } else if let Some(current_active) = snapshot.users[index].active_role.as_ref() {
+            if !snapshot.users[index].roles.contains(current_active) {
+                snapshot.users[index].active_role = snapshot.users[index].roles.first().cloned();
+            }
         }
         let admins = snapshot
             .users
@@ -2052,12 +2212,51 @@ async fn admin_update_user(
             "admin.user_update",
             None,
             None,
-            json!({ "userId": snapshot.users[index].id }),
+            json!({
+                "userId": snapshot.users[index].id,
+                "changes": user_changes(&before, &snapshot.users[index]),
+            }),
         );
         Ok(snapshot.users[index].clone())
     })
     .await?;
     Ok(Json(json!({ "user": user.private_json() })))
+}
+
+/// 审计日志只记真正改动的字段及前后值，排查“谁把谁停用了”时不用猜。
+fn user_changes(before: &User, after: &User) -> Value {
+    let mut changes = serde_json::Map::new();
+    if before.roles != after.roles {
+        changes.insert(
+            "roles".into(),
+            json!({ "from": before.roles, "to": after.roles }),
+        );
+    }
+    if before.name != after.name {
+        changes.insert(
+            "name".into(),
+            json!({ "from": before.name, "to": after.name }),
+        );
+    }
+    if before.platforms != after.platforms {
+        changes.insert(
+            "platforms".into(),
+            json!({ "from": before.platforms, "to": after.platforms }),
+        );
+    }
+    if before.active != after.active {
+        changes.insert(
+            "active".into(),
+            json!({ "from": before.active, "to": after.active }),
+        );
+    }
+    if before.active_role != after.active_role {
+        changes.insert(
+            "activeRole".into(),
+            json!({ "from": before.active_role, "to": after.active_role }),
+        );
+    }
+    Value::Object(changes)
 }
 
 #[derive(Debug, Deserialize)]
@@ -2134,7 +2333,9 @@ async fn admin_dingtalk_sync(
                 if org.unionid.is_some() {
                     user.dingtalk_union_id = org.unionid.clone();
                 }
-                if !org.name.trim().is_empty() {
+                // 管理员手动改过的姓名保留；离职（钉钉停用）一定会停用本地账号，
+                // 但钉钉“仍在职”不能把管理员手动停用的账号重新启用。
+                if !org.name.trim().is_empty() && !user.name_by_admin {
                     user.name = org.name.clone();
                 }
                 if org.mobile.is_some() {
@@ -2147,7 +2348,11 @@ async fn admin_dingtalk_sync(
                     user.title = org.title.clone();
                 }
                 user.department_ids = org.department_ids.clone();
-                user.active = org.active;
+                if !org.active {
+                    user.active = false;
+                } else if !user.disabled_by_admin {
+                    user.active = true;
+                }
                 updated += 1;
             } else {
                 let id = unique_user_id(snapshot, &org.userid);
@@ -2174,6 +2379,8 @@ async fn admin_dingtalk_sync(
                     department_ids: org.department_ids.clone(),
                     current_iteration_id: None,
                     current_project_id: None,
+                    disabled_by_admin: false,
+                    name_by_admin: false,
                 });
                 created += 1;
             }
@@ -2245,6 +2452,7 @@ async fn gitlab_webhook(
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
         .to_string();
+    let delivery_already_seen = webhook_delivery_seen(&state, &delivery).await?;
     let project_id = payload
         .pointer("/project/id")
         .and_then(Value::as_i64)
@@ -2362,12 +2570,14 @@ async fn gitlab_webhook(
             }
         }
         if let Some((requirement_id, platform_id)) = &found {
-            let duplicated = !delivery.is_empty()
-                && snapshot.events.iter().any(|event| {
-                    event.kind.starts_with("integration.gitlab")
-                        && event.payload.get("delivery").and_then(Value::as_str)
-                            == Some(delivery.as_str())
-                });
+            let sqlite_dup = delivery_already_seen;
+            let duplicated = sqlite_dup
+                || (!delivery.is_empty()
+                    && snapshot.events.iter().any(|event| {
+                        event.kind.starts_with("integration.gitlab")
+                            && event.payload.get("delivery").and_then(Value::as_str)
+                                == Some(delivery.as_str())
+                    }));
             if !duplicated {
                 snapshot.push_event(
                     None,
@@ -2431,6 +2641,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(auth_logout))
         .route("/onboarding/complete", post(onboarding_complete))
         .route("/state", get(get_state))
+        .route("/experience", post(experience_report))
         .route("/projects", post(create_project))
         .route("/projects/{id}", post(update_project))
         .route("/projects/{id}/select", post(select_project))
@@ -2463,6 +2674,7 @@ pub fn router(state: AppState) -> Router {
         .route("/requirements/{id}/schedule", post(schedule_requirement))
         .route("/requirements/{id}/scope", post(set_scope))
         .route("/requirements/{id}/design-claim", post(design_claim))
+        .route("/requirements/{id}/design-reset", post(design_reset))
         .route("/requirements/{id}/design-deliver", post(design_deliver))
         .route(
             "/requirements/{id}/document",
@@ -2505,10 +2717,4 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/integrations", get(admin_integrations))
         .route("/webhooks/gitlab", post(gitlab_webhook))
         .with_state(state)
-}
-
-// Keep the HashSet import used even when some feature branches are disabled.
-#[allow(dead_code)]
-fn _roles_set(roles: &[String]) -> HashSet<&str> {
-    roles.iter().map(String::as_str).collect()
 }

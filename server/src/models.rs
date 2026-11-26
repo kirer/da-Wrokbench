@@ -77,6 +77,12 @@ pub struct User {
     pub current_iteration_id: Option<String>,
     #[serde(default)]
     pub current_project_id: Option<String>,
+    /// 管理员手动停用的账号不随钉钉同步“仍在职”而恢复。
+    #[serde(default)]
+    pub disabled_by_admin: bool,
+    /// 管理员手动改过的姓名不再被钉钉通讯录覆盖。
+    #[serde(default)]
+    pub name_by_admin: bool,
 }
 
 impl User {
@@ -220,6 +226,8 @@ pub struct Iteration {
     pub reviewer_ids: Vec<String>,
     #[serde(default)]
     pub archived: bool,
+    #[serde(default)]
+    pub closed_at: Option<String>,
     #[serde(default)]
     pub created_at: String,
 }
@@ -368,6 +376,9 @@ pub struct DevTask {
     pub started_at: Option<String>,
     #[serde(default)]
     pub finished_at: Option<String>,
+    /// 排期时按端填的估时（人天）；None = 没估。
+    #[serde(default)]
+    pub estimate_days: Option<f64>,
     #[serde(default)]
     pub branch: Option<String>,
     #[serde(default)]
@@ -495,6 +506,7 @@ impl Requirement {
                     status: DEV_UNASSIGNED.to_string(),
                     started_at: None,
                     finished_at: None,
+                    estimate_days: None,
                     branch: None,
                     mr_url: None,
                     pipeline_status: None,

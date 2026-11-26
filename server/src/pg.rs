@@ -55,7 +55,9 @@ pub async fn init(pool: &Pool) -> Result<(), String> {
         )
         .await
         .map_err(|error| format!("初始化 Postgres 表失败：{error}"))?;
-    ensure_seeded(&client).await.map_err(|error| error.message)?;
+    ensure_seeded(&client)
+        .await
+        .map_err(|error| error.message)?;
     Ok(())
 }
 
@@ -101,14 +103,22 @@ pub async fn ping(pool: &Pool) -> Result<(), ApiError> {
     Ok(())
 }
 
-pub async fn load(pool: &Pool) -> Result<(i64, Snapshot), ApiError> {
+/// 读取整份状态。`with_contents = false` 时在 SQL 层就剔掉附件正文：
+/// 只读接口（/state 轮询、按 id 找用户、通知）用不到正文，没必要把它传回来再解析。
+/// 写路径必须带正文读取，否则保存会把附件清空。
+pub async fn load(pool: &Pool, with_contents: bool) -> Result<(i64, Snapshot), ApiError> {
     let client = pool
         .get()
         .await
         .map_err(|error| internal(format!("获取 Postgres 连接失败：{error}")))?;
     ensure_seeded(&client).await?;
+    let query = if with_contents {
+        "SELECT version, data FROM workbench_state WHERE id = 1"
+    } else {
+        "SELECT version, data - 'artifactContents' FROM workbench_state WHERE id = 1"
+    };
     let row = client
-        .query_one("SELECT version, data FROM workbench_state WHERE id = 1", &[])
+        .query_one(query, &[])
         .await
         .map_err(|error| internal(format!("读取 Postgres 状态失败：{error}")))?;
     let version: i64 = row.get(0);
@@ -190,7 +200,7 @@ pub async fn notifications_for(
     user_id: &str,
     limit: usize,
 ) -> Result<Vec<Notification>, ApiError> {
-    let (_, snapshot) = load(pool).await?;
+    let (_, snapshot) = load(pool, false).await?;
     let mut items: Vec<Notification> = snapshot
         .notifications
         .into_iter()
@@ -202,7 +212,7 @@ pub async fn notifications_for(
 }
 
 pub async fn unread_notifications(pool: &Pool, user_id: &str) -> Result<i64, ApiError> {
-    let (_, snapshot) = load(pool).await?;
+    let (_, snapshot) = load(pool, false).await?;
     Ok(snapshot
         .notifications
         .iter()
@@ -236,7 +246,7 @@ pub async fn mark_notifications_read(
 }
 
 pub async fn events_since(pool: &Pool, since: i64, limit: usize) -> Result<Vec<Event>, ApiError> {
-    let (_, snapshot) = load(pool).await?;
+    let (_, snapshot) = load(pool, false).await?;
     let mut items: Vec<Event> = snapshot
         .events
         .into_iter()

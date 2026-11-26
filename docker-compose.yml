@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: workbench
       POSTGRES_USER: workbench
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请先运行 deploy/init-env.sh 生成 .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置该变量（见 .env.example）}
     volumes:
       - workbench-pg:/var/lib/postgresql/data
     healthcheck:
@@ -32,10 +32,11 @@ services:
       PORT: "3210"
       # 容器内必须监听 0.0.0.0 才能被 Docker 端口映射转发；对外暴露范围由上面的 127.0.0.1 限制。
       WORKBENCH_BIND_ADDR: "0.0.0.0"
-      DATABASE_URL: postgres://workbench:${POSTGRES_PASSWORD:?请先运行 deploy/init-env.sh 生成 .env}@postgres:5432/workbench
+      DATABASE_URL: postgres://workbench:${POSTGRES_PASSWORD:?请在 .env 中设置该变量（见 .env.example）}@postgres:5432/workbench
       WORKBENCH_AUTH_PROVIDER: ${WORKBENCH_AUTH_PROVIDER:-mock}
-      WORKBENCH_AUTH_SECRET: ${WORKBENCH_AUTH_SECRET:?请先运行 deploy/init-env.sh 生成 .env}
-      WORKBENCH_INTERNAL_TOKEN: ${WORKBENCH_INTERNAL_TOKEN:?请先运行 deploy/init-env.sh 生成 .env}
+      WORKBENCH_AUTH_SECRET: ${WORKBENCH_AUTH_SECRET:?请在 .env 中设置该变量（见 .env.example）}
+      WORKBENCH_INTERNAL_TOKEN: ${WORKBENCH_INTERNAL_TOKEN:?请在 .env 中设置该变量（见 .env.example）}
+      WORKBENCH_TOKEN_TTL_SECONDS: ${WORKBENCH_TOKEN_TTL_SECONDS:-604800}
       WORKBENCH_PUBLIC_URL: ${WORKBENCH_PUBLIC_URL:-}
       WORKBENCH_ALLOWED_ORIGINS: ${WORKBENCH_ALLOWED_ORIGINS:-}
       # DSH 宿主从宿主机经回环端口访问容器，容器看到的来源是 Docker 网关而非 127.0.0.1；
@@ -47,6 +48,7 @@ services:
       DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID:-}
       DINGTALK_WORK_NOTIFY: ${DINGTALK_WORK_NOTIFY:-0}
       DINGTALK_API_BASE: ${DINGTALK_API_BASE:-https://oapi.dingtalk.com}
+      DINGTALK_OAUTH_BASE: ${DINGTALK_OAUTH_BASE:-https://api.dingtalk.com}
       DINGTALK_DEFAULT_ROLES: ${DINGTALK_DEFAULT_ROLES:-dev}
       DINGTALK_SYNC_ROOT_DEPT: ${DINGTALK_SYNC_ROOT_DEPT:-1}
       DINGTALK_SYNC_DISABLE_MISSING: ${DINGTALK_SYNC_DISABLE_MISSING:-0}

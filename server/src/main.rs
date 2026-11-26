@@ -2,6 +2,7 @@ mod api;
 mod db;
 mod dingtalk;
 mod domain;
+mod experience;
 mod gitlab;
 mod models;
 mod pg;
@@ -73,8 +74,7 @@ async fn main() {
         "change-me-to-a-long-random-string",
         "change-me-to-another-long-random-string",
     ];
-    if production
-        && (KNOWN_WEAK_SECRETS.contains(&auth_secret.as_str()) || auth_secret.len() < 32)
+    if production && (KNOWN_WEAK_SECRETS.contains(&auth_secret.as_str()) || auth_secret.len() < 32)
     {
         panic!("生产环境必须设置至少 32 字符的随机 WORKBENCH_AUTH_SECRET");
     }
@@ -84,17 +84,16 @@ async fn main() {
         panic!("生产环境必须设置至少 32 字符的随机 WORKBENCH_INTERNAL_TOKEN");
     }
     if auth_provider == "dingtalk"
-        && (env_opt("DINGTALK_CLIENT_ID").is_none()
-            || env_opt("DINGTALK_CLIENT_SECRET").is_none())
+        && (env_opt("DINGTALK_CLIENT_ID").is_none() || env_opt("DINGTALK_CLIENT_SECRET").is_none())
     {
         panic!("钉钉登录需要 DINGTALK_CLIENT_ID / DINGTALK_CLIENT_SECRET");
     }
     let gitlab_webhook_secret = env_opt("GITLAB_WEBHOOK_SECRET");
     if production
         && env_opt("GITLAB_BASE_URL").is_some()
-        && gitlab_webhook_secret.as_deref().map_or(true, |secret| {
-            secret.len() < 32 || KNOWN_WEAK_SECRETS.contains(&secret)
-        })
+        && gitlab_webhook_secret
+            .as_deref()
+            .is_none_or(|secret| secret.len() < 32 || KNOWN_WEAK_SECRETS.contains(&secret))
     {
         panic!("配置 GitLab 后，生产环境必须设置至少 32 字符的随机 GITLAB_WEBHOOK_SECRET");
     }
@@ -110,7 +109,9 @@ async fn main() {
         && (auth_secret == "dsh-workbench-poc-server-secret-change-me"
             || internal_token == "dsh-workbench-poc-internal-token")
     {
-        tracing::warn!("使用 POC 默认密钥；生产环境必须设置 WORKBENCH_AUTH_SECRET 与 WORKBENCH_INTERNAL_TOKEN");
+        tracing::warn!(
+            "使用 POC 默认密钥；生产环境必须设置 WORKBENCH_AUTH_SECRET 与 WORKBENCH_INTERNAL_TOKEN"
+        );
     }
 
     let database_path = env_value("DATABASE_PATH", "./data/workbench.db");
@@ -126,7 +127,9 @@ async fn main() {
         })
         .unwrap_or_default();
     let allow_remote_internal = matches!(
-        env_value("WORKBENCH_INTERNAL_ALLOW_REMOTE", "0").to_ascii_lowercase().as_str(),
+        env_value("WORKBENCH_INTERNAL_ALLOW_REMOTE", "0")
+            .to_ascii_lowercase()
+            .as_str(),
         "1" | "true" | "yes"
     );
     let config = Config {
@@ -138,7 +141,9 @@ async fn main() {
         dingtalk_client_secret: env_opt("DINGTALK_CLIENT_SECRET"),
         dingtalk_agent_id: env_opt("DINGTALK_AGENT_ID"),
         dingtalk_work_notify: matches!(
-            env_value("DINGTALK_WORK_NOTIFY", "0").to_ascii_lowercase().as_str(),
+            env_value("DINGTALK_WORK_NOTIFY", "0")
+                .to_ascii_lowercase()
+                .as_str(),
             "1" | "true" | "yes"
         ) && env_opt("DINGTALK_AGENT_ID").is_some(),
         dingtalk_api_base: env_value("DINGTALK_API_BASE", "https://oapi.dingtalk.com")
@@ -198,12 +203,9 @@ async fn main() {
             .collect();
         let cors = CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers([
-                header::AUTHORIZATION,
-                header::CONTENT_TYPE,
-                header::ACCEPT,
-            ])
+            // 路由里有 DELETE（删除需求/附件/会话），跨域部署时必须放行。
+            .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+            .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
             .expose_headers([header::CONTENT_TYPE]);
         app = app.layer(cors);
         tracing::info!("CORS allowlist: {}", allowed_origins.join(", "));
@@ -249,15 +251,18 @@ async fn main() {
         .await
         .unwrap_or_else(|error| panic!("监听 {address} 失败：{error}"));
     tracing::info!("dsh-workbench-server listening on http://{address}");
-    tracing::info!("auth provider: {}", env_value("WORKBENCH_AUTH_PROVIDER", "mock"));
+    tracing::info!(
+        "auth provider: {}",
+        env_value("WORKBENCH_AUTH_PROVIDER", "mock")
+    );
 
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .expect("server exit");
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .expect("server exit");
 }
 
 async fn shutdown_signal() {

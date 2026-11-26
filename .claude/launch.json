@@ -2,12 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "design",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8899", "--directory", "/Users/kirer/projects/da-Workbench/design"],
-      "port": 8899
-    },
-    {
       "name": "workbench",
       "url": "http://127.0.0.1:3199",
       "port": 3199

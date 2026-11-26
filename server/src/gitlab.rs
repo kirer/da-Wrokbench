@@ -24,19 +24,6 @@ fn gateway(message: impl Into<String>) -> ApiError {
     ApiError::new(StatusCode::BAD_GATEWAY, message)
 }
 
-fn url_encode(value: &str) -> String {
-    let mut out = String::new();
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(byte as char)
-            }
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
-}
-
 fn project_ref(platform: &crate::models::Platform) -> Option<String> {
     platform
         .gitlab_project_id
@@ -52,15 +39,16 @@ fn project_ref(platform: &crate::models::Platform) -> Option<String> {
         })
 }
 
+use crate::dingtalk::url_encode;
+
+/// 单次 GitLab 调用的总超时；连接超时沿用共享客户端的 5 秒。
+const GITLAB_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
 fn client(config: &Config) -> Result<reqwest::Client, ApiError> {
     if !configured(config) {
         return Err(gateway("GitLab 未配置"));
     }
-    reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|error| gateway(format!("初始化 GitLab HTTP 客户端失败：{}", error.without_url())))
+    Ok(crate::dingtalk::shared_http_client().clone())
 }
 
 fn base(config: &Config) -> String {
@@ -93,6 +81,7 @@ pub async fn create_branch(
             base(config),
             project
         ))
+        .timeout(GITLAB_TIMEOUT)
         .header("PRIVATE-TOKEN", token(config))
         .json(&json!({
             "branch": branch,
@@ -136,6 +125,7 @@ pub async fn create_merge_request(
             base(config),
             project
         ))
+        .timeout(GITLAB_TIMEOUT)
         .header("PRIVATE-TOKEN", token(config))
         .json(&json!({
             "source_branch": source,
@@ -209,6 +199,7 @@ pub async fn latest_pipeline(
             project,
             url_encode(branch)
         ))
+        .timeout(GITLAB_TIMEOUT)
         .header("PRIVATE-TOKEN", token(config))
         .send()
         .await

@@ -135,6 +135,7 @@ pub async fn app_token(config: &Config) -> Result<String, ApiError> {
     );
     let response = http_client()?
         .get(url)
+        .timeout(DINGTALK_TIMEOUT)
         .send()
         .await
         .map_err(|error| bad_gateway(format!("钉钉 gettoken 请求失败：{}", error.without_url())))?;
@@ -155,20 +156,33 @@ pub async fn app_token(config: &Config) -> Result<String, ApiError> {
         return Err(bad_gateway("钉钉 gettoken 没有返回 access_token"));
     }
     if let Ok(mut guard) = cache().lock() {
-        *guard = Some((token.clone(), Instant::now() + Duration::from_secs(ttl as u64 - 30)));
+        *guard = Some((
+            token.clone(),
+            Instant::now() + Duration::from_secs(ttl as u64 - 30),
+        ));
     }
     Ok(token)
 }
 
-pub(crate) fn http_client() -> Result<reqwest::Client, ApiError> {
-    reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(15))
-        .build()
-        .map_err(|error| bad_gateway(format!("初始化钉钉 HTTP 客户端失败：{}", error.without_url())))
+/// 全进程共用一个连接池：每次调用都新建 Client 会丢掉连接复用和 DNS 缓存。
+/// 超时按请求设置（见 [`GITLAB_TIMEOUT`] / [`DINGTALK_TIMEOUT`]），各集成互不影响。
+pub(crate) fn shared_http_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .expect("reqwest client with static settings cannot fail")
+    })
 }
 
-fn url_encode(value: &str) -> String {
+pub(crate) const DINGTALK_TIMEOUT: Duration = Duration::from_secs(15);
+
+pub(crate) fn http_client() -> Result<reqwest::Client, ApiError> {
+    Ok(shared_http_client().clone())
+}
+
+pub(crate) fn url_encode(value: &str) -> String {
     let mut out = String::new();
     for byte in value.bytes() {
         match byte {
@@ -196,10 +210,13 @@ pub async fn fetch_org(config: &Config) -> Result<(Vec<i64>, Vec<OrgUser>), ApiE
         );
         let response = client
             .post(url)
+            .timeout(DINGTALK_TIMEOUT)
             .json(&json!({ "dept_id": dept_id }))
             .send()
             .await
-            .map_err(|error| bad_gateway(format!("钉钉部门列表请求失败：{}", error.without_url())))?;
+            .map_err(|error| {
+                bad_gateway(format!("钉钉部门列表请求失败：{}", error.without_url()))
+            })?;
         let body: OapiResponse<Vec<Department>> = response
             .json()
             .await
@@ -229,10 +246,13 @@ pub async fn fetch_org(config: &Config) -> Result<(Vec<i64>, Vec<OrgUser>), ApiE
             );
             let response = client
                 .post(url)
+                .timeout(DINGTALK_TIMEOUT)
                 .json(&json!({ "dept_id": dept_id, "cursor": cursor, "size": 100 }))
                 .send()
                 .await
-                .map_err(|error| bad_gateway(format!("钉钉成员列表请求失败：{}", error.without_url())))?;
+                .map_err(|error| {
+                    bad_gateway(format!("钉钉成员列表请求失败：{}", error.without_url()))
+                })?;
             let body: OapiResponse<UserListResult> = response
                 .json()
                 .await
@@ -259,11 +279,7 @@ pub async fn fetch_org(config: &Config) -> Result<(Vec<i64>, Vec<OrgUser>), ApiE
                     mobile: raw.mobile,
                     avatar: raw.avatar,
                     title: raw.title,
-                    department_ids: raw
-                        .dept_id_list
-                        .iter()
-                        .map(|id| id.to_string())
-                        .collect(),
+                    department_ids: raw.dept_id_list.iter().map(|id| id.to_string()).collect(),
                     active: raw.active,
                 });
             }
@@ -297,6 +313,7 @@ pub async fn send_work_notice(config: &Config, notice: &WorkNotice) -> Result<()
     );
     let response = http_client()?
         .post(url)
+        .timeout(DINGTALK_TIMEOUT)
         .json(&json!({
             "agent_id": agent_id,
             "userid_list": notice.userid,
