@@ -85,6 +85,7 @@ Mock 模式在登录页直接点员工进入，然后完成首次引导（默认
 - **一键重置**：`bash tools/reset-workbench-test-data.sh`。只用于测试环境：会退出桌面端，
   清空数据库、本机需求目录和会话缓存（不备份），以种子基线重启服务端，并以 9222 调试端口重开桌面端。
 - **数据库备份**：`bash tools/workbench-db-backup.sh`（SQLite 在线备份，默认保留最近 14 份）。
+- **DSH 会话一键备份 / 重置 / 恢复（Windows）**：双击 `tools\dsh-session-manager.cmd`，或直接用 `tools\dsh-session-reset.cmd` / `tools\dsh-session-restore.cmd`；说明见 [docs/本地运行与备份.md](docs/本地运行与备份.md#43-一键重置--一键恢复windows)。
 
 ## 目录
 
