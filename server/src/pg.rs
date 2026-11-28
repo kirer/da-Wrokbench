@@ -113,11 +113,12 @@ pub async fn init(pool: &Pool) -> Result<(), String> {
         "iterations",
         "skills",
     ] {
-        let _ = client
+        client
             .batch_execute(&format!(
                 "ALTER TABLE {table} ADD COLUMN IF NOT EXISTS hash TEXT"
             ))
-            .await;
+            .await
+            .map_err(|error| format!("为表 {table} 补 hash 列失败：{error}"))?;
     }
     migrate_legacy(&client)
         .await
@@ -345,7 +346,7 @@ pub async fn load(pool: &Pool, with_contents: bool) -> Result<(i64, Snapshot), A
         .get()
         .await
         .map_err(|error| internal(format!("获取 Postgres 连接失败：{error}")))?;
-    ensure_seeded(&client).await?;
+    // 种子初始化只在 pg::init 启动时做一次，读路径不再每次查用户数。
     load_with_client(&client, with_contents).await
 }
 

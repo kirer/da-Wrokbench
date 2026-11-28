@@ -2837,7 +2837,12 @@ window.__ModuleLoader__.load({
       try {
         const es = new EventSource(`${API}events/stream`, { withCredentials: true })
         es.addEventListener('workbench', () => { void reloadWorkbench() })
-        es.onopen = () => { workbenchStore.failures = 0 }
+        es.onopen = () => { workbenchStore.failures = 0; workbenchStore.streamErrors = 0 }
+        // 无 Cookie/鉴权失败（如桌面端）时 EventSource 会一直后台重连；连续失败几次就退回纯轮询。
+        es.onerror = () => {
+          workbenchStore.streamErrors = (workbenchStore.streamErrors || 0) + 1
+          if (workbenchStore.streamErrors >= 3) stopWorkbenchStream()
+        }
         workbenchStore.eventSource = es
       } catch (_) { /* 不支持就只轮询 */ }
     }
