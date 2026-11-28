@@ -693,3 +693,47 @@ pub async fn insert_revoked(pool: &Pool, jti: &str, expires_at: i64) -> Result<(
         .map_err(|error| internal(format!("清理吊销表失败：{error}")))?;
     Ok(())
 }
+
+pub async fn revision(pool: &Pool) -> Result<i64, ApiError> {
+    let client = pool
+        .get()
+        .await
+        .map_err(|error| internal(format!("获取 Postgres 连接失败：{error}")))?;
+    let row = client
+        .query_opt(
+            "SELECT value FROM workbench_meta WHERE key = 'revision'",
+            &[],
+        )
+        .await
+        .map_err(|error| internal(format!("读取修订号失败：{error}")))?;
+    Ok(row
+        .and_then(|row| row.get::<_, String>(0).parse::<i64>().ok())
+        .unwrap_or(0))
+}
+
+pub async fn notification_watermark(pool: &Pool, user_id: &str) -> Result<(i64, i64), ApiError> {
+    let client = pool
+        .get()
+        .await
+        .map_err(|error| internal(format!("获取 Postgres 连接失败：{error}")))?;
+    let row = client
+        .query_one(
+            "SELECT COUNT(*) FILTER (WHERE read = false), COALESCE(MAX(id), 0) FROM notifications WHERE user_id = $1",
+            &[&user_id],
+        )
+        .await
+        .map_err(|error| internal(format!("读取通知水位失败：{error}")))?;
+    Ok((row.get::<_, i64>(0), row.get::<_, i64>(1)))
+}
+
+pub async fn latest_event_id(pool: &Pool) -> Result<i64, ApiError> {
+    let client = pool
+        .get()
+        .await
+        .map_err(|error| internal(format!("获取 Postgres 连接失败：{error}")))?;
+    let row = client
+        .query_one("SELECT COALESCE(MAX(id), 0) FROM events", &[])
+        .await
+        .map_err(|error| internal(format!("读取事件水位失败：{error}")))?;
+    Ok(row.get::<_, i64>(0))
+}

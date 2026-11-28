@@ -1051,6 +1051,41 @@ pub fn mark_notifications_read(
     Ok(())
 }
 
+/// 轻量读取全局修订号（不存在按 0）。
+pub fn revision(conn: &Connection) -> rusqlite::Result<i64> {
+    match conn.query_row(
+        "SELECT value FROM workbench_meta WHERE key = 'revision'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(value) => Ok(value.parse().unwrap_or(0)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+        Err(error) => Err(error),
+    }
+}
+
+/// (未读数, 该用户最新通知 id)。ETag 用它把「已读/新通知」纳入，避免点击已读后仍命中 304。
+pub fn notification_watermark(conn: &Connection, user_id: &str) -> rusqlite::Result<(i64, i64)> {
+    let unread: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM notifications WHERE user_id = ?1 AND read = 0",
+        params![user_id],
+        |row| row.get(0),
+    )?;
+    let latest: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(id), 0) FROM notifications WHERE user_id = ?1",
+        params![user_id],
+        |row| row.get(0),
+    )?;
+    Ok((unread, latest))
+}
+
+/// 当前最大事件 id（SSE 默认从它开始，避免回放历史）。
+pub fn latest_event_id(conn: &Connection) -> rusqlite::Result<i64> {
+    conn.query_row("SELECT COALESCE(MAX(id), 0) FROM events", [], |row| {
+        row.get(0)
+    })
+}
+
 pub fn events_since(conn: &Connection, since: i64, limit: usize) -> rusqlite::Result<Vec<Event>> {
     let mut statement = conn.prepare(
         "SELECT id, at, actor_id, type, requirement_id, iteration_id, payload

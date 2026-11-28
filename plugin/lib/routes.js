@@ -540,6 +540,11 @@ export function makeRoute(local, hostCtx = null) {
         } catch (reason) {
           return json(res, 502, { error: `事件流连接失败：${reason instanceof Error ? reason.message : String(reason)}` })
         }
+        if (upstream.status !== 200) {
+          let detail = ''
+          try { detail = await upstream.text() } catch (_) { /* 忽略 */ }
+          return json(res, 502, { error: `事件流上游返回 ${upstream.status}`, detail: detail.slice(0, 300) })
+        }
         res.writeHead(upstream.status, {
           'content-type': 'text/event-stream; charset=utf-8',
           'cache-control': 'no-cache, no-transform',
@@ -569,7 +574,8 @@ export function makeRoute(local, hostCtx = null) {
           || item.primarySessionId === recordId
         ))
         if (!serverRequirement) return json(res, 200, { requirement: null })
-        await syncWorkspaceFiles(userId, { requirements: [serverRequirement] }, local)
+        // 不阻塞接口返回：工作区同步转后台（与 /state 一致），首次可能暂缺本机文件列表，下一轮同步补齐。
+        scheduleWorkspaceSync(userId, { requirements: [serverRequirement] }, local)
         const requirement = decorateRequirement(localState, baseDir, stateData, serverRequirement)
         requirement.designFiles = listDesignFiles(requirement.folderPath, baseDir)
         attachWorkingFolders(requirement, baseDir)

@@ -151,7 +151,7 @@ export async function serverRaw(route, options = {}) {
 export async function serverStream(route, options = {}) {
   const headers = {}
   if (options.token) headers.authorization = `Bearer ${options.token}`
-  const response = await fetch(`${SERVER_URL}${route}`, { headers, signal: options.signal })
+  const response = await fetch(`${SERVER_URL}${route}`, { headers, signal: options.signal, redirect: 'manual' })
   return response
 }
 

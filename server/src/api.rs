@@ -6,8 +6,9 @@ use crate::domain::{self, ApiError};
 use crate::gitlab;
 use crate::models::*;
 use crate::store_ops::{
-    events_since, lock_sqlite, mark_notifications_read, mutate, notifications_for, read_snapshot,
-    unread_notifications,
+    events_since, latest_event_id, lock_sqlite, mark_notifications_read, mutate,
+    notification_watermark, notifications_for, read_snapshot, state_revision, unread_notifications,
+    with_sqlite_blocking,
 };
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
@@ -212,8 +213,8 @@ impl AppState {
 async fn find_user(state: &AppState, id: &str) -> Result<Option<User>, ApiError> {
     match &state.store {
         Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::find_user(&conn, id)?)
+            let id = id.to_string();
+            with_sqlite_blocking(state, move |conn| Ok(db::find_user(conn, &id)?)).await
         }
         Store::Postgres(pool) => {
             let (_, snapshot) = crate::pg::load(pool, false).await?;
@@ -746,14 +747,24 @@ async fn get_state(
     AuthUser(actor): AuthUser,
     headers: axum::http::HeaderMap,
 ) -> Result<axum::response::Response, ApiError> {
+    let actor_id = actor.id.clone();
+    let revision = state_revision(&state).await?;
+    let (unread, latest_notif) = notification_watermark(&state, &actor_id).await?;
+    let etag = format!("\"{revision}:{unread}:{latest_notif}\"");
+    // 先做轻量 ETag 比对：命中直接 304，省掉加载整份快照 + 拼装 JSON 的开销。
+    if headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        == Some(etag.as_str())
+    {
+        return Ok((StatusCode::NOT_MODIFIED, [(axum::http::header::ETAG, etag)]).into_response());
+    }
     let snapshot = read_snapshot(&state).await?;
-    let etag = format!("\"{}\"", snapshot.revision);
-    let all_notifications = notifications_for(&state, &actor.id, 500).await?;
-    let unread = unread_notifications(&state, &actor.id).await?;
+    let all_notifications = notifications_for(&state, &actor_id, 500).await?;
     let notification_groups = build_notification_groups(&snapshot, &all_notifications);
     let notifications: Vec<_> = all_notifications.into_iter().take(50).collect();
     let actor = snapshot
-        .user(&actor.id)
+        .user(&actor_id)
         .cloned()
         .ok_or_else(|| ApiError::unauthorized("账号不存在"))?;
     let mut iterations = snapshot.iterations.clone();
@@ -794,13 +805,6 @@ async fn get_state(
         // 没接 GitLab 时 MR / 流水线是演示数据，前端据此把它标成“演示”，不做可点的真链接。
         "gitlabConfigured": gitlab::configured(&state.config),
     });
-    // ETag = 全局修订号：内容没变时直接 304，省掉序列化和传输。
-    let if_none_match = headers
-        .get(axum::http::header::IF_NONE_MATCH)
-        .and_then(|value| value.to_str().ok());
-    if if_none_match == Some(etag.as_str()) {
-        return Ok((StatusCode::NOT_MODIFIED, [(axum::http::header::ETAG, etag)]).into_response());
-    }
     Ok(([(axum::http::header::ETAG, etag)], Json(payload)).into_response())
 }
 
@@ -2265,7 +2269,10 @@ async fn events_stream(
     impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
 > {
     use axum::response::sse::{Event, KeepAlive, Sse};
-    let start = query.since.unwrap_or(0);
+    let start = match query.since {
+        Some(value) => value,
+        None => latest_event_id(&state).await.unwrap_or(0),
+    };
     let is_admin = actor.has_role(ROLE_ADMIN);
     let state = state.clone();
     let stream = futures::stream::unfold(start, move |cursor| {
