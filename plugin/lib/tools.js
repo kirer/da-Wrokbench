@@ -448,6 +448,9 @@ export function registerTools(ctx, local) {
               properties: {
                 platformId: { type: 'string', description: '平台 id，例如 trade-server / web' },
                 days: { type: 'number', description: '估时人天，可带小数' },
+                startDate: { type: 'string', description: '该端计划开始日期 YYYY-MM-DD（可选）' },
+                endDate: { type: 'string', description: '该端计划结束日期 YYYY-MM-DD（可选）' },
+                dependsOn: { type: 'array', items: { type: 'string' }, description: '该端依赖的其他平台 id（可选），用于联调先后' },
               },
             },
           },
@@ -512,6 +515,8 @@ export function registerTools(ctx, local) {
           platformId: { type: 'string', description: '平台 id，例如 trade-server / web / ios' },
           assigneeId: { type: 'string', description: 'assign 时的开发负责人用户 id' },
           note: { type: 'string', description: '完成开发备注' },
+          actualDays: { type: 'number', description: 'finish 时填写实际投入人天（可选，不填按开始到完成时间推算）' },
+          blockedReason: { type: 'string', description: 'finish 时填写阻塞原因/超时说明（可选，用于估时偏差复盘）' },
         },
         required: ['action', 'platformId'],
       },
@@ -531,7 +536,7 @@ export function registerTools(ctx, local) {
           path = 'dev-start'
         } else if (action === 'finish') {
           path = 'dev-finish'
-          body = { ...base, note: args?.note }
+          body = { ...base, note: args?.note, actualDays: args?.actualDays, blockedReason: args?.blockedReason }
         } else if (action === 'reopen') {
           path = 'dev-reopen'
         } else {
@@ -544,6 +549,10 @@ export function registerTools(ctx, local) {
           `已${actionLabel(action)}：${result.requirement.code}「${result.requirement.title}」的 ${platformId}`
           + (action === 'assign' && assignee ? `，开发负责人 ${assignee}` : '')
           + `。任务状态 ${task ? devTaskStatusLabel(task.status) : '未知'}，需求状态 ${statusLabel(result.requirement.status)}。`
+          + (task?.estimateDays != null && task?.actualDays != null
+            ? ` 估时 ${task.estimateDays} 人天 / 实际 ${task.actualDays} 人天。`
+            : '')
+          + (task?.blockedReason ? ` 阻塞：${task.blockedReason}。` : '')
           + (task?.mrUrl ? ` MR：${task.mrUrl}` : ''),
         )
       },
@@ -592,13 +601,13 @@ export function registerTools(ctx, local) {
 
     sub.tools.register(defineTool(
       'workbench_release_action',
-      '发布阶段操作：freeze 测试通过后冻结；unfreeze 解冻；release 发布并记录版本号。仅负责人/管理员可调用。',
+      '发布阶段操作：freeze 测试通过后冻结；unfreeze 解冻；release 发布并记录版本号；complete 发布后完成验收（进入已完成）；cancel 取消/废弃需求。仅负责人/管理员可调用。',
       {
         type: 'object',
         additionalProperties: false,
         properties: {
           requirement: { type: 'string', description: '需求编号；省略则取当前会话绑定的需求' },
-          action: { type: 'string', enum: ['freeze', 'unfreeze', 'release'], description: '发布操作' },
+          action: { type: 'string', enum: ['freeze', 'unfreeze', 'release', 'complete', 'cancel'], description: '发布/终态操作' },
           version: { type: 'string', description: 'release 时的版本号，例如 v1.2.0' },
         },
         required: ['action'],
@@ -606,8 +615,8 @@ export function registerTools(ctx, local) {
       async (args, exec) => {
         const actorId = actorIdFromExec(local, exec)
         const action = String(args?.action ?? '')
-        if (!['freeze', 'unfreeze', 'release'].includes(action)) {
-          throw httpError(400, 'action 只能是 freeze / unfreeze / release')
+        if (!['freeze', 'unfreeze', 'release', 'complete', 'cancel'].includes(action)) {
+          throw httpError(400, 'action 只能是 freeze / unfreeze / release / complete / cancel')
         }
         const result = await actionOnRequirement(local, actorId, args, exec, action, {
           version: args?.version,
@@ -617,6 +626,100 @@ export function registerTools(ctx, local) {
           + `当前状态：${statusLabel(result.requirement.status)}。`
           + (result.requirement.release ? ` 发布版本：${result.requirement.release.version}。` : ''),
         )
+      },
+    ))
+
+    sub.tools.register(defineTool(
+      'workbench_overview',
+      '查看跨项目的人员负载总览：每个成员在手的开发任务数、估时人天与负责需求数。只读。',
+      { type: 'object', additionalProperties: false, properties: {} },
+      async (_args, exec) => {
+        const actorId = actorIdFromExec(local, exec)
+        const data = await serverAs(actorId, '/overview')
+        const users = Array.isArray(data?.overview?.users) ? data.overview.users : []
+        if (users.length === 0) return toolOutput('当前没有需要展示的人员负载。')
+        const totals = data?.overview?.totals ?? {}
+        const lines = users
+          .slice(0, 40)
+          .map((item) => `${item.name}：在手 ${item.openTasks} 个任务 / ${item.openEstimateDays} 人天，负责需求 ${item.ownedRequirements} 个`)
+        return toolOutput(
+          `人员负载总览（共 ${totals.requirements ?? 0} 条需求，在手任务 ${totals.openTasks ?? 0} 个）：\n${lines.join('\n')}`,
+        )
+      },
+    ))
+
+    sub.tools.register(defineTool(
+      'workbench_version_diff',
+      '对比需求两个提交版本之间的差异：正文、验收标准、摘要与原型屏增删。只读。',
+      {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          requirement: { type: 'string', description: '需求编号；省略则取当前会话绑定的需求' },
+          from: { type: 'integer', description: '旧版本号' },
+          to: { type: 'integer', description: '新版本号' },
+        },
+        required: ['from', 'to'],
+      },
+      async (args, exec) => {
+        const actorId = actorIdFromExec(local, exec)
+        const { requirement } = await requirementForExec(local, actorId, args, exec)
+        const from = Number(args?.from)
+        const to = Number(args?.to)
+        if (!Number.isInteger(from) || !Number.isInteger(to)) {
+          throw httpError(400, 'from / to 需要是整数版本号')
+        }
+        const data = await serverAs(
+          actorId,
+          `/requirements/${encodeURIComponent(requirement.id)}/versions/diff?from=${from}&to=${to}`,
+        )
+        const diff = data?.diff ?? {}
+        const doc = diff.document ?? {}
+        const screens = diff.prototypeScreens ?? {}
+        const tag = (a, b) => (a === b ? '（无变化）' : '（有变化）')
+        return toolOutput([
+          `${requirement.code} 版本对比 v${from} → v${to}`,
+          `摘要${tag(diff.versionSummary?.from, diff.versionSummary?.to)}`,
+          `正文${tag(doc.body?.from, doc.body?.to)}`,
+          `验收标准${tag(doc.acceptanceCriteria?.from, doc.acceptanceCriteria?.to)}`,
+          `原型屏新增：${(screens.added ?? []).join('、') || '无'}；删除：${(screens.removed ?? []).join('、') || '无'}`,
+        ].join('\n'))
+      },
+    ))
+
+    sub.tools.register(defineTool(
+      'workbench_gitlab_retry',
+      '某个开发任务的 GitLab 同步失败后手动重试：branch 重建分支 / mr 补建合并请求 / pipeline 同步流水线。',
+      {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          requirement: { type: 'string', description: '需求编号；省略则取当前会话绑定的需求' },
+          platformId: { type: 'string', description: '平台 id，例如 trade-server' },
+          action: { type: 'string', enum: ['branch', 'mr', 'pipeline'], description: '重试动作，默认 branch' },
+        },
+        required: ['platformId'],
+      },
+      async (args, exec) => {
+        const actorId = actorIdFromExec(local, exec)
+        const { requirement } = await requirementForExec(local, actorId, args, exec)
+        const platformId = String(args?.platformId ?? '').trim()
+        if (platformId === '') throw httpError(400, '缺少 platformId')
+        const action = String(args?.action ?? 'branch')
+        const data = await serverAs(
+          actorId,
+          `/requirements/${encodeURIComponent(requirement.id)}/gitlab-retry`,
+          'POST',
+          { platformId, action },
+        )
+        const detail = data?.branch
+          ? `分支：${data.branch}`
+          : data?.mrUrl
+            ? `合并请求：${data.mrUrl}`
+            : data?.status
+              ? `流水线：${data.status}`
+              : ''
+        return toolOutput(`已重试 ${requirement.code} 的 GitLab ${action}。${detail}`)
       },
     ))
 

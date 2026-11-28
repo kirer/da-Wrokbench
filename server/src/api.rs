@@ -1,16 +1,23 @@
+use crate::api_admin::{admin_dingtalk_sync, admin_integrations, admin_update_user};
+use crate::api_webhooks::gitlab_webhook;
+use crate::clientip::ClientIp;
 use crate::db::{self, Snapshot};
-use crate::domain::{self, valid_role, ApiError};
+use crate::domain::{self, ApiError};
 use crate::gitlab;
 use crate::models::*;
+use crate::store_ops::{
+    events_since, lock_sqlite, mark_notifications_read, mutate, notifications_for, read_snapshot,
+    unread_notifications,
+};
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -33,6 +40,10 @@ pub struct Config {
     pub gitlab_token: Option<String>,
     pub gitlab_webhook_secret: Option<String>,
     pub gitlab_default_branch: String,
+    /// 分支命名模板，支持 {code} 与 {platform} 占位；默认 feature/{code}-{platform}。
+    pub gitlab_branch_template: Option<String>,
+    /// 是否启用发布门禁：冻结/发布前必须有验收标准且设计已交付。
+    pub publish_gate: bool,
     pub token_ttl_seconds: i64,
     pub allow_remote_internal: bool,
 }
@@ -53,6 +64,8 @@ pub struct AppState {
     pub revoked: Arc<Mutex<std::collections::HashMap<String, i64>>>,
     /// 简单的按 key 令牌桶，用于登录/Webhook 这类无鉴权入口。
     pub limiter: Arc<Mutex<std::collections::HashMap<String, RateBucket>>>,
+    /// 进程级请求指标（/metrics 暴露），用于基础可观测性。
+    pub metrics: Arc<crate::metrics::Metrics>,
 }
 
 /// 令牌桶：capacity 个令牌，每 refill_secs 秒补满一个。
@@ -92,11 +105,17 @@ impl RateBucket {
 
 impl AppState {
     pub fn new_sqlite(conn: rusqlite::Connection, config: Config) -> Self {
+        // 启动时把库里已吊销的 token 载入内存：重启后旧 token 仍然失效。
+        let revoked_map = crate::db::load_revoked(&conn)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         Self {
             store: Store::Sqlite(Arc::new(Mutex::new(conn))),
             config: Arc::new(config),
-            revoked: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            revoked: Arc::new(Mutex::new(revoked_map)),
             limiter: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            metrics: Arc::new(crate::metrics::Metrics::new()),
         }
     }
 
@@ -106,11 +125,12 @@ impl AppState {
             config: Arc::new(config),
             revoked: Arc::new(Mutex::new(std::collections::HashMap::new())),
             limiter: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            metrics: Arc::new(crate::metrics::Metrics::new()),
         }
     }
 
     /// 返回 false 表示超限。key 由调用方拼成「路由:来源」，不同入口互不影响。
-    fn allow(&self, key: &str, capacity: f64, refill_secs: f64) -> bool {
+    pub(crate) fn allow(&self, key: &str, capacity: f64, refill_secs: f64) -> bool {
         let now = unix_now();
         let mut buckets = match self.limiter.lock() {
             Ok(guard) => guard,
@@ -154,80 +174,38 @@ impl AppState {
         if let Ok(mut revoked) = self.revoked.lock() {
             revoked.insert(jti.to_string(), expires_at);
         }
-    }
-}
-
-/// 登录/Webhook 入口的来源地址。取不到 peer（Unix socket、内嵌测试）时统一
-/// 记成 "unknown"，不返回错误——限流不能成为拒绝服务的新入口。
-pub struct ClientIp(String);
-
-impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
-    type Rejection = std::convert::Infallible;
-
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        Ok(ClientIp(
-            parts
-                .extensions
-                .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-                .map(|info| info.0.ip().to_string())
-                .unwrap_or_else(|| "unknown".to_string()),
-        ))
-    }
-}
-
-impl ClientIp {
-    fn key(&self, route: &str) -> String {
-        format!("{route}:{}", self.0)
-    }
-}
-
-fn lock_sqlite(
-    state: &AppState,
-) -> Result<std::sync::MutexGuard<'_, rusqlite::Connection>, ApiError> {
-    match &state.store {
-        Store::Sqlite(db) => db
-            .lock()
-            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")),
-        Store::Postgres(_) => Err(ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "服务端配置错误：Postgres 后端不能使用 SQLite 连接",
-        )),
-    }
-}
-
-async fn read_snapshot(state: &AppState) -> Result<Snapshot, ApiError> {
-    match &state.store {
-        Store::Sqlite(db) => {
-            let conn = db.lock().map_err(|_| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")
-            })?;
-            Ok(db::load_snapshot_without_contents(&conn)?)
+        // SQLite 落库：重启后旧 token 仍然失效（Postgres 多实例共享另需外部存储）。
+        if let Store::Sqlite(db) = &self.store {
+            if let Ok(conn) = db.lock() {
+                if let Err(error) = crate::db::insert_revoked(&conn, jti, expires_at) {
+                    tracing::warn!("吊销 token 落库失败：{error}");
+                }
+            }
         }
-        Store::Postgres(pool) => {
-            let (_, snapshot) = crate::pg::load(pool, false).await?;
-            Ok(snapshot)
+        // Postgres 也落库：后台异步写，重启后旧 token 仍失效。
+        if let Store::Postgres(pool) = &self.store {
+            let pool = pool.clone();
+            let jti = jti.to_string();
+            tokio::spawn(async move {
+                let _ = crate::pg::insert_revoked(&pool, &jti, expires_at).await;
+            });
         }
     }
-}
 
-async fn mutate<T, F>(state: &AppState, action: F) -> Result<T, ApiError>
-where
-    T: Send,
-    F: FnOnce(&mut Snapshot) -> Result<T, ApiError> + Send,
-{
-    match &state.store {
-        Store::Sqlite(db) => {
-            let mut conn = db.lock().map_err(|_| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")
-            })?;
-            let mut snapshot = db::load_snapshot(&conn)?;
-            let result = action(&mut snapshot)?;
-            let tx = conn.transaction()?;
-            db::save_snapshot(&tx, &mut snapshot)?;
-            tx.commit()?;
-            Ok(result)
+    /// 启动时把已吊销 token 载入内存（Postgres 后端）。SQLite 在 new_sqlite 里已加载。
+    pub async fn warm_revoked(&self) {
+        if let Store::Postgres(pool) = &self.store {
+            match crate::pg::load_revoked(pool).await {
+                Ok(list) => {
+                    if let Ok(mut map) = self.revoked.lock() {
+                        for (jti, expires_at) in list {
+                            map.insert(jti, expires_at);
+                        }
+                    }
+                }
+                Err(error) => tracing::warn!("加载已吊销 token 失败：{}", error.message),
+            }
         }
-        Store::Postgres(pool) => crate::pg::mutate(pool, action).await,
     }
 }
 
@@ -241,67 +219,6 @@ async fn find_user(state: &AppState, id: &str) -> Result<Option<User>, ApiError>
             let (_, snapshot) = crate::pg::load(pool, false).await?;
             Ok(snapshot.users.into_iter().find(|user| user.id == id))
         }
-    }
-}
-
-async fn webhook_delivery_seen(state: &AppState, delivery: &str) -> Result<bool, ApiError> {
-    if delivery.is_empty() {
-        return Ok(false);
-    }
-    match &state.store {
-        Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::has_webhook_delivery(&conn, delivery)?)
-        }
-        Store::Postgres(_) => Ok(false),
-    }
-}
-
-async fn notifications_for(
-    state: &AppState,
-    user_id: &str,
-    limit: usize,
-) -> Result<Vec<Notification>, ApiError> {
-    match &state.store {
-        Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::notifications_for(&conn, user_id, limit)?)
-        }
-        Store::Postgres(pool) => crate::pg::notifications_for(pool, user_id, limit).await,
-    }
-}
-
-async fn unread_notifications(state: &AppState, user_id: &str) -> Result<i64, ApiError> {
-    match &state.store {
-        Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::unread_notifications(&conn, user_id)?)
-        }
-        Store::Postgres(pool) => crate::pg::unread_notifications(pool, user_id).await,
-    }
-}
-
-async fn mark_notifications_read(
-    state: &AppState,
-    user_id: &str,
-    ids: Option<&[i64]>,
-) -> Result<(), ApiError> {
-    match &state.store {
-        Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::mark_notifications_read(&conn, user_id, ids)?)
-        }
-        Store::Postgres(pool) => crate::pg::mark_notifications_read(pool, user_id, ids).await,
-    }
-}
-
-async fn events_since(state: &AppState, since: i64, limit: usize) -> Result<Vec<Event>, ApiError> {
-    match &state.store {
-        Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::events_since(&conn, since, limit)?)
-        }
-        Store::Postgres(pool) => crate::pg::events_since(pool, since, limit).await,
     }
 }
 
@@ -827,8 +744,10 @@ async fn experience_report(
 async fn get_state(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
-) -> Result<Json<Value>, ApiError> {
+    headers: axum::http::HeaderMap,
+) -> Result<axum::response::Response, ApiError> {
     let snapshot = read_snapshot(&state).await?;
+    let etag = format!("\"{}\"", snapshot.revision);
     let all_notifications = notifications_for(&state, &actor.id, 500).await?;
     let unread = unread_notifications(&state, &actor.id).await?;
     let notification_groups = build_notification_groups(&snapshot, &all_notifications);
@@ -855,7 +774,7 @@ async fn get_state(
         .cloned()
         .collect::<Vec<_>>();
     requirements.sort_by(|a, b| a.code.cmp(&b.code));
-    Ok(Json(json!({
+    let payload = json!({
         "version": 5,
         "currentUser": actor.private_json(),
         "users": snapshot.users.iter().map(|user| user.public_json()).collect::<Vec<_>>(),
@@ -874,7 +793,15 @@ async fn get_state(
         "serverTime": crate::now_iso(),
         // 没接 GitLab 时 MR / 流水线是演示数据，前端据此把它标成“演示”，不做可点的真链接。
         "gitlabConfigured": gitlab::configured(&state.config),
-    })))
+    });
+    // ETag = 全局修订号：内容没变时直接 304，省掉序列化和传输。
+    let if_none_match = headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok());
+    if if_none_match == Some(etag.as_str()) {
+        return Ok((StatusCode::NOT_MODIFIED, [(axum::http::header::ETAG, etag)]).into_response());
+    }
+    Ok(([(axum::http::header::ETAG, etag)], Json(payload)).into_response())
 }
 
 async fn requirement_by_session(
@@ -1364,6 +1291,14 @@ struct PlatformActionBody {
     platform_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitlabRetryInput {
+    platform_id: String,
+    #[serde(default)]
+    action: String,
+}
+
 async fn dev_claim(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
@@ -1397,7 +1332,7 @@ async fn dev_start(
             .find(|platform| platform.id == input.platform_id)
             .cloned()
         {
-            let branch = gitlab::branch_name(&requirement.code, &input.platform_id);
+            let branch = gitlab::branch_name(&state.config, &requirement.code, &input.platform_id);
             let branch_result = match tokio::time::timeout(
                 std::time::Duration::from_secs(15),
                 gitlab::create_branch(&state.config, &platform, &branch),
@@ -1486,6 +1421,138 @@ async fn dev_start(
     })))
 }
 
+/// 单个开发任务的 GitLab 手动重试：重新创建分支 / 补建 MR / 同步流水线。
+async fn retry_gitlab(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+    Json(input): Json<GitlabRetryInput>,
+) -> Result<Json<Value>, ApiError> {
+    if !gitlab::configured(&state.config) {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "GitLab 未配置",
+        ));
+    }
+    let snapshot = read_snapshot(&state).await?;
+    let requirement = snapshot
+        .requirements
+        .iter()
+        .find(|item| item.id == id || item.code == id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found("需求不存在"))?;
+    if !actor.can_plan() && requirement.owner_id != actor.id {
+        return Err(ApiError::forbidden("没有权限重试该需求的 GitLab 集成"));
+    }
+    if !requirement
+        .platform_ids
+        .iter()
+        .any(|platform| platform == &input.platform_id)
+    {
+        return Err(ApiError::bad("该平台不在需求范围内"));
+    }
+    let platform = snapshot
+        .platforms
+        .iter()
+        .find(|platform| platform.id == input.platform_id)
+        .cloned()
+        .ok_or_else(|| ApiError::bad("平台不存在"))?;
+    let existing_branch = requirement
+        .dev_tasks
+        .iter()
+        .find(|task| task.platform_id == input.platform_id)
+        .and_then(|task| task.branch.clone());
+    let branch = existing_branch.unwrap_or_else(|| {
+        gitlab::branch_name(&state.config, &requirement.code, &input.platform_id)
+    });
+    let action = if input.action.is_empty() {
+        "branch".to_string()
+    } else {
+        input.action.to_lowercase()
+    };
+    match action.as_str() {
+        "branch" => {
+            gitlab::create_branch(&state.config, &platform, &branch).await?;
+            mutate(&state, |snap| {
+                if let Some(index) = snap
+                    .requirements
+                    .iter()
+                    .position(|item| item.id == requirement.id)
+                {
+                    if let Some(task) = snap.requirements[index].dev_task_mut(&input.platform_id) {
+                        task.branch = Some(branch.clone());
+                        if task.pipeline_status.is_none() {
+                            task.pipeline_status = Some("pending".to_string());
+                        }
+                    }
+                    snap.push_event(
+                        Some(&actor.id),
+                        "integration.gitlab_branch",
+                        Some(&requirement.id),
+                        None,
+                        json!({ "platformId": input.platform_id, "branch": branch }),
+                    );
+                }
+                Ok(())
+            })
+            .await?;
+            Ok(Json(json!({ "ok": true, "branch": branch })))
+        }
+        "mr" => {
+            let title = format!("{} {}", requirement.code, requirement.title);
+            let mr =
+                gitlab::create_merge_request(&state.config, &platform, &branch, &title, "").await?;
+            let url = mr.url.clone();
+            mutate(&state, |snap| {
+                if let Some(index) = snap
+                    .requirements
+                    .iter()
+                    .position(|item| item.id == requirement.id)
+                {
+                    if let Some(task) = snap.requirements[index].dev_task_mut(&input.platform_id) {
+                        task.mr_url = Some(url.clone());
+                    }
+                    snap.push_event(
+                        Some(&actor.id),
+                        "integration.gitlab_mr",
+                        Some(&requirement.id),
+                        None,
+                        json!({ "platformId": input.platform_id, "url": url }),
+                    );
+                }
+                Ok(())
+            })
+            .await?;
+            Ok(Json(json!({ "ok": true, "mrUrl": url })))
+        }
+        "pipeline" => {
+            let pipeline = gitlab::latest_pipeline(&state.config, &platform, &branch).await?;
+            let (status, url) = match pipeline {
+                Some(info) => (info.status, info.url),
+                None => ("unknown".to_string(), None),
+            };
+            let saved_status = status.clone();
+            let saved_url = url.clone();
+            mutate(&state, move |snap| {
+                if let Some(index) = snap
+                    .requirements
+                    .iter()
+                    .position(|item| item.id == requirement.id)
+                {
+                    if let Some(task) = snap.requirements[index].dev_task_mut(&input.platform_id) {
+                        task.pipeline_status = Some(saved_status);
+                        task.pipeline_url = saved_url;
+                    }
+                }
+                Ok(())
+            })
+            .await?;
+            Ok(Json(json!({ "ok": true, "status": status, "url": url })))
+        }
+        other => Err(ApiError::bad(format!("不支持的重试动作：{other}"))),
+    }
+}
+
 async fn dev_finish(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
@@ -1513,7 +1580,9 @@ async fn dev_finish(
                 .iter()
                 .find(|task| task.platform_id == platform_id)
                 .and_then(|task| task.branch.clone())
-                .unwrap_or_else(|| gitlab::branch_name(&requirement.code, &platform_id));
+                .unwrap_or_else(|| {
+                    gitlab::branch_name(&state.config, &requirement.code, &platform_id)
+                });
             let title = format!("{} {}", requirement.code, requirement.title);
             let description = if note.trim().is_empty() {
                 format!("{} / {}", requirement.code, platform_id)
@@ -1694,6 +1763,16 @@ async fn freeze(
     AuthUser(actor): AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
+    if state.config.publish_gate {
+        let snapshot = read_snapshot(&state).await?;
+        if let Some(item) = snapshot
+            .requirements
+            .iter()
+            .find(|item| item.id == id || item.code == id)
+        {
+            domain::enforce_publish_gate(item)?;
+        }
+    }
     let requirement = mutate(&state, |snapshot| domain::freeze(snapshot, &actor, &id)).await?;
     Ok(Json(json!({ "requirement": requirement })))
 }
@@ -1713,11 +1792,77 @@ async fn release(
     Path(id): Path<String>,
     Json(input): Json<domain::ReleaseInput>,
 ) -> Result<Json<Value>, ApiError> {
+    if state.config.publish_gate {
+        let snapshot = read_snapshot(&state).await?;
+        if let Some(item) = snapshot
+            .requirements
+            .iter()
+            .find(|item| item.id == id || item.code == id)
+        {
+            domain::enforce_publish_gate(item)?;
+        }
+    }
     let requirement = mutate(&state, |snapshot| {
         domain::release(snapshot, &actor, &id, input)
     })
     .await?;
     Ok(Json(json!({ "requirement": requirement })))
+}
+
+/// 发布后验收完成：released -> done。
+async fn complete_requirement(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let requirement = mutate(&state, |snapshot| {
+        domain::complete_requirement(snapshot, &actor, &id)
+    })
+    .await?;
+    Ok(Json(json!({ "requirement": requirement })))
+}
+
+/// 废弃需求：任何未完成/未取消的需求都可以取消，进入「已取消」并移出本期。
+async fn cancel_requirement(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let requirement = mutate(&state, |snapshot| {
+        domain::cancel_requirement(snapshot, &actor, &id)
+    })
+    .await?;
+    Ok(Json(json!({ "requirement": requirement })))
+}
+
+/// 跨项目人员负载总览（只读）。
+async fn global_overview(
+    State(state): State<AppState>,
+    AuthUser(_actor): AuthUser,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = read_snapshot(&state).await?;
+    Ok(Json(
+        json!({ "overview": domain::global_overview(&snapshot) }),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VersionDiffQuery {
+    from: u32,
+    to: u32,
+}
+
+/// 两个提交版本之间的差异（只读）。
+async fn version_diff(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+    Query(query): Query<VersionDiffQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let snapshot = read_snapshot(&state).await?;
+    let diff = domain::version_diff(&snapshot, &id, &actor, query.from, query.to)?;
+    Ok(Json(json!({ "diff": diff })))
 }
 
 // ---------------------------------------------------------------------------
@@ -1945,6 +2090,28 @@ async fn review_skill(
     Ok(Json(json!({ "skill": skill })))
 }
 
+async fn skill_use(
+    State(state): State<AppState>,
+    AuthUser(_actor): AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let skill = mutate(&state, |snapshot| domain::record_skill_use(snapshot, &id)).await?;
+    Ok(Json(json!({ "skill": skill })))
+}
+
+async fn skill_projects(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Path(id): Path<String>,
+    Json(input): Json<domain::SkillProjectsInput>,
+) -> Result<Json<Value>, ApiError> {
+    let skill = mutate(&state, |snapshot| {
+        domain::set_skill_projects(snapshot, &actor, &id, input)
+    })
+    .await?;
+    Ok(Json(json!({ "skill": skill })))
+}
+
 // ---------------------------------------------------------------------------
 // Notifications / events
 // ---------------------------------------------------------------------------
@@ -2089,6 +2256,45 @@ async fn list_events(
     Ok(Json(json!({ "events": items })))
 }
 
+/// SSE 事件流：把新事件实时推给客户端，替代高频轮询。非管理员过滤敏感事件。
+async fn events_stream(
+    State(state): State<AppState>,
+    AuthUser(actor): AuthUser,
+    Query(query): Query<EventsQuery>,
+) -> axum::response::sse::Sse<
+    impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
+> {
+    use axum::response::sse::{Event, KeepAlive, Sse};
+    let start = query.since.unwrap_or(0);
+    let is_admin = actor.has_role(ROLE_ADMIN);
+    let state = state.clone();
+    let stream = futures::stream::unfold(start, move |cursor| {
+        let state = state.clone();
+        async move {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            match events_since(&state, cursor, 200).await {
+                Ok(mut items) if !items.is_empty() => {
+                    if !is_admin {
+                        items.retain(|event| {
+                            !event.kind.starts_with("admin.")
+                                && !event.kind.starts_with("integration.")
+                                && !event.kind.starts_with("skill.")
+                        });
+                    }
+                    if items.is_empty() {
+                        return Some((Ok(Event::default().comment("ping")), cursor));
+                    }
+                    let last = items.last().map(|event| event.id).unwrap_or(cursor);
+                    let data = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
+                    Some((Ok(Event::default().event("workbench").data(data)), last))
+                }
+                _ => Some((Ok(Event::default().comment("ping")), cursor)),
+            }
+        }
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
 async fn list_audit(
     State(state): State<AppState>,
     AuthUser(actor): AuthUser,
@@ -2106,527 +2312,6 @@ async fn list_audit(
     Ok(Json(json!({ "events": items })))
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AdminUserInput {
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    roles: Option<Vec<String>>,
-    #[serde(default)]
-    platforms: Option<Vec<String>>,
-    #[serde(default)]
-    active: Option<bool>,
-    #[serde(default)]
-    active_role: Option<String>,
-}
-
-fn require_admin(actor: &User) -> Result<(), ApiError> {
-    if actor.has_role(ROLE_ADMIN) {
-        Ok(())
-    } else {
-        Err(ApiError::forbidden("只有管理员可以执行这个操作"))
-    }
-}
-
-async fn admin_update_user(
-    State(state): State<AppState>,
-    AuthUser(actor): AuthUser,
-    Path(id): Path<String>,
-    Json(input): Json<AdminUserInput>,
-) -> Result<Json<Value>, ApiError> {
-    require_admin(&actor)?;
-    let user = mutate(&state, |snapshot| {
-        let index = snapshot
-            .users
-            .iter()
-            .position(|user| user.id == id)
-            .ok_or_else(|| ApiError::not_found("用户不存在"))?;
-        let before = snapshot.users[index].clone();
-        if let Some(roles) = input.roles {
-            if roles.iter().any(|role| !valid_role(role)) {
-                return Err(ApiError::bad("包含未知角色"));
-            }
-            if roles.is_empty() {
-                return Err(ApiError::bad("至少保留一个角色"));
-            }
-            snapshot.users[index].roles = roles;
-        }
-        if let Some(name) = input.name {
-            let name = name.trim().to_string();
-            if name.is_empty() {
-                return Err(ApiError::bad("姓名不能为空"));
-            }
-            if name.chars().count() > 60 {
-                return Err(ApiError::bad("姓名长度不能超过 60"));
-            }
-            if name.chars().any(char::is_control) {
-                return Err(ApiError::bad("姓名不能包含控制字符"));
-            }
-            snapshot.users[index].name = name;
-            snapshot.users[index].name_by_admin = true;
-        }
-        if let Some(platforms) = input.platforms {
-            let valid_ids: HashSet<&str> = snapshot
-                .platforms
-                .iter()
-                .map(|platform| platform.id.as_str())
-                .collect();
-            for pid in &platforms {
-                if !valid_ids.contains(pid.as_str()) {
-                    return Err(ApiError::bad(format!("包含未知平台「{pid}」")));
-                }
-            }
-            snapshot.users[index].platforms = platforms;
-        }
-        if let Some(active) = input.active {
-            if !active && snapshot.users[index].id == actor.id {
-                return Err(ApiError::bad("不能停用自己的账号"));
-            }
-            snapshot.users[index].active = active;
-            snapshot.users[index].disabled_by_admin = !active;
-        }
-        if let Some(role) = input.active_role {
-            if !role.is_empty() && !valid_role(&role) {
-                return Err(ApiError::bad("未知角色"));
-            }
-            if !role.is_empty() && !snapshot.users[index].roles.contains(&role) {
-                return Err(ApiError::bad("当前启用角色必须包含在成员角色中"));
-            }
-            snapshot.users[index].active_role = if role.is_empty() { None } else { Some(role) };
-        } else if let Some(current_active) = snapshot.users[index].active_role.as_ref() {
-            if !snapshot.users[index].roles.contains(current_active) {
-                snapshot.users[index].active_role = snapshot.users[index].roles.first().cloned();
-            }
-        }
-        let admins = snapshot
-            .users
-            .iter()
-            .filter(|user| user.active && user.has_role(ROLE_ADMIN))
-            .count();
-        if admins == 0 {
-            return Err(ApiError::bad("至少保留一个启用的管理员"));
-        }
-        snapshot.push_event(
-            Some(&actor.id),
-            "admin.user_update",
-            None,
-            None,
-            json!({
-                "userId": snapshot.users[index].id,
-                "changes": user_changes(&before, &snapshot.users[index]),
-            }),
-        );
-        Ok(snapshot.users[index].clone())
-    })
-    .await?;
-    Ok(Json(json!({ "user": user.private_json() })))
-}
-
-/// 审计日志只记真正改动的字段及前后值，排查“谁把谁停用了”时不用猜。
-fn user_changes(before: &User, after: &User) -> Value {
-    let mut changes = serde_json::Map::new();
-    if before.roles != after.roles {
-        changes.insert(
-            "roles".into(),
-            json!({ "from": before.roles, "to": after.roles }),
-        );
-    }
-    if before.name != after.name {
-        changes.insert(
-            "name".into(),
-            json!({ "from": before.name, "to": after.name }),
-        );
-    }
-    if before.platforms != after.platforms {
-        changes.insert(
-            "platforms".into(),
-            json!({ "from": before.platforms, "to": after.platforms }),
-        );
-    }
-    if before.active != after.active {
-        changes.insert(
-            "active".into(),
-            json!({ "from": before.active, "to": after.active }),
-        );
-    }
-    if before.active_role != after.active_role {
-        changes.insert(
-            "activeRole".into(),
-            json!({ "from": before.active_role, "to": after.active_role }),
-        );
-    }
-    Value::Object(changes)
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DingTalkSyncInput {
-    #[serde(default)]
-    disable_missing: Option<bool>,
-}
-
-fn unique_user_id(snapshot: &Snapshot, raw: &str) -> String {
-    let base = format!(
-        "dt-{}",
-        raw.chars()
-            .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
-            .collect::<String>()
-            .trim_matches('-')
-            .to_lowercase()
-    );
-    let base = if base == "dt-" {
-        "dt-user".to_string()
-    } else {
-        base
-    };
-    if !snapshot.users.iter().any(|user| user.id == base) {
-        return base;
-    }
-    let mut index = 2;
-    loop {
-        let candidate = format!("{base}-{index}");
-        if !snapshot.users.iter().any(|user| user.id == candidate) {
-            return candidate;
-        }
-        index += 1;
-    }
-}
-
-async fn admin_dingtalk_sync(
-    State(state): State<AppState>,
-    AuthUser(actor): AuthUser,
-    Json(input): Json<DingTalkSyncInput>,
-) -> Result<Json<Value>, ApiError> {
-    require_admin(&actor)?;
-    let (departments, org_users) = crate::dingtalk::fetch_org(&state.config).await?;
-    let default_roles = if state.config.dingtalk_default_roles.is_empty() {
-        vec![ROLE_DEV.to_string()]
-    } else {
-        state
-            .config
-            .dingtalk_default_roles
-            .iter()
-            .filter(|role| valid_role(role))
-            .cloned()
-            .collect()
-    };
-    let disable_missing = input
-        .disable_missing
-        .unwrap_or(state.config.dingtalk_disable_missing);
-    let result = mutate(&state, |snapshot| {
-        let mut created = 0usize;
-        let mut updated = 0usize;
-        let mut seen = HashSet::new();
-        for org in &org_users {
-            seen.insert(org.userid.clone());
-            let existing = snapshot.users.iter().position(|user| {
-                user.dingtalk_user_id.as_deref() == Some(org.userid.as_str())
-                    || (org.unionid.is_some() && user.dingtalk_union_id == org.unionid)
-                    || (org.mobile.is_some()
-                        && !org.mobile.as_deref().unwrap_or("").is_empty()
-                        && user.mobile == org.mobile)
-            });
-            if let Some(index) = existing {
-                let user = &mut snapshot.users[index];
-                user.dingtalk_user_id = Some(org.userid.clone());
-                if org.unionid.is_some() {
-                    user.dingtalk_union_id = org.unionid.clone();
-                }
-                // 管理员手动改过的姓名保留；离职（钉钉停用）一定会停用本地账号，
-                // 但钉钉“仍在职”不能把管理员手动停用的账号重新启用。
-                if !org.name.trim().is_empty() && !user.name_by_admin {
-                    user.name = org.name.clone();
-                }
-                if org.mobile.is_some() {
-                    user.mobile = org.mobile.clone();
-                }
-                if org.avatar.is_some() {
-                    user.avatar_url = org.avatar.clone();
-                }
-                if org.title.is_some() {
-                    user.title = org.title.clone();
-                }
-                user.department_ids = org.department_ids.clone();
-                if !org.active {
-                    user.active = false;
-                } else if !user.disabled_by_admin {
-                    user.active = true;
-                }
-                updated += 1;
-            } else {
-                let id = unique_user_id(snapshot, &org.userid);
-                snapshot.users.push(User {
-                    id,
-                    name: if org.name.trim().is_empty() {
-                        org.userid.clone()
-                    } else {
-                        org.name.clone()
-                    },
-                    roles: default_roles.clone(),
-                    platforms: Vec::new(),
-                    active_platform_ids: Vec::new(),
-                    active_role: default_roles.first().cloned(),
-                    active: org.active,
-                    onboarding_completed_at: None,
-                    folder_configured: false,
-                    dingtalk_user_id: Some(org.userid.clone()),
-                    dingtalk_union_id: org.unionid.clone(),
-                    dingtalk_open_id: None,
-                    mobile: org.mobile.clone(),
-                    avatar_url: org.avatar.clone(),
-                    title: org.title.clone(),
-                    department_ids: org.department_ids.clone(),
-                    current_iteration_id: None,
-                    current_project_id: None,
-                    disabled_by_admin: false,
-                    name_by_admin: false,
-                });
-                created += 1;
-            }
-        }
-        let mut disabled = 0usize;
-        if disable_missing {
-            for user in snapshot.users.iter_mut() {
-                if user.id == actor.id {
-                    continue;
-                }
-                if user.dingtalk_user_id.is_some()
-                    && !seen.contains(user.dingtalk_user_id.as_deref().unwrap_or(""))
-                    && user.active
-                {
-                    user.active = false;
-                    disabled += 1;
-                }
-            }
-        }
-        snapshot.push_event(
-            Some(&actor.id),
-            "integration.dingtalk_sync",
-            None,
-            None,
-            json!({
-                "departments": departments.len(),
-                "users": org_users.len(),
-                "created": created,
-                "updated": updated,
-                "disabled": disabled
-            }),
-        );
-        Ok(json!({
-            "departments": departments.len(),
-            "users": org_users.len(),
-            "created": created,
-            "updated": updated,
-            "disabled": disabled
-        }))
-    })
-    .await?;
-    Ok(Json(result))
-}
-
-async fn gitlab_webhook(
-    State(state): State<AppState>,
-    ip: ClientIp,
-    headers: axum::http::HeaderMap,
-    body: axum::body::Bytes,
-) -> Result<Json<Value>, ApiError> {
-    // 令牌错误的请求也要限流：否则可以用 8 MB 请求体持续打解析前的比较路径。
-    if !state.allow(&ip.key("webhook"), 120.0, 1.0) {
-        return Err(ApiError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Webhook 请求过于频繁",
-        ));
-    }
-    let token = headers
-        .get("x-gitlab-token")
-        .and_then(|value| value.to_str().ok());
-    // 先验令牌，再解析 JSON：否则未认证请求可以用 8 MB 请求体反复消耗解析 CPU。
-    if !gitlab::webhook_authorized(&state.config, token) {
-        return Err(ApiError::unauthorized("GitLab Webhook 令牌无效"));
-    }
-    let payload: Value =
-        serde_json::from_slice(&body).map_err(|_| ApiError::bad("Webhook 请求体不是合法 JSON"))?;
-    let delivery = headers
-        .get("x-gitlab-event-uuid")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_string();
-    let delivery_already_seen = webhook_delivery_seen(&state, &delivery).await?;
-    let project_id = payload
-        .pointer("/project/id")
-        .and_then(Value::as_i64)
-        .map(|id| id.to_string());
-    let project_path = payload
-        .pointer("/project/path_with_namespace")
-        .and_then(Value::as_str)
-        .map(String::from);
-    let kind = payload
-        .get("object_kind")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if kind != "pipeline" && kind != "merge_request" {
-        return Ok(Json(json!({ "ok": true, "ignored": kind })));
-    }
-    let attrs = payload
-        .get("object_attributes")
-        .cloned()
-        .unwrap_or(Value::Null);
-    let branch = if kind == "pipeline" {
-        attrs.get("ref").and_then(Value::as_str)
-    } else {
-        attrs.get("source_branch").and_then(Value::as_str)
-    }
-    .unwrap_or_default()
-    .to_string();
-    if branch.is_empty() {
-        return Ok(Json(json!({ "ok": true, "ignored": "no branch" })));
-    }
-    let status = attrs
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    // merge_request 的 url 是 API 地址（/api/v4/...），点进浏览器会 404；
-    // 必须优先用 web_url。
-    let url = if kind == "merge_request" {
-        attrs
-            .get("web_url")
-            .and_then(Value::as_str)
-            .map(String::from)
-            .or_else(|| attrs.get("url").and_then(Value::as_str).map(String::from))
-    } else {
-        attrs
-            .get("url")
-            .and_then(Value::as_str)
-            .map(String::from)
-            .or_else(|| {
-                attrs
-                    .get("web_url")
-                    .and_then(Value::as_str)
-                    .map(String::from)
-            })
-    };
-    let mr_iid = attrs.get("iid").and_then(Value::as_i64);
-    let platform_projects: Vec<(String, Option<String>, Option<String>)> = {
-        let snapshot = read_snapshot(&state).await?;
-        snapshot
-            .platforms
-            .iter()
-            .map(|platform| {
-                (
-                    platform.id.clone(),
-                    platform.gitlab_project_id.clone(),
-                    platform.gitlab_project_path.clone(),
-                )
-            })
-            .collect()
-    };
-    let updated = mutate(&state, |snapshot| {
-        let mut found: Option<(String, String)> = None;
-        for requirement in snapshot.requirements.iter_mut() {
-            for task in requirement.dev_tasks.iter_mut() {
-                if task.branch.as_deref() != Some(branch.as_str()) {
-                    continue;
-                }
-                // 同名分支在不同 GitLab 项目里很常见；只接受平台配置的项目，
-                // 避免一个能发 Webhook 的项目改写别的平台任务。
-                let project_ok = platform_projects
-                    .iter()
-                    .find(|(id, _, _)| id == &task.platform_id)
-                    .map(|(_, configured_id, configured_path)| {
-                        let id_ok = match configured_id {
-                            Some(configured) => project_id.as_deref() == Some(configured.as_str()),
-                            None => true,
-                        };
-                        let path_ok = match configured_path {
-                            Some(configured) => {
-                                project_path.as_deref() == Some(configured.as_str())
-                            }
-                            None => true,
-                        };
-                        id_ok && path_ok
-                    })
-                    .unwrap_or(false);
-                if !project_ok {
-                    continue;
-                }
-                if kind == "pipeline" && !status.is_empty() {
-                    task.pipeline_status = Some(status.clone());
-                    task.pipeline_url = url.clone();
-                }
-                if kind == "merge_request" {
-                    if let Some(url) = url.clone() {
-                        task.mr_url = Some(url);
-                    }
-                    // 不往用户手写的 note 里追加 “MR merged”：Webhook 每次重投都会
-                    // 让文本无限增长。MR 状态本身已经保存在 mr_url/pipeline_status。
-                }
-                found = Some((requirement.id.clone(), task.platform_id.clone()));
-                break;
-            }
-            if found.is_some() {
-                break;
-            }
-        }
-        if let Some((requirement_id, platform_id)) = &found {
-            let sqlite_dup = delivery_already_seen;
-            let duplicated = sqlite_dup
-                || (!delivery.is_empty()
-                    && snapshot.events.iter().any(|event| {
-                        event.kind.starts_with("integration.gitlab")
-                            && event.payload.get("delivery").and_then(Value::as_str)
-                                == Some(delivery.as_str())
-                    }));
-            if !duplicated {
-                snapshot.push_event(
-                    None,
-                    if kind == "pipeline" {
-                        "integration.gitlab_pipeline"
-                    } else {
-                        "integration.gitlab_mr_update"
-                    },
-                    Some(requirement_id),
-                    None,
-                    json!({
-                        "platformId": platform_id,
-                        "branch": branch,
-                        "status": status,
-                        "url": url,
-                        "iid": mr_iid,
-                        "delivery": delivery,
-                    }),
-                );
-            }
-        }
-        Ok(found)
-    })
-    .await?;
-    Ok(Json(json!({ "ok": true, "updated": updated.is_some() })))
-}
-
-async fn admin_integrations(
-    State(state): State<AppState>,
-    AuthUser(actor): AuthUser,
-) -> Result<Json<Value>, ApiError> {
-    require_admin(&actor)?;
-    Ok(Json(json!({
-        "dingtalk": {
-            "configured": state.config.dingtalk_client_id.is_some()
-                && state.config.dingtalk_client_secret.is_some(),
-            "orgSync": state.config.dingtalk_client_id.is_some()
-                && state.config.dingtalk_client_secret.is_some(),
-            "workNotify": state.config.dingtalk_work_notify,
-            "agentIdConfigured": state.config.dingtalk_agent_id.is_some()
-        },
-        "gitlab": {
-            "configured": state.config.gitlab_base_url.is_some()
-                && state.config.gitlab_token.is_some(),
-            "webhookConfigured": state.config.gitlab_webhook_secret.is_some()
-        }
-    })))
-}
-
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -2634,6 +2319,7 @@ async fn admin_integrations(
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/metrics", get(crate::metrics::scrape))
         .route("/auth/config", get(auth_config))
         .route("/auth/mock", post(auth_mock))
         .route("/auth/dingtalk/exchange", post(dingtalk_exchange))
@@ -2641,6 +2327,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(auth_logout))
         .route("/onboarding/complete", post(onboarding_complete))
         .route("/state", get(get_state))
+        .route("/overview", get(global_overview))
         .route("/experience", post(experience_report))
         .route("/projects", post(create_project))
         .route("/projects/{id}", post(update_project))
@@ -2687,6 +2374,7 @@ pub fn router(state: AppState) -> Router {
         .route("/requirements/{id}/dev-start", post(dev_start))
         .route("/requirements/{id}/dev-finish", post(dev_finish))
         .route("/requirements/{id}/dev-reopen", post(dev_reopen))
+        .route("/requirements/{id}/gitlab-retry", post(retry_gitlab))
         .route("/requirements/{id}/test-claim", post(test_claim))
         .route("/requirements/{id}/test-start", post(test_start))
         .route("/requirements/{id}/test-pass", post(test_pass))
@@ -2694,6 +2382,9 @@ pub fn router(state: AppState) -> Router {
         .route("/requirements/{id}/freeze", post(freeze))
         .route("/requirements/{id}/unfreeze", post(unfreeze))
         .route("/requirements/{id}/release", post(release))
+        .route("/requirements/{id}/complete", post(complete_requirement))
+        .route("/requirements/{id}/cancel", post(cancel_requirement))
+        .route("/requirements/{id}/versions/diff", get(version_diff))
         .route("/platform-groups", post(create_platform_group))
         .route("/platform-groups/{id}", post(update_platform_group))
         .route(
@@ -2708,13 +2399,20 @@ pub fn router(state: AppState) -> Router {
         .route("/skills/{id}", post(update_skill))
         .route("/skills/{id}/versions", post(add_skill_version))
         .route("/skills/{id}/review", post(review_skill))
+        .route("/skills/{id}/use", post(skill_use))
+        .route("/skills/{id}/projects", post(skill_projects))
         .route("/notifications", get(list_notifications))
         .route("/notifications/read", post(read_notifications))
         .route("/events", get(list_events))
+        .route("/events/stream", get(events_stream))
         .route("/audit", get(list_audit))
         .route("/admin/users/{id}", post(admin_update_user))
         .route("/admin/dingtalk/sync", post(admin_dingtalk_sync))
         .route("/admin/integrations", get(admin_integrations))
         .route("/webhooks/gitlab", post(gitlab_webhook))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::metrics::track_metrics,
+        ))
         .with_state(state)
 }

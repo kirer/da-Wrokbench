@@ -64,8 +64,18 @@ fn token(config: &Config) -> String {
     config.gitlab_token.clone().unwrap_or_default()
 }
 
-pub fn branch_name(code: &str, platform_id: &str) -> String {
-    format!("feature/{}-{}", code.to_lowercase(), platform_id)
+/// 默认分支命名：feature/{code}-{platform}。可通过 GITLAB_BRANCH_TEMPLATE 配置
+/// 项目级前缀规范（如 feat/{code}-{platform}），占位符 {code}/{platform}。
+pub fn branch_name(config: &Config, code: &str, platform_id: &str) -> String {
+    let template = config
+        .gitlab_branch_template
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| value.contains("{code}"))
+        .unwrap_or("feature/{code}-{platform}");
+    template
+        .replace("{code}", &code.to_lowercase())
+        .replace("{platform}", platform_id)
 }
 
 pub async fn create_branch(

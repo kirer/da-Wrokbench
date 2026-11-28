@@ -190,31 +190,51 @@ fn user_experience(snap: &Snapshot) -> Vec<Value> {
     users
 }
 
-fn similar_requirements(
-    snap: &Snapshot,
-    query: &str,
-    exclude: &str,
-    limit: usize,
-) -> Vec<Value> {
+fn similar_requirements(snap: &Snapshot, query: &str, exclude: &str, limit: usize) -> Vec<Value> {
     let query_terms = terms(query);
     if query_terms.is_empty() {
         return Vec::new();
     }
     let limit = limit.clamp(1, 10);
-    let mut scored: Vec<(i64, &Requirement)> = snap
-        .requirements
-        .iter()
-        .filter(|requirement| {
+    let eligible = || {
+        snap.requirements.iter().filter(|requirement| {
             requirement.id != exclude
                 && requirement.status != STATUS_CREATING
                 && requirement.status != STATUS_CREATE_FAILED
         })
-        .filter_map(|requirement| {
-            let score = score_requirement(requirement, &query_terms);
-            (score > 0).then_some((score, requirement))
+    };
+    // 文档频率：每个候选需求把标题/摘要/正文的词合并成一篇「文档」，用于算 IDF。
+    let mut df: HashMap<String, f64> = HashMap::new();
+    let mut doc_count = 0f64;
+    for requirement in eligible() {
+        doc_count += 1.0;
+        let mut doc = terms(&requirement.title);
+        doc.extend(terms(&requirement.document.summary));
+        doc.extend(terms(&requirement.document.body));
+        for term in &query_terms {
+            if doc.contains(term) {
+                *df.entry(term.clone()).or_insert(0.0) += 1.0;
+            }
+        }
+    }
+    let idf: HashMap<String, f64> = query_terms
+        .iter()
+        .map(|term| {
+            let freq = df.get(term).copied().unwrap_or(0.0);
+            (term.clone(), ((doc_count + 1.0) / (freq + 1.0)).ln() + 1.0)
         })
         .collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.updated_at.cmp(&a.1.updated_at)));
+    let mut scored: Vec<(f64, &Requirement)> = eligible()
+        .filter_map(|requirement| {
+            let score = score_requirement(requirement, &query_terms, &idf);
+            (score > 0.0).then_some((score, requirement))
+        })
+        .collect();
+    scored.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.1.updated_at.cmp(&a.1.updated_at))
+    });
     scored.truncate(limit);
     scored
         .into_iter()
@@ -293,24 +313,119 @@ fn contributors(snap: &Snapshot, requirement: &Requirement) -> Vec<Value> {
     result
 }
 
-fn score_requirement(requirement: &Requirement, query: &HashSet<String>) -> i64 {
+fn score_requirement(
+    requirement: &Requirement,
+    query: &HashSet<String>,
+    idf: &HashMap<String, f64>,
+) -> f64 {
     let title = terms(&requirement.title);
     let summary = terms(&requirement.document.summary);
     let body = terms(&requirement.document.body);
     query
         .iter()
         .map(|term| {
-            if title.contains(term) {
-                3
+            let base = if title.contains(term) {
+                3.0
             } else if summary.contains(term) {
-                2
+                2.0
             } else if body.contains(term) {
-                1
+                1.0
             } else {
-                0
-            }
+                0.0
+            };
+            // 逆文档频率加权：「需求/功能」这类高频词权重低，稀有词权重高，减少误配。
+            base * idf.get(term).copied().unwrap_or(1.0)
         })
         .sum()
+}
+
+/// 高频但区分度低的词：命中它们不该抬高相似度，否则「需求/功能/页面」会把
+/// 一堆无关需求拉到一起。中英文各一份，只用于相似度检索。
+const STOPWORDS: &[&str] = &[
+    "需求",
+    "功能",
+    "页面",
+    "支持",
+    "系统",
+    "相关",
+    "进行",
+    "实现",
+    "增加",
+    "优化",
+    "问题",
+    "一个",
+    "我们",
+    "可以",
+    "需要",
+    "以及",
+    "通过",
+    "使用",
+    "管理",
+    "模块",
+    "内容",
+    "数据",
+    "服务",
+    "用户",
+    "平台",
+    "设计",
+    "开发",
+    "测试",
+    "版本",
+    "说明",
+    "情况",
+    "部分",
+    "方式",
+    "时间",
+    "时候",
+    "目前",
+    "当前",
+    "后续",
+    "主要",
+    "这个",
+    "那个",
+    "并且",
+    "或者",
+    "如果",
+    "因为",
+    "所以",
+    "然后",
+    "已经",
+    "还是",
+    "没有",
+    "什么",
+    "怎么",
+    "这些",
+    "那些",
+    "一下",
+    "一些",
+    "功能点",
+];
+
+fn is_stopword(token: &str) -> bool {
+    if STOPWORDS.contains(&token) {
+        return true;
+    }
+    matches!(
+        token,
+        "the"
+            | "and"
+            | "for"
+            | "with"
+            | "that"
+            | "this"
+            | "from"
+            | "are"
+            | "was"
+            | "were"
+            | "has"
+            | "have"
+            | "not"
+            | "but"
+            | "you"
+            | "your"
+            | "can"
+            | "will"
+    )
 }
 
 /// 中文按二元组切分，英文/数字按词切分；比纯子串匹配更能承受措辞差异。
@@ -368,6 +483,7 @@ fn terms(text: &str) -> HashSet<String> {
     if let Some(previous) = cjk {
         flush(&run, previous, &mut result);
     }
+    result.retain(|token| !is_stopword(token));
     result
 }
 

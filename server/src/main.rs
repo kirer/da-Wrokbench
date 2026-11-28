@@ -1,12 +1,17 @@
 mod api;
+mod api_admin;
+mod api_webhooks;
+mod clientip;
 mod db;
 mod dingtalk;
 mod domain;
 mod experience;
 mod gitlab;
+mod metrics;
 mod models;
 mod pg;
 mod seed;
+mod store_ops;
 
 use api::{AppState, Config};
 use axum::extract::DefaultBodyLimit;
@@ -171,6 +176,13 @@ async fn main() {
         gitlab_token: env_opt("GITLAB_TOKEN"),
         gitlab_webhook_secret,
         gitlab_default_branch: env_value("GITLAB_DEFAULT_BRANCH", "main"),
+        gitlab_branch_template: env_opt("GITLAB_BRANCH_TEMPLATE"),
+        publish_gate: matches!(
+            env_value("WORKBENCH_PUBLISH_GATE", "0")
+                .to_ascii_lowercase()
+                .as_str(),
+            "1" | "true" | "yes"
+        ),
         token_ttl_seconds,
         allow_remote_internal,
     };
@@ -195,6 +207,7 @@ async fn main() {
         AppState::new_sqlite(conn, config)
     };
 
+    state.warm_revoked().await;
     let mut app = api::router(state);
     if !allowed_origins.is_empty() {
         let origins: Vec<HeaderValue> = allowed_origins

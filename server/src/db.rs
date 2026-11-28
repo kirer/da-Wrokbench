@@ -29,6 +29,9 @@ pub struct Snapshot {
     /// 附件/设计稿正文。元数据在 Requirement.artifacts，这里只保存实际内容。
     #[serde(default)]
     pub artifact_contents: Vec<ArtifactContent>,
+    /// 全局修订号：每次成功保存 +1，用于 /state 的 ETag/增量判断。
+    #[serde(default)]
+    pub revision: i64,
 }
 
 impl Snapshot {
@@ -203,6 +206,22 @@ impl Snapshot {
             });
         }
     }
+
+    /// 用户完成与某需求相关的动作后，把该需求发给他的未读提醒标记为已读，
+    /// 避免通知中心积压过期待办；还没落库的待发提醒也一并撤掉。
+    pub fn mark_requirement_notifications_read(&mut self, user_id: &str, requirement_id: &str) {
+        for item in self.notifications.iter_mut() {
+            if item.user_id == user_id
+                && item.requirement_id.as_deref() == Some(requirement_id)
+                && !item.read
+            {
+                item.read = true;
+            }
+        }
+        self.pending_notifications.retain(|item| {
+            !(item.user_id == user_id && item.requirement_id.as_deref() == Some(requirement_id))
+        });
+    }
 }
 
 pub fn demo_seed_enabled() -> bool {
@@ -308,8 +327,37 @@ pub(crate) fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             delivery TEXT PRIMARY KEY,
             seen_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS revoked_tokens (
+            jti TEXT PRIMARY KEY,
+            expires_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workbench_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         "#,
-    )
+    )?;
+    // 老库补 hash 列（用于跳过未变更需求的整行重写）；已存在时忽略报错。
+    let _ = conn.execute("ALTER TABLE requirements ADD COLUMN hash TEXT", []);
+    for table in [
+        "users",
+        "platform_groups",
+        "platforms",
+        "projects",
+        "iterations",
+        "skills",
+    ] {
+        let _ = conn.execute(&format!("ALTER TABLE {table} ADD COLUMN hash TEXT"), []);
+    }
+    // 需求编号唯一约束：拆表/并发创建后由数据库兜底，避免生成重复编号。
+    // 老库可能已有历史重复编号，建索引失败时只告警、不阻断启动。
+    if let Err(error) = conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_requirements_code ON requirements(code)",
+        [],
+    ) {
+        tracing::warn!("建立需求编号唯一索引失败（可能存在历史重复编号）：{error}");
+    }
+    Ok(())
 }
 
 pub fn seed_snapshot() -> Snapshot {
@@ -348,6 +396,7 @@ pub fn seed_snapshot() -> Snapshot {
             )
             .collect(),
         artifact_contents: Vec::new(),
+        revision: 0,
     }
 }
 
@@ -368,6 +417,7 @@ fn seed_if_empty(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 // Postgres 使用单个 JSONB 快照；把本轮变更追加到历史数组并分配自增 id。
+#[allow(dead_code)]
 pub fn append_pending(snapshot: &mut Snapshot) {
     let first_event_id = snapshot
         .events
@@ -440,6 +490,104 @@ fn parse<T: DeserializeOwned>(raw: String) -> rusqlite::Result<T> {
     })
 }
 
+// 附件正文可外置到本地对象目录（WORKBENCH_BLOB_DIR）：数据库只存元数据，
+// 正文落到文件，避免大附件把库撑大。默认关闭（未配置）时行为完全不变。
+pub(crate) fn blob_dir() -> Option<std::path::PathBuf> {
+    std::env::var("WORKBENCH_BLOB_DIR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+}
+
+pub(crate) fn blob_safe_name(id: &str) -> String {
+    id.chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn load_artifacts(
+    conn: &Connection,
+    blob: Option<&Path>,
+) -> rusqlite::Result<Vec<ArtifactContent>> {
+    let mut statement = conn.prepare("SELECT id, data FROM artifact_contents")?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, data) = row?;
+        if let Some(dir) = blob {
+            if let Ok(marker) = serde_json::from_str::<Value>(&data) {
+                if let Some(name) = marker.get("blob").and_then(Value::as_str) {
+                    let path = dir.join(name);
+                    let content = std::fs::read_to_string(&path).unwrap_or_default();
+                    out.push(ArtifactContent { id, content });
+                    continue;
+                }
+            }
+        }
+        out.push(parse::<ArtifactContent>(data)?);
+    }
+    Ok(out)
+}
+
+pub(crate) fn hash_str(value: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// 按内容哈希增量 upsert 一张 (id,data,hash) 表：未变化的行整体跳过，减少写放大。
+fn save_hashed<T: serde::Serialize>(
+    conn: &Connection,
+    table: &str,
+    items: &[T],
+    id_of: impl Fn(&T) -> &str,
+) -> rusqlite::Result<()> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let existing: std::collections::HashMap<String, String> = {
+        let mut map = std::collections::HashMap::new();
+        let mut statement = conn.prepare(&format!("SELECT id, hash FROM {table}"))?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
+        for row in rows {
+            let (id, hash) = row?;
+            if let Some(hash) = hash {
+                map.insert(id, hash);
+            }
+        }
+        map
+    };
+    let sql = format!(
+        "INSERT INTO {table}(id, data, hash) VALUES(?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET data = excluded.data, hash = excluded.hash"
+    );
+    for item in items {
+        let data = serde_json::to_string(item).unwrap_or_default();
+        let hash = hash_str(&data);
+        let id = id_of(item);
+        if existing
+            .get(id)
+            .map(|stored| stored == &hash)
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        conn.execute(&sql, params![id, data, hash])?;
+    }
+    Ok(())
+}
+
 fn load_rows<T: DeserializeOwned>(conn: &Connection, table: &str) -> rusqlite::Result<Vec<T>> {
     let mut statement = conn.prepare(&format!("SELECT data FROM {table}"))?;
     let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
@@ -453,19 +601,23 @@ fn load_rows<T: DeserializeOwned>(conn: &Connection, table: &str) -> rusqlite::R
 /// 只读接口用：不加载附件正文。正文可能很大，/state 每次轮询都读一遍纯属浪费。
 /// 写路径必须用 [`load_snapshot`]：保存时按快照做差集，缺了正文会把附件行删掉。
 pub fn load_snapshot_without_contents(conn: &Connection) -> rusqlite::Result<Snapshot> {
-    let mut snapshot = load_snapshot_inner(conn, false)?;
+    let mut snapshot = load_snapshot_inner(conn, false, blob_dir().as_deref())?;
     snapshot.ensure_projects();
     Ok(snapshot)
 }
 
 pub fn load_snapshot(conn: &Connection) -> rusqlite::Result<Snapshot> {
-    let mut snapshot = load_snapshot_inner(conn, true)?;
+    let mut snapshot = load_snapshot_inner(conn, true, blob_dir().as_deref())?;
     snapshot.ensure_projects();
     Ok(snapshot)
 }
 
-fn load_snapshot_inner(conn: &Connection, with_contents: bool) -> rusqlite::Result<Snapshot> {
-    let snapshot = Snapshot {
+fn load_snapshot_inner(
+    conn: &Connection,
+    with_contents: bool,
+    blob: Option<&Path>,
+) -> rusqlite::Result<Snapshot> {
+    let mut snapshot = Snapshot {
         users: load_rows(conn, "users")?,
         groups: load_rows(conn, "platform_groups")?,
         platforms: load_rows(conn, "platforms")?,
@@ -478,11 +630,21 @@ fn load_snapshot_inner(conn: &Connection, with_contents: bool) -> rusqlite::Resu
         pending_events: Vec::new(),
         pending_notifications: Vec::new(),
         artifact_contents: if with_contents {
-            load_rows(conn, "artifact_contents")?
+            load_artifacts(conn, blob)?
         } else {
             Vec::new()
         },
+        revision: 0,
     };
+    snapshot.revision = conn
+        .query_row(
+            "SELECT value FROM workbench_meta WHERE key = 'revision'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
     Ok(snapshot)
 }
 
@@ -496,38 +658,65 @@ pub fn artifact_content(conn: &Connection, id: &str) -> rusqlite::Result<Option<
             |row| row.get(0),
         )
         .optional()?;
-    Ok(raw
-        .and_then(|json| serde_json::from_str::<ArtifactContent>(&json).ok())
-        .map(|content| content.content))
+    Ok(raw.and_then(|data| {
+        if let Some(dir) = blob_dir() {
+            if let Ok(marker) = serde_json::from_str::<Value>(&data) {
+                if let Some(name) = marker.get("blob").and_then(Value::as_str) {
+                    return std::fs::read_to_string(dir.join(name)).ok();
+                }
+            }
+        }
+        serde_json::from_str::<ArtifactContent>(&data)
+            .ok()
+            .map(|content| content.content)
+    }))
 }
 
 // SQLite 后端按快照重建数据，但增量保存不会自动删除已经不在快照里的行。
 // 需求删除后要把需求行、通知和附件正文一起删掉，否则重启后会被重新加载回来。
-fn delete_removed_requirements(conn: &Connection, snapshot: &Snapshot) -> rusqlite::Result<()> {
+fn delete_removed_requirements(
+    conn: &Connection,
+    snapshot: &Snapshot,
+    blob: Option<&Path>,
+) -> rusqlite::Result<()> {
     let keep: std::collections::HashSet<&str> = snapshot
         .requirements
         .iter()
         .map(|requirement| requirement.id.as_str())
         .collect();
-    let mut statement = conn.prepare("SELECT id, data FROM requirements")?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut removed = Vec::new();
-    for row in rows {
-        let (id, data) = row?;
-        if !keep.contains(id.as_str()) {
-            removed.push((id, data));
+    let ids: Vec<String> = {
+        let mut statement = conn.prepare("SELECT id FROM requirements")?;
+        let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
         }
-    }
-    drop(statement);
-    for (id, data) in removed {
-        if let Ok(requirement) = serde_json::from_str::<Requirement>(&data) {
-            for artifact in &requirement.artifacts {
-                conn.execute(
-                    "DELETE FROM artifact_contents WHERE id = ?1",
-                    params![&artifact.id],
-                )?;
+        out
+    };
+    use rusqlite::OptionalExtension;
+    for id in ids {
+        if keep.contains(id.as_str()) {
+            continue;
+        }
+        // 只有被删除的需求才读整行数据（用来清附件），避免每次保存都全量读需求正文。
+        let data: Option<String> = conn
+            .query_row(
+                "SELECT data FROM requirements WHERE id = ?1",
+                params![&id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(data) = data {
+            if let Ok(requirement) = serde_json::from_str::<Requirement>(&data) {
+                for artifact in &requirement.artifacts {
+                    conn.execute(
+                        "DELETE FROM artifact_contents WHERE id = ?1",
+                        params![&artifact.id],
+                    )?;
+                    if let Some(dir) = blob {
+                        let _ = std::fs::remove_file(dir.join(blob_safe_name(&artifact.id)));
+                    }
+                }
             }
         }
         conn.execute("DELETE FROM requirements WHERE id = ?1", params![&id])?;
@@ -540,76 +729,78 @@ fn delete_removed_requirements(conn: &Connection, snapshot: &Snapshot) -> rusqli
 }
 
 pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Result<()> {
-    delete_removed_requirements(conn, snapshot)?;
-    for user in &snapshot.users {
-        let data = serde_json::to_string(user).unwrap_or_default();
-        conn.execute(
-            "INSERT INTO users(id, data) VALUES(?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-            params![user.id, data],
-        )?;
-    }
-    for group in &snapshot.groups {
-        let data = serde_json::to_string(group).unwrap_or_default();
-        conn.execute(
-            "INSERT INTO platform_groups(id, data) VALUES(?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-            params![group.id, data],
-        )?;
-    }
-    for platform in &snapshot.platforms {
-        let data = serde_json::to_string(platform).unwrap_or_default();
-        conn.execute(
-            "INSERT INTO platforms(id, data) VALUES(?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-            params![platform.id, data],
-        )?;
-    }
-    for project in &snapshot.projects {
-        let data = serde_json::to_string(project).unwrap_or_default();
-        conn.execute(
-            "INSERT INTO projects(id, data) VALUES(?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-            params![project.id, data],
-        )?;
-    }
-    for iteration in &snapshot.iterations {
-        let data = serde_json::to_string(iteration).unwrap_or_default();
-        conn.execute(
-            "INSERT INTO iterations(id, data) VALUES(?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-            params![iteration.id, data],
-        )?;
-    }
+    save_snapshot_with_blob(conn, snapshot, blob_dir().as_deref())
+}
+
+fn save_snapshot_with_blob(
+    conn: &Connection,
+    snapshot: &mut Snapshot,
+    blob: Option<&Path>,
+) -> rusqlite::Result<()> {
+    delete_removed_requirements(conn, snapshot, blob)?;
+    // 每次成功保存全局修订号 +1，/state 用它做 ETag 判断内容是否变化。
+    snapshot.revision += 1;
+    save_hashed(conn, "users", &snapshot.users, |item| item.id.as_str())?;
+    save_hashed(conn, "platform_groups", &snapshot.groups, |item| {
+        item.id.as_str()
+    })?;
+    save_hashed(conn, "platforms", &snapshot.platforms, |item| {
+        item.id.as_str()
+    })?;
+    save_hashed(conn, "projects", &snapshot.projects, |item| {
+        item.id.as_str()
+    })?;
+    save_hashed(conn, "iterations", &snapshot.iterations, |item| {
+        item.id.as_str()
+    })?;
+    // 只重写内容真正变化的需求：大部分变更只动一条需求，逐条 upsert 全部需求
+    // 会把整表写放大。用 data 的哈希和库里已存的 hash 比对，未变就跳过。
+    let existing_hashes: std::collections::HashMap<String, String> = {
+        let mut map = std::collections::HashMap::new();
+        let mut statement = conn.prepare("SELECT id, hash FROM requirements")?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
+        for row in rows {
+            let (id, hash) = row?;
+            if let Some(hash) = hash {
+                map.insert(id, hash);
+            }
+        }
+        map
+    };
     for requirement in &snapshot.requirements {
         let data = serde_json::to_string(requirement).unwrap_or_default();
+        let data_hash = hash_str(&data);
+        if existing_hashes
+            .get(&requirement.id)
+            .map(|stored| stored == &data_hash)
+            .unwrap_or(false)
+        {
+            continue;
+        }
         conn.execute(
-            "INSERT INTO requirements(id, iteration_id, code, status, data, updated_at)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6)
+            "INSERT INTO requirements(id, iteration_id, code, status, data, updated_at, hash)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(id) DO UPDATE SET
                iteration_id = excluded.iteration_id,
                code = excluded.code,
                status = excluded.status,
                data = excluded.data,
-               updated_at = excluded.updated_at",
+               updated_at = excluded.updated_at,
+               hash = excluded.hash",
             params![
                 requirement.id,
                 requirement.iteration_id,
                 requirement.code,
                 requirement.status,
                 data,
-                requirement.updated_at
+                requirement.updated_at,
+                data_hash
             ],
         )?;
     }
-    for skill in &snapshot.skills {
-        let data = serde_json::to_string(skill).unwrap_or_default();
-        conn.execute(
-            "INSERT INTO skills(id, data) VALUES(?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-            params![skill.id, data],
-        )?;
-    }
+    save_hashed(conn, "skills", &snapshot.skills, |item| item.id.as_str())?;
     // 按 artifact_contents 的当前快照做差集同步：
     // 1. 删除已被单独 delete_artifact 移出快照的正文行，避免重启复活或膨胀；
     // 2. 跳过库里已存在的 UUID 行（附件正文创建后不可变），避免每次普通保存全量重写大文件。
@@ -632,13 +823,28 @@ pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Re
                 "DELETE FROM artifact_contents WHERE id = ?1",
                 params![existing_id],
             )?;
+            if let Some(dir) = blob {
+                let _ = std::fs::remove_file(dir.join(blob_safe_name(existing_id)));
+            }
         }
     }
     for artifact in &snapshot.artifact_contents {
         if existing_artifacts.contains(&artifact.id) {
             continue;
         }
-        let data = serde_json::to_string(artifact).unwrap_or_default();
+        let data = match blob {
+            Some(dir) => {
+                let name = blob_safe_name(&artifact.id);
+                std::fs::create_dir_all(dir).map_err(|error| {
+                    rusqlite::Error::InvalidParameterName(format!("创建对象目录失败：{error}"))
+                })?;
+                std::fs::write(dir.join(&name), artifact.content.as_bytes()).map_err(|error| {
+                    rusqlite::Error::InvalidParameterName(format!("写对象文件失败：{error}"))
+                })?;
+                serde_json::json!({ "blob": name }).to_string()
+            }
+            None => serde_json::to_string(artifact).unwrap_or_default(),
+        };
         conn.execute(
             "INSERT INTO artifact_contents(id, data) VALUES(?1, ?2)
              ON CONFLICT(id) DO UPDATE SET data = excluded.data",
@@ -687,6 +893,11 @@ pub fn save_snapshot(conn: &Connection, snapshot: &mut Snapshot) -> rusqlite::Re
             ],
         )?;
     }
+    conn.execute(
+        "INSERT INTO workbench_meta(key, value) VALUES('revision', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![snapshot.revision.to_string()],
+    )?;
     prune_append_only_tables(conn)?;
     Ok(())
 }
@@ -748,6 +959,36 @@ pub fn has_webhook_delivery(conn: &Connection, delivery: &str) -> rusqlite::Resu
         |row| row.get(0),
     )?;
     Ok(exists != 0)
+}
+
+/// 启动时把已吊销的 token 读进内存，重启后旧 token 不会复活。
+pub fn load_revoked(conn: &Connection) -> rusqlite::Result<Vec<(String, i64)>> {
+    let mut statement = conn.prepare("SELECT jti, expires_at FROM revoked_tokens")?;
+    let rows = statement.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+/// 吊销一个 token 并落库（同时清理已过期的行）。
+pub fn insert_revoked(conn: &Connection, jti: &str, expires_at: i64) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO revoked_tokens(jti, expires_at) VALUES(?1, ?2)",
+        params![jti, expires_at],
+    )?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    conn.execute(
+        "DELETE FROM revoked_tokens WHERE expires_at <= ?1",
+        params![now],
+    )?;
+    Ok(())
 }
 
 pub fn notifications_for(
@@ -832,4 +1073,63 @@ pub fn events_since(conn: &Connection, since: i64, limit: usize) -> rusqlite::Re
         out.push(row?);
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod blob_tests {
+    use super::*;
+
+    #[test]
+    fn blob_store_roundtrips_artifact_content() {
+        let dir = std::env::temp_dir().join(format!("wb-blob-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        let mut snap = seed_snapshot();
+        snap.artifact_contents.push(ArtifactContent {
+            id: "art-x".to_string(),
+            content: "hello-blob".to_string(),
+        });
+        save_snapshot_with_blob(&conn, &mut snap, Some(&dir)).unwrap();
+        // 数据库里不应再存正文，只存 blob 引用。
+        let raw: String = conn
+            .query_row(
+                "SELECT data FROM artifact_contents WHERE id = 'art-x'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!raw.contains("hello-blob"), "正文不应写进数据库: {raw}");
+        assert!(raw.contains("blob"), "应写入 blob 引用: {raw}");
+        // 从文件读回正文。
+        let loaded = load_snapshot_inner(&conn, true, Some(&dir)).unwrap();
+        let content = loaded
+            .artifact_contents
+            .iter()
+            .find(|item| item.id == "art-x")
+            .unwrap()
+            .content
+            .clone();
+        assert_eq!(content, "hello-blob");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn requirements_keep_hash_and_incremental_resave_works() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        let mut snap = seed_snapshot();
+        save_snapshot_with_blob(&conn, &mut snap, None).unwrap();
+        let digest: Option<String> = conn
+            .query_row("SELECT hash FROM requirements LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(digest.is_some(), "需求行应写入内容哈希");
+        // 无变化再存一次不应报错（会走哈希跳过）。
+        save_snapshot_with_blob(&conn, &mut snap, None).unwrap();
+        // 读回仍正常。
+        let loaded = load_snapshot(&conn).unwrap();
+        assert_eq!(loaded.requirements.len(), snap.requirements.len());
+    }
 }

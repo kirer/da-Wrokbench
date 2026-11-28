@@ -342,7 +342,16 @@ export const WORKBENCH_SKILL_PROVIDER = 'dsh-workbench-roles'
 
 // 团队技能库里已发布的技能；syncPublishedSkills 启动时拉一次，按 rolePacks
 // 过滤后一起出现在技能目录里。空 rolePacks 表示所有身份都能用。
-export const publishedSkills = new Map()
+// 团队技能按登录 token（≈用户）分桶缓存：同一个 BFF 进程被多个用户共用时，
+// 以前用一个全局 Map 会被后一个用户覆盖、串号。这里按 token 隔离，最多保留 16 个桶。
+export const publishedSkillsByToken = new Map()
+const MAX_SKILL_TOKENS = 16
+const emptySkillMap = new Map()
+function publishedSkillsForCurrent() {
+  const token = activeWorkbenchUser.token
+  if (typeof token !== 'string' || token === '') return emptySkillMap
+  return publishedSkillsByToken.get(token) ?? emptySkillMap
+}
 
 // 当前使用这个 DSH 的工作台身份。桌面端通常一人一号；身份和当前角色由
 // makeRoute 在每个已登录请求上更新，角色一变就刷新技能目录和斜杠命令。
@@ -375,9 +384,13 @@ export function noteActiveWorkbenchUser(local, user, token = activeWorkbenchUser
   if (!user || typeof user.id !== 'string' || user.id === '') return
   const role = roleFromWorkbenchUser(user)
   // 留住这个账号的登录令牌：团队技能同步要用真实身份去取，按可见范围过滤。
-  activeWorkbenchUser.token = token
+  const previous = activeWorkbenchUser
   // 第一次拿到登录令牌也要算“变了”：启动时的同步没有身份，要等第一个登录请求补上。
-  const changed = activeWorkbenchUser.userId !== user.id || activeWorkbenchUser.role !== role || activeWorkbenchUser.token === null
+  // 必须与旧值比较后再赋值，否则先写 token 再判 null 会永远为 false，漏掉首次补令牌。
+  const changed = previous.userId !== user.id
+    || previous.role !== role
+    || (token !== null && token !== previous.token)
+    || previous.token === null
   activeWorkbenchUser = { userId: user.id, role, token }
   if (local.lastUserId !== user.id || local.lastRole !== role) {
     local.lastUserId = user.id
@@ -420,7 +433,7 @@ export function roleSkillCandidates(role) {
     if (!roleCanUse(role, skill.roles)) continue
     candidates.push(skillCandidate(skill, { kind: 'builtin', name: skill.name }))
   }
-  for (const skill of publishedSkills.values()) {
+  for (const skill of publishedSkillsForCurrent().values()) {
     if (!publishedSkillVisible(skill, role)) continue
     candidates.push(skillCandidate(skill, { kind: 'published', name: skill.name }))
   }
@@ -443,7 +456,7 @@ export function skillDefinitionFor(candidate) {
       content: skill.content,
     }
   }
-  const skill = publishedSkills.get(name)
+  const skill = publishedSkillsForCurrent().get(name)
   if (!skill) return undefined
   return {
     name: skill.name,
@@ -492,16 +505,22 @@ export async function syncPublishedSkills(ctx, local) {
     const token = activeWorkbenchUser.token
     if (typeof token !== 'string' || token === '') return
     const data = await serverJson('/skills/published', { token })
-    publishedSkills.clear()
+    const bucket = new Map()
     for (const skill of data.skills || []) {
       if (!skill || typeof skill.name !== 'string' || skill.name === '') continue
       if (BUILTIN_SKILL_NAMES.has(skill.name)) continue
-      publishedSkills.set(skill.name, {
+      bucket.set(skill.name, {
         name: skill.name,
         description: String(skill.description ?? ''),
         rolePacks: Array.isArray(skill.rolePacks) ? skill.rolePacks : [],
         content: String(skill.content ?? ''),
       })
+    }
+    publishedSkillsByToken.set(token, bucket)
+    // 分桶按插入序淘汰最旧的，避免账号切换多了无限增长。
+    if (publishedSkillsByToken.size > MAX_SKILL_TOKENS) {
+      const oldest = publishedSkillsByToken.keys().next()
+      if (!oldest.done) publishedSkillsByToken.delete(oldest.value)
     }
     invalidateWorkbenchSkills()
   } catch (reason) {

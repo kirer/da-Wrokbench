@@ -48,6 +48,9 @@ jobs:
       - name: 客户端语法检查
         working-directory: plugin
         run: npm run check
+      - name: BFF 单元测试
+        working-directory: plugin
+        run: npm run test:unit
       - name: API 回归
         run: |
           DATABASE_PATH="$RUNNER_TEMP/workbench-api.db" PORT=3210 ./target/debug/dsh-workbench-server &

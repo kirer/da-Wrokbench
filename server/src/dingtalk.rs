@@ -12,7 +12,8 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::Semaphore;
 
 #[derive(Debug, Clone)]
 pub struct OrgUser {
@@ -105,7 +106,7 @@ fn missing_credentials() -> ApiError {
 }
 
 static TOKEN_CACHE: OnceLock<Mutex<Option<(String, Instant)>>> = OnceLock::new();
-static NOTIFIER: OnceLock<UnboundedSender<WorkNotice>> = OnceLock::new();
+static NOTIFIER: OnceLock<Sender<WorkNotice>> = OnceLock::new();
 
 fn cache() -> &'static Mutex<Option<(String, Instant)>> {
     TOKEN_CACHE.get_or_init(|| Mutex::new(None))
@@ -236,62 +237,93 @@ pub async fn fetch_org(config: &Config) -> Result<(Vec<i64>, Vec<OrgUser>), ApiE
     }
 
     let mut users: HashMap<String, OrgUser> = HashMap::new();
-    for dept_id in &departments {
-        let mut cursor = 0i64;
-        loop {
-            let url = format!(
-                "{}/topapi/v2/user/list?access_token={}",
-                config.dingtalk_api_base,
-                url_encode(&token)
-            );
-            let response = client
-                .post(url)
-                .timeout(DINGTALK_TIMEOUT)
-                .json(&json!({ "dept_id": dept_id, "cursor": cursor, "size": 100 }))
-                .send()
-                .await
-                .map_err(|error| {
-                    bad_gateway(format!("钉钉成员列表请求失败：{}", error.without_url()))
-                })?;
-            let body: OapiResponse<UserListResult> = response
-                .json()
-                .await
-                .map_err(|error| bad_gateway(format!("钉钉成员列表响应不合法：{error}")))?;
-            if body.errcode != 0 {
-                return Err(bad_gateway(format!(
-                    "钉钉成员列表失败（{}）：{}",
-                    body.errcode, body.errmsg
-                )));
+    // 部门数量多时逐个串行拉取成员非常慢；用信号量限制并发（默认 6）并行拉取。
+    let dep_base = config.dingtalk_api_base.clone();
+    let semaphore = std::sync::Arc::new(Semaphore::new(6));
+    let mut handles = Vec::new();
+    for dept_id in departments.clone() {
+        let permit = semaphore.clone();
+        let client = client.clone();
+        let base = dep_base.clone();
+        let token = token.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = permit.acquire_owned().await.ok();
+            fetch_department_users(&client, &base, &token, dept_id).await
+        }));
+    }
+    for handle in handles {
+        let raws = match handle.await {
+            Ok(Ok(list)) => list,
+            Ok(Err(error)) => return Err(error),
+            Err(error) => return Err(bad_gateway(format!("钉钉成员列表任务失败：{error}"))),
+        };
+        for raw in raws {
+            if raw.userid.is_empty() {
+                continue;
             }
-            let result = body.result.unwrap_or(UserListResult {
-                list: Vec::new(),
-                has_more: false,
-                next_cursor: 0,
+            users.entry(raw.userid.clone()).or_insert_with(|| OrgUser {
+                userid: raw.userid,
+                unionid: raw.unionid,
+                name: raw.name,
+                mobile: raw.mobile,
+                avatar: raw.avatar,
+                title: raw.title,
+                department_ids: raw.dept_id_list.iter().map(|id| id.to_string()).collect(),
+                active: raw.active,
             });
-            for raw in result.list {
-                if raw.userid.is_empty() {
-                    continue;
-                }
-                users.entry(raw.userid.clone()).or_insert_with(|| OrgUser {
-                    userid: raw.userid,
-                    unionid: raw.unionid,
-                    name: raw.name,
-                    mobile: raw.mobile,
-                    avatar: raw.avatar,
-                    title: raw.title,
-                    department_ids: raw.dept_id_list.iter().map(|id| id.to_string()).collect(),
-                    active: raw.active,
-                });
-            }
-            if !result.has_more || result.next_cursor <= cursor {
-                break;
-            }
-            cursor = result.next_cursor;
         }
     }
     let mut users: Vec<OrgUser> = users.into_values().collect();
     users.sort_by(|a, b| a.userid.cmp(&b.userid));
     Ok((departments, users))
+}
+
+/// 拉取单个部门的全部成员（自动翻页）。抽出来便于并发调用。
+async fn fetch_department_users(
+    client: &reqwest::Client,
+    base: &str,
+    token: &str,
+    dept_id: i64,
+) -> Result<Vec<RawUser>, ApiError> {
+    let mut collected = Vec::new();
+    let mut cursor = 0i64;
+    loop {
+        let url = format!(
+            "{}/topapi/v2/user/list?access_token={}",
+            base,
+            url_encode(token)
+        );
+        let response = client
+            .post(url)
+            .timeout(DINGTALK_TIMEOUT)
+            .json(&json!({ "dept_id": dept_id, "cursor": cursor, "size": 100 }))
+            .send()
+            .await
+            .map_err(|error| {
+                bad_gateway(format!("钉钉成员列表请求失败：{}", error.without_url()))
+            })?;
+        let body: OapiResponse<UserListResult> = response
+            .json()
+            .await
+            .map_err(|error| bad_gateway(format!("钉钉成员列表响应不合法：{error}")))?;
+        if body.errcode != 0 {
+            return Err(bad_gateway(format!(
+                "钉钉成员列表失败（{}）：{}",
+                body.errcode, body.errmsg
+            )));
+        }
+        let result = body.result.unwrap_or(UserListResult {
+            list: Vec::new(),
+            has_more: false,
+            next_cursor: 0,
+        });
+        collected.extend(result.list);
+        if !result.has_more || result.next_cursor <= cursor {
+            break;
+        }
+        cursor = result.next_cursor;
+    }
+    Ok(collected)
 }
 
 pub async fn send_work_notice(config: &Config, notice: &WorkNotice) -> Result<(), ApiError> {
@@ -340,21 +372,47 @@ pub async fn send_work_notice(config: &Config, notice: &WorkNotice) -> Result<()
 
 /// 启动工作通知消费者。只在显式开启 DINGTALK_WORK_NOTIFY 且配置 AgentId 时调用。
 pub fn init_notifier(config: std::sync::Arc<Config>) {
-    let (tx, mut rx) = unbounded_channel::<WorkNotice>();
+    // 有界队列：钉钉慢或挂掉时最多积压 N 条，超出丢弃并告警，避免内存无限增长。
+    let (tx, mut rx) = channel::<WorkNotice>(1024);
     if NOTIFIER.set(tx).is_err() {
         return;
     }
     tokio::spawn(async move {
+        // sender 全部释放后 recv 会先返回剩余缓冲消息、再返回 None，实现优雅排空。
         while let Some(notice) = rx.recv().await {
-            if let Err(error) = send_work_notice(&config, &notice).await {
-                tracing::warn!("钉钉工作通知发送失败：{}", error.message);
+            send_with_retry(&config, &notice).await;
+        }
+        tracing::info!("钉钉工作通知队列已排空并退出");
+    });
+}
+
+/// 发送失败按指数退避重试（最多 3 次），仍失败只告警、不阻塞队列。
+async fn send_with_retry(config: &Config, notice: &WorkNotice) {
+    let mut attempt = 0u32;
+    loop {
+        match send_work_notice(config, notice).await {
+            Ok(()) => return,
+            Err(error) => {
+                attempt += 1;
+                if attempt >= 3 {
+                    tracing::warn!(
+                        "钉钉工作通知最终失败（已重试 {} 次）：{}",
+                        attempt - 1,
+                        error.message
+                    );
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt - 1))).await;
             }
         }
-    });
+    }
 }
 
 pub fn enqueue(notice: WorkNotice) {
     if let Some(sender) = NOTIFIER.get() {
-        let _ = sender.send(notice);
+        // 队列满时不阻塞业务线程：丢弃并留痕，避免把工作台写入卡在钉钉上。
+        if let Err(error) = sender.try_send(notice) {
+            tracing::warn!("钉钉工作通知队列已满或已关闭，丢弃一条通知：{error}");
+        }
     }
 }

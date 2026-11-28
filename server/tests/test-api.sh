@@ -42,7 +42,7 @@ expect() {
   if [ "$actual" = "$expected" ]; then
     ok "HTTP $expected"
   else
-    bad "期望 HTTP $expected，实际 $actual：$(cat "$BODY_FILE")"
+    bad "期望 HTTP ${expected}，实际 ${actual}：$(cat "$BODY_FILE")"
   fi
 }
 
@@ -182,7 +182,7 @@ expect 200 -X POST "$BASE/requirements/$REQ_ID/design-claim" -H "$(auth "$T_DESI
 ok "设计认领"
 
 expect 200 -X POST "$BASE/requirements/$REQ_ID/design-deliver" -H "$(auth "$T_DESIGN")" \
-  -H 'content-type: application/json' -d '{"summary":"开发开始后交付的设计","files":["index.html"]}'
+  -H 'content-type: application/json' -d '{"summary":"开发开始后交付的设计"}'
 check_json '.requirement.designUpdatedAt != null' "开发开始后交付设计，标记设计已更新"
 
 expect 200 -X POST "$BASE/requirements/$REQ_ID/dev-assign" -H "$(auth "$T_ZS")" \

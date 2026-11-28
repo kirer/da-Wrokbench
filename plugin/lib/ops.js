@@ -2,14 +2,34 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { httpError } from './util.js'
 import { slugTitle, refreshLocal, saveLocal, localUser, baseDirFor, isInside, assertNoSymlinkBetween, assertLocalFolderInside, safeSegment, ensureRequirementFolder, PROTOTYPE_DIR, listHtmlFiles, listDesignFiles, listPrototypeFiles, listDesignSupportFiles } from './local.js'
-import { SYNC_INTERVAL_MS, lastSyncAt, serverState, serverJson, serverAs, previewAssetCache } from './server.js'
+import { SYNC_INTERVAL_MS, lastSyncAt, serverState, serverJson, serverAs, previewAssetCache, capMap, LAST_SYNC_MAX, PREVIEW_ASSET_CACHE_MAX } from './server.js'
 import { iterationOf, folderPathFor, findMappedRecord, findSessionOwner } from './state.js'
+
+// 受控并发的批量处理：单个失败不影响其它，最多同时跑 limit 个。
+// 结果按输入下标回填，保证 warnings / 顺序稳定。
+async function runWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length)
+  let cursor = 0
+  const size = Math.max(1, Math.min(limit, items.length))
+  const runners = Array.from({ length: size }, async () => {
+    while (true) {
+      const index = cursor++
+      if (index >= items.length) return
+      results[index] = await worker(items[index], index)
+    }
+  })
+  await Promise.all(runners)
+  return results
+}
+
+const UPLOAD_CONCURRENCY = 4
 
 // 返回 true 表示这次真的跑了同步；写操作后调用 force 让新上传的文件立刻可见。
 export async function syncWorkspaceFiles(userId, data, local, force = false) {
   const last = lastSyncAt.get(userId) ?? 0
   if (!force && Date.now() - last < SYNC_INTERVAL_MS) return false
   lastSyncAt.set(userId, Date.now())
+  capMap(lastSyncAt, LAST_SYNC_MAX)
   const localState = localUser(local, userId)
   const baseDir = baseDirFor(local, userId)
   // 同步失败不影响工作台本身：卡片仍可从服务端附件预览。
@@ -137,6 +157,7 @@ export async function previewArtifactsFor(requirementId, token) {
   const requirement = (stateData.requirements || []).find(item => item.id === requirementId)
   const artifacts = Array.isArray(requirement?.artifacts) ? requirement.artifacts : []
   previewAssetCache.set(key, { at: Date.now(), artifacts })
+  capMap(previewAssetCache, PREVIEW_ASSET_CACHE_MAX)
   return artifacts
 }
 
@@ -233,7 +254,7 @@ export function sendDesignPreview(res, buffer, name, declaredType) {
   if (/text\/html|text\/css|javascript|image\/svg/i.test(type)) {
     // 原型是别人写的 HTML：放进沙箱源里跑，拿不到工作台会话，也不许加载外部资源、
     // 提交表单或借 base 标签改解析地址。
-    res.setHeader('content-security-policy', "sandbox allow-scripts allow-forms allow-modals; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'; object-src 'none'")
+    res.setHeader('content-security-policy', "sandbox allow-scripts allow-forms; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'; object-src 'none'")
   }
   res.end(buffer)
 }
@@ -358,14 +379,11 @@ export async function uploadDesignArtifacts(userId, folder, baseDir, requirement
   if (files.length > 30) {
     warnings.push(`设计稿共 ${files.length} 个文件，单次交付最多上传前 30 个`)
   }
-  for (const relativePath of files.slice(0, 30)) {
-    if (typeof relativePath !== 'string' || relativePath.trim() === '') continue
+  const outcomes = await runWithConcurrency(files.slice(0, 30), UPLOAD_CONCURRENCY, async (relativePath) => {
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') return null
     const ext = path.extname(relativePath).toLowerCase()
     const contentType = DESIGN_UPLOAD_TYPES[ext]
-    if (!contentType) {
-      warnings.push(`${relativePath}：不支持的文件类型，未上传`)
-      continue
-    }
+    if (!contentType) return { warning: `${relativePath}：不支持的文件类型，未上传` }
     try {
       const target = path.resolve(realFolder, relativePath)
       assertNoSymlinkBetween(realFolder, target)
@@ -381,12 +399,18 @@ export async function uploadDesignArtifacts(userId, folder, baseDir, requirement
         content,
         kind: 'design',
       })
-      if (result?.artifact?.id) {
-        artifactIds.push(result.artifact.id)
-        uploadedPaths.push(real)
-      }
+      if (result?.artifact?.id) return { id: result.artifact.id, path: real }
+      return null
     } catch (reason) {
-      warnings.push(`${relativePath}：${reason instanceof Error ? reason.message : String(reason)}`)
+      return { warning: `${relativePath}：${reason instanceof Error ? reason.message : String(reason)}` }
+    }
+  })
+  for (const outcome of outcomes) {
+    if (!outcome) continue
+    if (outcome.warning !== undefined) warnings.push(outcome.warning)
+    if (outcome.id !== undefined) {
+      artifactIds.push(outcome.id)
+      uploadedPaths.push(outcome.path)
     }
   }
   return { artifactIds, uploadedPaths, warnings }
@@ -427,12 +451,12 @@ export async function uploadPrototypeArtifacts(userId, folder, baseDir, requirem
   if (files.length > 30) {
     warnings.push(`原型共 ${files.length} 个文件，单次最多同步 30 个`)
   }
-  for (const file of files.slice(0, 30)) {
+  const outcomes = await runWithConcurrency(files.slice(0, 30), UPLOAD_CONCURRENCY, async (file) => {
     const relativePath = file?.relativePath
-    if (typeof relativePath !== 'string' || relativePath.trim() === '') continue
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') return null
     const stamp = `${file.size}:${file.updatedAt}`
     const contentType = DESIGN_UPLOAD_TYPES[path.extname(relativePath).toLowerCase()]
-    if (!contentType) continue
+    if (!contentType) return null
     try {
       const target = path.resolve(realFolder, relativePath)
       assertNoSymlinkBetween(realFolder, target)
@@ -448,13 +472,20 @@ export async function uploadPrototypeArtifacts(userId, folder, baseDir, requirem
         content,
         kind: PROTOTYPE_ARTIFACT_KIND,
       })
-      if (result?.artifact?.id) {
-        uploaded.push({ relativePath, stamp, artifact: result.artifact })
-      }
+      if (result?.artifact?.id) return { uploaded: { relativePath, stamp, artifact: result.artifact } }
+      return null
     } catch (reason) {
-      failed.push({ relativePath, stamp })
-      warnings.push(`${relativePath}：${reason instanceof Error ? reason.message : String(reason)}`)
+      return {
+        failed: { relativePath, stamp },
+        warning: `${relativePath}：${reason instanceof Error ? reason.message : String(reason)}`,
+      }
     }
+  })
+  for (const outcome of outcomes) {
+    if (!outcome) continue
+    if (outcome.uploaded) uploaded.push(outcome.uploaded)
+    if (outcome.failed) failed.push(outcome.failed)
+    if (outcome.warning !== undefined) warnings.push(outcome.warning)
   }
   return { uploaded, failed, warnings }
 }
@@ -466,6 +497,8 @@ export async function syncOwnPrototypes(userId, data, local, localState, baseDir
   let dirty = false
   for (const requirement of requirements) {
     if (requirement.ownerId !== userId) continue
+    const protoIteration = iterationOf(data, requirement)
+    if (protoIteration !== null && protoIteration !== undefined && protoIteration.archived) continue
     if (requirement.status === 'frozen' || requirement.status === 'released' || requirement.status === 'done') continue
     let folder = ''
     try { folder = folderPathFor(localState, baseDir, data, requirement) } catch { continue }
@@ -630,6 +663,8 @@ export async function syncOwnTestReports(userId, data, local, localState, baseDi
     // 冻结/发布之后服务端不再接受新附件，测试报告只能赶在冻结前同步；
     // 这里跳过能避免每次 /state 都重试一轮注定失败的请求。
     if (requirement.status === 'frozen' || requirement.status === 'released' || requirement.status === 'done') continue
+    const testIteration = iterationOf(data, requirement)
+    if (testIteration !== null && testIteration !== undefined && testIteration.archived) continue
     const runs = Array.isArray(requirement.testRuns) ? requirement.testRuns : []
     if (!runs.some(run => run.by === userId)) continue
     let folder = ''
@@ -677,6 +712,8 @@ export async function mirrorPrototypesForUser(userId, data, localState, baseDir)
   let wrote = false
   for (const requirement of requirements) {
     if (requirement.ownerId === userId) continue
+    const mirrorIteration = iterationOf(data, requirement)
+    if (mirrorIteration !== null && mirrorIteration !== undefined && mirrorIteration.archived) continue
     const artifacts = (requirement.artifacts || []).filter(artifact =>
       artifact.kind === PROTOTYPE_ARTIFACT_KIND
       && typeof artifact.name === 'string'

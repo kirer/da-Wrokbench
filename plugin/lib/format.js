@@ -100,6 +100,7 @@ export function statusLabel(status) {
     frozen: '已冻结',
     released: '已发布',
     done: '已完成',
+    cancelled: '已取消',
   })[status] ?? status
 }
 
@@ -145,6 +146,8 @@ export const ACTION_LABELS = {
   freeze: '冻结',
   unfreeze: '解冻',
   release: '发布',
+  complete: '完成验收',
+  cancel: '取消需求',
 }
 
 export function actionLabel(action) {

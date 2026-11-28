@@ -2,15 +2,59 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
+import { Readable } from 'node:stream'
 import { API_PREFIX, AUTH_COOKIE, AUTH_STATE_COOKIE, IS_PRODUCTION, ALLOW_REMOTE_BFF } from './config.js'
 import { greetingMessageText } from './greeting.js'
 import { httpError } from './util.js'
-import { defaultBaseDir, refreshLocal, saveLocal, localUser, baseDirFor, ensureBaseDir, isInside, assertNoSymlinkBetween, assertLocalFolderInside, safeSegment, resolveAndCreateTopFolder, ensureRequirementFolder, PROTOTYPE_DIR, DESIGN_DIR, BLANK_CANVAS_NAME, BLANK_CANVAS_HTML, BLANK_DESIGN_HTML, listDesignFiles, removeLocalDesignFiles, listDesignSupportFiles, attachWorkingFolders } from './local.js'
-import { serverState, serverRaw, serverJson, serverAs, authConfig, withoutLocalPaths } from './server.js'
+import { defaultBaseDir, refreshLocal, saveLocal, localUser, baseDirFor, ensureBaseDir, isInside, assertNoSymlinkBetween, assertLocalFolderInside, safeSegment, resolveAndCreateTopFolder, ensureRequirementFolder, PROTOTYPE_DIR, DESIGN_DIR, BLANK_CANVAS_NAME, BLANK_CANVAS_HTML, BLANK_DESIGN_HTML, listDesignFiles, removeLocalDesignFiles, listDesignSupportFiles, attachWorkingFolders, unsafeBaseDirReason } from './local.js'
+import { serverState, serverRaw, serverJson, serverAs, authConfig, withoutLocalPaths, serverStream } from './server.js'
 import { PREVIEW_TICKET_TTL_MS, mintPreviewTicket, verifyPreviewTicket, parseCookies, serializeCookie, appendCookie, json, readJson, requestOrigin, redirect, htmlPage, assertSameOrigin, safeReturnTo, tokenFromRequest, authSessionCache, invalidateAuthSessionsForUser, isBinaryBuffer, sessionFromRequest, isLoopbackRequest, remoteAllowedRoute, issueAuthCookie } from './http.js'
 import { folderPathFor, decorateRequirement, decorateState, findMappedRecord, findSessionOwner, removeRequirementFolders, forgetRequirementLocalState, attachDesignScreens } from './state.js'
 import { syncWorkspaceFiles, requirementFolder, ensureRequirementFolderFor, DESIGN_PREVIEW_TYPES, inlinePreviewAssets, sendDesignPreview, codeBrowserDenied, CODE_PREVIEW_MAX_BYTES, uploadDesignArtifacts, PROTOTYPE_ARTIFACT_KIND } from './ops.js'
 import { noteActiveWorkbenchUser, syncPublishedSkills } from './skills.js'
+
+// 版本快照目录（~/.dsh/cache/dsh-workbench/versions/）会随每次预览不断增长，
+// 之前只在覆盖同一版本时清理，从不清已删除/长期未访问的目录。这里按小时节流地
+// 清掉超过 7 天没碰过的快照，并回收变空的需求目录。
+let lastVersionsPruneAt = 0
+function pruneVersionsCache(maxAgeMs = 7 * 24 * 3600 * 1000) {
+  const now = Date.now()
+  if (now - lastVersionsPruneAt < 60 * 60 * 1000) return
+  lastVersionsPruneAt = now
+  const root = path.join(os.homedir(), '.dsh', 'cache', 'dsh-workbench', 'versions')
+  let entries
+  try { entries = fs.readdirSync(root, { withFileTypes: true }) } catch { return }
+  for (const reqDir of entries) {
+    if (!reqDir.isDirectory()) continue
+    const reqPath = path.join(root, reqDir.name)
+    let sub
+    try { sub = fs.readdirSync(reqPath, { withFileTypes: true }) } catch { continue }
+    let remaining = 0
+    for (const item of sub) {
+      if (!item.isDirectory()) continue
+      const itemPath = path.join(reqPath, item.name)
+      try {
+        if (now - fs.statSync(itemPath).mtimeMs > maxAgeMs) {
+          fs.rmSync(itemPath, { recursive: true, force: true })
+          continue
+        }
+      } catch { /* 单个目录异常不影响其它 */ }
+      remaining += 1
+    }
+    if (remaining === 0) { try { fs.rmdirSync(reqPath) } catch { /* 非空或已删除 */ } }
+  }
+}
+
+// 工作区文件同步会扫目录、可能上传附件；放到后台跑，别拖慢 /state 的响应。
+// 同一用户同时只保留一个同步任务，避免被高频轮询打爆。
+const workspaceSyncInFlight = new Set()
+function scheduleWorkspaceSync(userId, data, local) {
+  if (workspaceSyncInFlight.has(userId)) return
+  workspaceSyncInFlight.add(userId)
+  void syncWorkspaceFiles(userId, data, local)
+    .catch((reason) => console.warn('[dsh-workbench] 后台工作区同步失败', reason))
+    .finally(() => workspaceSyncInFlight.delete(userId))
+}
 
 // ---------------------------------------------------------------------------
 // Route handler
@@ -483,8 +527,31 @@ export function makeRoute(local, hostCtx = null) {
       if (req.method === 'GET' && route === '/state') {
         ensureBaseDir(local, userId)
         const data = await serverState(session.token)
-        await syncWorkspaceFiles(userId, data, local)
+        scheduleWorkspaceSync(userId, data, local)
         return json(res, 200, decorateState(data, local, userId))
+      }
+
+      // SSE 事件流：把团队服务端的事件流管道透传给浏览器（同源 Cookie 鉴权）。
+      if (req.method === 'GET' && route === '/events/stream') {
+        const controller = new AbortController()
+        let upstream
+        try {
+          upstream = await serverStream('/events/stream', { token: session.token, signal: controller.signal })
+        } catch (reason) {
+          return json(res, 502, { error: `事件流连接失败：${reason instanceof Error ? reason.message : String(reason)}` })
+        }
+        res.writeHead(upstream.status, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          connection: 'keep-alive',
+        })
+        if (typeof res.flushHeaders === 'function') res.flushHeaders()
+        if (upstream.body === null) { res.end(); return }
+        const streamBody = Readable.fromWeb(upstream.body)
+        streamBody.on('error', () => { try { res.end() } catch (_) { /* 忽略 */ } })
+        req.on('close', () => { controller.abort(); try { streamBody.destroy() } catch (_) { /* 忽略 */ } })
+        streamBody.pipe(res)
+        return
       }
 
       if (req.method === 'GET' && route === '/requirement') {
@@ -508,6 +575,24 @@ export function makeRoute(local, hostCtx = null) {
         attachWorkingFolders(requirement, baseDir)
         attachDesignScreens(requirement)
         return json(res, 200, { requirement })
+      }
+
+      if (req.method === 'POST' && route === '/onboarding/precheck') {
+        const body = await readJson(req)
+        const folder = typeof body.folder === 'string' ? body.folder.trim() : ''
+        if (folder === '') return json(res, 200, { valid: false, reason: '请填写一个文件夹路径' })
+        const resolved = path.resolve(folder)
+        const reason = unsafeBaseDirReason(resolved)
+        if (reason !== '') return json(res, 200, { valid: false, reason })
+        const exists = fs.existsSync(resolved)
+        let writable = true
+        if (exists) {
+          try { fs.accessSync(resolved, fs.constants.W_OK) } catch { writable = false }
+        }
+        const hasHistory = Object.values(local.users ?? {}).some(item => (
+          typeof item.topLevelFolder === 'string' && item.topLevelFolder !== '' && path.resolve(item.topLevelFolder) === resolved
+        ))
+        return json(res, 200, { valid: writable, reason: writable ? '' : '目录不可写', exists, writable, hasHistory })
       }
 
       if (req.method === 'POST' && route === '/onboarding/complete') {
@@ -592,6 +677,7 @@ export function makeRoute(local, hostCtx = null) {
       // 本机快照目录（~/.dsh/cache/…/versions/），再把目录路径交给画布。
       // 版本不可变，快照可以反复覆盖；「最新」也走这里，供没有本机文件的人看。
       if (req.method === 'POST' && route === '/versions/materialize') {
+        pruneVersionsCache()
         const body = await readJson(req)
         const requirementId = typeof body.requirementId === 'string' ? body.requirementId.trim() : ''
         const kind = body.kind === 'design' ? 'design' : 'prototype'

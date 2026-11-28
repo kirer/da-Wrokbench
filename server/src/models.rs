@@ -17,6 +17,7 @@ pub const STATUS_TEST_PASSED: &str = "test_passed";
 pub const STATUS_FROZEN: &str = "frozen";
 pub const STATUS_RELEASED: &str = "released";
 pub const STATUS_DONE: &str = "done";
+pub const STATUS_CANCELLED: &str = "cancelled";
 
 pub const DESIGN_NONE: &str = "not_needed";
 pub const DESIGN_UNCLAIMED: &str = "unclaimed";
@@ -243,6 +244,9 @@ pub struct Version {
     pub summary: String,
     pub at: String,
     pub by: String,
+    /// 提交时的文档快照，用于版本间正文/验收标准 Diff；老数据缺省为空。
+    #[serde(default)]
+    pub document: Option<RequirementDocument>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,6 +383,20 @@ pub struct DevTask {
     /// 排期时按端填的估时（人天）；None = 没估。
     #[serde(default)]
     pub estimate_days: Option<f64>,
+    /// 按端排期窗口（YYYY-MM-DD）；支持各端独立排期与联调先后。
+    #[serde(default)]
+    pub planned_start_date: Option<String>,
+    #[serde(default)]
+    pub planned_end_date: Option<String>,
+    /// 本端依赖的其他端（platform_id）：被依赖端未完成时用于提示联调顺序。
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+    /// 实际投入人天（完成开发时按起止时间推算或手工填写），用于估时偏差复盘。
+    #[serde(default)]
+    pub actual_days: Option<f64>,
+    /// 阻塞原因/备注，复盘时回看为什么超出估时。
+    #[serde(default)]
+    pub blocked_reason: Option<String>,
     #[serde(default)]
     pub branch: Option<String>,
     #[serde(default)]
@@ -507,6 +525,11 @@ impl Requirement {
                     started_at: None,
                     finished_at: None,
                     estimate_days: None,
+                    planned_start_date: None,
+                    planned_end_date: None,
+                    depends_on: Vec::new(),
+                    actual_days: None,
+                    blocked_reason: None,
                     branch: None,
                     mr_url: None,
                     pipeline_status: None,
@@ -561,6 +584,12 @@ pub struct Skill {
     pub owner_id: String,
     #[serde(default)]
     pub versions: Vec<SkillVersion>,
+    /// 被模型/用户实际调用的次数（用于评估团队技能的活跃度）。
+    #[serde(default)]
+    pub usage_count: u64,
+    /// 在这些项目（项目 id）里停用的技能；空表示所有项目可用。
+    #[serde(default)]
+    pub disabled_projects: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }

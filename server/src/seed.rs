@@ -213,6 +213,7 @@ fn version(version: u32, summary: &str, at: &str) -> Version {
         summary: summary.into(),
         at: at.into(),
         by: "lisi".into(),
+        document: None,
     }
 }
 
@@ -253,6 +254,11 @@ fn dev_task(
         started_at: started_at.map(String::from),
         finished_at: finished_at.map(String::from),
         estimate_days: None,
+        planned_start_date: None,
+        planned_end_date: None,
+        depends_on: Vec::new(),
+        actual_days: None,
+        blocked_reason: None,
         branch: if status == DEV_DONE {
             Some(format!("feature/{platform_id}-s11"))
         } else {
@@ -723,6 +729,8 @@ fn seed_skill(
         status: status.into(),
         owner_id: "zhangsan".into(),
         versions: vec![version],
+        usage_count: 0,
+        disabled_projects: Vec::new(),
         created_at: "2026-11-01T03:00:00.000Z".into(),
         updated_at: "2026-11-01T03:10:00.000Z".into(),
     }

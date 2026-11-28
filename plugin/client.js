@@ -35,13 +35,26 @@ window.__ModuleLoader__.load({
     const API = '/dsh-workbench/api/'
     // 桌面端 dsh-app://app 下 Cookie 可能不持久，登录时把 token 存进 localStorage，
     // 之后所有请求带 Authorization: Bearer，服务端两者都接受。
+    // 网页端（http/https）优先用 Cookie，token 只放内存不落 localStorage，降低 XSS 窃取风险。
     const TOKEN_KEY = 'dshWorkbenchAuthToken'
+    const PERSIST_TOKEN = (() => {
+      try { return window.location.protocol === 'dsh-app:' } catch (_) { return false }
+    })()
+    let inMemoryToken = ''
     function readToken() {
+      if (inMemoryToken !== '') return inMemoryToken
+      if (!PERSIST_TOKEN) return ''
       try { return String(window.localStorage.getItem(TOKEN_KEY) || '') } catch (_) { return '' }
     }
     function writeToken(token) {
+      inMemoryToken = typeof token === 'string' ? token : ''
       try {
-        if (typeof token === 'string' && token !== '') window.localStorage.setItem(TOKEN_KEY, token)
+        if (!PERSIST_TOKEN) {
+          // 网页端：清掉可能残留的旧持久化 token。
+          if (window.localStorage.getItem(TOKEN_KEY) !== null) window.localStorage.removeItem(TOKEN_KEY)
+          return
+        }
+        if (inMemoryToken !== '') window.localStorage.setItem(TOKEN_KEY, inMemoryToken)
         else window.localStorage.removeItem(TOKEN_KEY)
       } catch (_) { /* 无 localStorage 时退回 Cookie */ }
     }
@@ -111,29 +124,31 @@ window.__ModuleLoader__.load({
   --dur-3: 240ms;
 
 
-  --bg: #151517;
-  --bg-elev: #191919;
-  --panel: #1b1b1e;
-  --surface: #232326;
-  --surface-2: #2a2a2e;
-  --surface-3: #333338;
+  /* 跟随宿主主题：核心中性色/文字/边框/主色直接取 DSH 语义变量，深浅色由宿主自动切换。
+     末尾保留深色 hex 作兜底：宿主未提供这些变量时退回原深色，不影响功能。 */
+  --bg: var(--dsw-alias-bg-base, #151517);
+  --bg-elev: var(--dsw-alias-bg-layer-1, #191919);
+  --panel: var(--dsw-alias-bg-layer-1, #1b1b1e);
+  --surface: var(--dsw-alias-bg-layer-2, #232326);
+  --surface-2: var(--dsw-alias-bg-layer-2, #2a2a2e);
+  --surface-3: var(--dsw-alias-bg-layer-2, #333338);
   --overlay: rgba(0,0,0,.55);
 
-  --line: #2b2b30;
-  --line-2: #36363c;
-  --line-3: #46474d;
+  --line: var(--dsw-alias-border-l1, #2b2b30);
+  --line-2: var(--dsw-alias-border-l2, #36363c);
+  --line-3: var(--dsw-alias-border-l2, #46474d);
 
-  --text: #ededef;
-  --text-2: #adb0b8;
-  --text-3: #9a9aa2;
-  --text-4: #6e6e76;
-  --text-inv: #17171a;
+  --text: var(--dsw-alias-label-primary, #ededef);
+  --text-2: var(--dsw-alias-label-secondary, #adb0b8);
+  --text-3: var(--dsw-alias-label-tertiary, #9a9aa2);
+  --text-4: var(--dsw-alias-label-tertiary, #6e6e76);
+  --text-inv: var(--dsw-alias-label-inverse, #17171a);
 
-  --primary: #6f9bf0;
-  --primary-strong: #3563cc;
-  --primary-strong-h: #3f6fd6;
-  --primary-h: #86adf4;
-  --primary-ink: #cdddfb;
+  --primary: var(--dsw-alias-brand-primary, #6f9bf0);
+  --primary-strong: var(--dsw-alias-brand-primary, #3563cc);
+  --primary-strong-h: var(--dsw-alias-brand-primary, #3f6fd6);
+  --primary-h: var(--dsw-alias-brand-primary, #86adf4);
+  --primary-ink: var(--dsw-alias-brand-primary, #cdddfb);
   --primary-bg: rgba(111,155,240,.13);
   --primary-bg-2: rgba(111,155,240,.20);
   --primary-line: rgba(111,155,240,.38);
@@ -690,7 +705,6 @@ window.__ModuleLoader__.load({
 @media (prefers-reduced-motion: reduce){
 .dsh-wb-design .skeleton { animation: none; }
 }
-.dsh-wb-design .toast-wrap { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 8px; align-items: center; }
 .dsh-wb-design .toast {
   display: flex; align-items: center; gap: 9px;
   padding: 9px 14px; border-radius: var(--r-md);
@@ -1019,9 +1033,16 @@ window.__ModuleLoader__.load({
 @media (max-width: 1180px){
 .dsh-wb-design { --rail-w: 208px; --rpanel-w: 336px; }
 }
+.dsh-wb-design .dsh-wb-drawer-toggles{display:none}
 @media (max-width: 980px){
 .dsh-wb-design .win, .dsh-wb-design .win.has-panel { grid-template-columns: minmax(0, 1fr); }
-.dsh-wb-design .rail, .dsh-wb-design .rpanel { display: none; }
+.dsh-wb-design .dsh-wb-drawer-toggles{display:flex;gap:6px;margin-right:8px}
+.dsh-wb-drawer-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--surface);color:var(--text-2);cursor:pointer}
+.dsh-wb-design .rail,.dsh-wb-design .rpanel{position:fixed;top:0;bottom:0;z-index:70;display:flex;transition:transform var(--dur-2,180ms) var(--ease,ease);box-shadow:0 0 0 1px var(--line),0 20px 60px rgba(0,0,0,.4)}
+.dsh-wb-design .rail{left:0;transform:translateX(-102%)}
+.dsh-wb-design .rpanel{right:0;transform:translateX(102%)}
+.dsh-wb-design.drawer-left-open .rail{transform:translateX(0)}
+.dsh-wb-design.drawer-right-open .rpanel{transform:translateX(0)}
 .dsh-wb-design .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 20px; }
 .dsh-wb-design .plugnac { flex-wrap: wrap; row-gap: 4px; }
 .dsh-wb-design .page-head { flex-wrap: wrap; }
@@ -1217,21 +1238,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .set-sec-hd .t { font-size: var(--fs-13); font-weight: var(--fw-semi); }
 .dsh-wb-design .set-sec-hd .d { font-size: var(--fs-11); color: var(--text-3); margin-left: 8px; }
 .dsh-wb-design .set-sec-bd { padding: 14px 16px; }
-.dsh-wb-design .ptog { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--surface); font-size: var(--fs-12); color: var(--text-2); cursor: pointer; }
-.dsh-wb-design .ptog .box { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid var(--line-3); display: flex; align-items: center; justify-content: center; }
-.dsh-wb-design .ptog.on { border-color: var(--primary-line); background: var(--primary-bg); color: var(--text); }
-.dsh-wb-design .ptog.on .box { background: var(--primary); border-color: var(--primary); }
-.dsh-wb-design .ptog.on .box::after { content: ""; width: 5px; height: 8px; border: solid #0e1424; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-top: -2px; }
-.dsh-wb-design .radio-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.dsh-wb-design .radio-card { flex: 1; min-width: 190px; border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 11px 12px; cursor: pointer; }
-.dsh-wb-design .radio-card.sel { border-color: var(--primary-line); background: var(--primary-bg); box-shadow: 0 0 0 1px var(--primary-line); }
-.dsh-wb-design .radio-card .rt { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); font-weight: var(--fw-med); color: var(--text); }
 .dsh-wb-design .radio-card .rd { font-size: var(--fs-11); color: var(--text-3); margin-top: 5px; line-height: var(--lh-snug); }
-.dsh-wb-design .radio-card .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-3); flex: none; display: flex; align-items: center; justify-content: center; }
-.dsh-wb-design .radio-card.sel .r { border-color: var(--primary); }
-.dsh-wb-design .radio-card.sel .r::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
-.dsh-wb-design .path-box { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface-2); }
-.dsh-wb-design .path-box .p { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text); flex: 1; }
 /* page: skill-library */
 .dsh-wb-design .skill-layout { display: grid; grid-template-columns: 372px minmax(0,1fr); gap: 20px; align-items: start; }
 .dsh-wb-design .skill-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1301,7 +1308,7 @@ window.__ModuleLoader__.load({
 .dsh-wb-design .topbar{position:relative;z-index:20}
 /* DSH 侧栏收起后插件贴住窗口左边：顶栏让开 macOS 红绿灯和宿主的展开/新建按钮，
    背景透明、指针穿透，让宿主那组按钮露出来且点得到。 */
-.dsh-wb-design.is-flush-left .topbar{padding-left:180px;background:transparent;backdrop-filter:none;pointer-events:none}
+.dsh-wb-design.is-flush-left .topbar{padding-left:var(--dsh-safe-left, 180px);background:transparent;backdrop-filter:none;pointer-events:none}
 .dsh-wb-design.is-flush-left .topbar > *{pointer-events:auto}
 .dsh-wb-design .topbar .plugnac{display:flex;align-items:center;gap:7px;min-width:0;overflow:visible}
 .dsh-wb-design .plugnac-title{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-13);font-weight:var(--fw-semi);color:var(--text);white-space:nowrap}
@@ -1617,6 +1624,9 @@ window.__ModuleLoader__.load({
 `
 
     function DesignIcon({ name, size = 16, className = 'ic', ...rest }) {
+      // 图标精灵按需注入：第一次真正渲染图标时才把 <symbol> 塞进 body，
+      // 不再在样式装配阶段无条件注入，减少不需要时的首屏 DOM。
+      ensureDesignIcons()
       return h('svg', { className, width: size, height: size, 'aria-hidden': 'true', focusable: 'false', ...rest },
         h('use', { href: `#i-${name}` }))
     }
@@ -1625,7 +1635,7 @@ window.__ModuleLoader__.load({
     // 代码块。只生成 React 节点、不拼 innerHTML，避免把需求文档当 HTML 执行。
     function markdownInline(text, keyPrefix) {
       const nodes = []
-      const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g
+      const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|~~([^~]+)~~/g
       let last = 0
       let index = 0
       let match
@@ -1633,7 +1643,8 @@ window.__ModuleLoader__.load({
         if (match.index > last) nodes.push(text.slice(last, match.index))
         if (match[1] !== undefined) nodes.push(h('strong', { key: `${keyPrefix}-s${index++}` }, match[1]))
         else if (match[2] !== undefined) nodes.push(h('code', { key: `${keyPrefix}-c${index++}` }, match[2]))
-        else nodes.push(h('a', { key: `${keyPrefix}-a${index++}`, href: match[4], target: '_blank', rel: 'noreferrer noopener' }, match[3]))
+        else if (match[3] !== undefined) nodes.push(h('a', { key: `${keyPrefix}-a${index++}`, href: match[4], target: '_blank', rel: 'noreferrer noopener' }, match[3]))
+        else nodes.push(h('del', { key: `${keyPrefix}-d${index++}` }, match[5]))
         last = pattern.lastIndex
       }
       if (last < text.length) nodes.push(text.slice(last))
@@ -1648,6 +1659,26 @@ window.__ModuleLoader__.load({
       while (index < lines.length) {
         const line = lines[index]
         if (/^\s*$/.test(line)) { index += 1; continue }
+        // 表格：| a | b | 换行 | --- | --- | 换行若干数据行（产品文档常用）。
+        const isTableRow = (value) => /^\s*\|.*\|\s*$/.test(value)
+        const isTableSep = (value) => /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(value)
+        if (isTableRow(line) && index + 1 < lines.length && isTableSep(lines[index + 1])) {
+          const splitRow = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim())
+          const header = splitRow(line)
+          index += 2
+          const rows = []
+          while (index < lines.length && isTableRow(lines[index])) {
+            rows.push(splitRow(lines[index]))
+            index += 1
+          }
+          const headerCells = header.map((cell, ci) => h('th', { key: `th-${ci}` }, ...markdownInline(cell, `th${key}-${ci}`)))
+          const bodyRows = rows.map((cells, ri) => h('tr', { key: `tr-${ri}` },
+            ...header.map((_, ci) => h('td', { key: `td-${ci}` }, ...markdownInline(cells[ci] ?? '', `td${key}-${ri}-${ci}`)))))
+          blocks.push(h('table', { key: `md-${key++}`, className: 'dsh-wb-md-table' },
+            h('thead', null, h('tr', null, ...headerCells)),
+            h('tbody', null, ...bodyRows)))
+          continue
+        }
         if (/^\s*```/.test(line)) {
           const code = []
           index += 1
@@ -1679,7 +1710,20 @@ window.__ModuleLoader__.load({
           const items = []
           const itemPattern = ordered ? /^\s*\d+[.)]\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/
           while (index < lines.length && itemPattern.test(lines[index])) {
-            items.push(h('li', { key: `li-${key++}` }, markdownInline(lines[index].match(itemPattern)[1], `li${key}`)))
+            let itemText = lines[index].match(itemPattern)[1]
+            let task = null
+            if (unordered) {
+              const checkbox = /^\[( |x|X)\]\s+(.*)$/.exec(itemText)
+              if (checkbox) { task = checkbox[1].toLowerCase() === 'x'; itemText = checkbox[2] }
+            }
+            const inner = markdownInline(itemText, `li${key}`)
+            if (task === null) {
+              items.push(h('li', { key: `li-${key++}` }, ...inner))
+            } else {
+              items.push(h('li', { key: `li-${key++}`, className: 'dsh-wb-md-task' },
+                h('span', { key: 'ck', className: `dsh-wb-md-check${task ? ' is-done' : ''}`, 'aria-hidden': 'true' }, task ? '✓' : '○'),
+                h('span', { key: 'tx' }, ...inner)))
+            }
             index += 1
           }
           blocks.push(h(ordered ? 'ol' : 'ul', { key: `md-${key++}` }, ...items))
@@ -1774,24 +1818,38 @@ window.__ModuleLoader__.load({
       }
     }
 
-    // 斜杠命令的结果本来只写进会话日志；这里补一个轻量 toast，让 /req-now 这类直达命令的结果
-    // 在 composer 清空后仍然可见（失败也保留，便于纠正参数）。
+    // 统一的全局提示队列：斜杠命令结果、页面操作反馈都走这一套，避免多套提示风格/位置。
     let commandToastSeq = 0
-    let commandToastState = null
-    const commandToastListeners = new Set()
-
-    function publishCommandToast(next) {
-      commandToastState = next
-      for (const listener of [...commandToastListeners]) listener()
+    let toastQueue = []
+    const toastListeners = new Set()
+    function notifyToasts() { for (const listener of [...toastListeners]) listener() }
+    function pushToast(next) {
+      const item = {
+        seq: ++commandToastSeq,
+        kind: next.kind || 'info',
+        name: next.name || '',
+        text: next.text || '',
+        detail: next.detail || '',
+      }
+      toastQueue = [...toastQueue, item].slice(-6)
+      notifyToasts()
+      if (item.kind !== 'error') {
+        setTimeout(() => {
+          toastQueue = toastQueue.filter(entry => entry.seq !== item.seq)
+          notifyToasts()
+        }, 6000)
+      }
+      return item
     }
-
-    function useCommandToast() {
-      const [snapshot, setSnapshot] = useState(commandToastState)
+    function publishCommandToast(next) { return pushToast(next) }
+    function dismissToast(seq) { toastQueue = toastQueue.filter(entry => entry.seq !== seq); notifyToasts() }
+    function useToasts() {
+      const [snapshot, setSnapshot] = useState(toastQueue)
       useEffect(() => {
-        const listener = () => setSnapshot(commandToastState)
-        commandToastListeners.add(listener)
+        const listener = () => setSnapshot(toastQueue)
+        toastListeners.add(listener)
         listener()
-        return () => { commandToastListeners.delete(listener) }
+        return () => { toastListeners.delete(listener) }
       }, [])
       return snapshot
     }
@@ -1813,6 +1871,7 @@ window.__ModuleLoader__.load({
       frozen: { label: '已冻结', tone: 'warn', glyph: '❄' },
       released: { label: '已发布', tone: 'success', glyph: '▲' },
       done: { label: '已完成', tone: 'success', glyph: '✓' },
+      cancelled: { label: '已取消', tone: 'idle', glyph: '⊘' },
     }
 
     const DESIGN_STATUS = {
@@ -1985,7 +2044,11 @@ window.__ModuleLoader__.load({
 .dsh-wb-toast-text{min-width:0;overflow-wrap:anywhere}
 .dsh-wb-toast-close{flex:none;border:0;background:transparent;color:inherit;font-size:16px;line-height:1;cursor:pointer;padding:0 2px;min-width:24px;min-height:24px;border-radius:4px}
 .dsh-wb-toast-close:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.dsh-wb-command-toast{display:block;white-space:pre-wrap;cursor:default;max-width:min(440px,90vw);right:22px;bottom:80px;position:fixed;z-index:81}
+.dsh-wb-toast-queue{position:fixed;right:22px;bottom:22px;z-index:81;display:flex;flex-direction:column;align-items:flex-end;gap:8px;max-width:min(440px,calc(100vw - 32px));pointer-events:none}
+.dsh-wb-toast-queue>*{pointer-events:auto}
+.dsh-wb-command-toast{display:block;white-space:pre-wrap;cursor:default;max-width:min(440px,90vw);position:relative}
+.dsh-wb-toast-detail{margin-top:6px;font-size:11px;color:var(--dsw-alias-label-tertiary)}
+.dsh-wb-toast-detail summary{cursor:pointer}
 .dsh-wb-command-toast .dsh-wb-toast-close{position:absolute;right:6px;top:6px}
 .dsh-wb-command-toast-head{display:flex;align-items:center;gap:8px;margin-bottom:5px;color:var(--dsw-alias-label-secondary);font-size:11px}
 .dsh-wb-command-toast-head code{font-family:var(--dsw-font-family-mono,ui-monospace,monospace);color:var(--dsw-alias-brand-primary);font-size:11px}
@@ -2282,6 +2345,18 @@ window.__ModuleLoader__.load({
 .dsh-wb-md pre code{padding:0;background:none}
 .dsh-wb-md blockquote{margin:6px 0;padding:2px 0 2px 8px;border-left:2px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));color:var(--dsw-alias-label-secondary)}
 .dsh-wb-md a{color:var(--dsw-alias-brand-primary,#4b7bf5);text-decoration:underline}
+.dsh-wb-md del{opacity:.65}
+.dsh-wb-md .dsh-wb-md-table{margin:6px 0;border-collapse:collapse;width:100%;font-size:11px}
+.dsh-wb-md .dsh-wb-md-table th,.dsh-wb-md .dsh-wb-md-table td{border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.25));padding:4px 7px;text-align:left;vertical-align:top}
+.dsh-wb-md .dsh-wb-md-table th{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.1));font-weight:600}
+.dsh-wb-md li.dsh-wb-md-task{list-style:none;display:flex;align-items:flex-start;gap:6px;margin-left:-14px}
+.dsh-wb-md .dsh-wb-md-check{flex:none;width:13px;display:inline-flex;justify-content:center;color:var(--dsw-alias-label-tertiary,rgba(127,127,127,.8))}
+.dsh-wb-md .dsh-wb-md-check.is-done{color:var(--dsw-alias-state-success-primary,#3aa675)}
+.dsh-wb-offline-bar{display:flex;align-items:center;gap:10px;justify-content:center;padding:7px 14px;background:var(--dsw-alias-state-warn-tertiary,rgba(245,180,60,.14));color:var(--dsw-alias-state-warn-label,#8a5a00);font-size:12px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.dsh-wb-offline-bar button{margin-left:auto}
+.dsh-wb-shot-frame{position:relative}
+.dsh-wb-thumb-skel{position:absolute;inset:0;border-radius:inherit;background:linear-gradient(90deg,var(--dsw-alias-bg-layer-2,rgba(127,127,127,.1)) 25%,var(--dsw-alias-bg-layer-1,rgba(127,127,127,.16)) 37%,var(--dsw-alias-bg-layer-2,rgba(127,127,127,.1)) 63%);background-size:400% 100%;animation:dsh-wb-skel 1.4s ease infinite;z-index:1}
+@keyframes dsh-wb-skel{0%{background-position:100% 0}100%{background-position:-100% 0}}
 .dsh-wb-req-brief-summary .dsh-wb-md,.dsh-wb-req-brief-body .dsh-wb-md{white-space:normal}
 .dsh-wb-design .spec-item b{display:block;margin-bottom:2px}
 .dsh-wb-canvas-bar{display:flex;align-items:center;gap:8px;flex:none;min-height:38px;padding:5px 6px 5px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1)}
@@ -2367,7 +2442,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-detail-head{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px}
 .dsh-wb-detail-head-main{min-width:0;flex:1}
 .dsh-wb-detail-code-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px}
-.dsh-wb-detail-code{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-size:11px;color:var(--dsw-alias-label-tertiary)}
 .dsh-wb-detail-meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--dsw-alias-label-tertiary)}
 .dsh-wb-detail-meta>span{display:inline-flex;align-items:center;gap:5px}
 .dsh-wb-detail-actions{display:flex;align-items:center;gap:7px;flex:none}
@@ -2419,7 +2493,6 @@ window.__ModuleLoader__.load({
 .dsh-wb-activity-main b{font-size:10.5px;font-weight:600;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
 .dsh-wb-activity-main span{font-size:9.5px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dsh-wb-activity-main em{font-style:normal;font-size:9px;color:var(--dsw-alias-label-tertiary)}
-.dsh-wb-platform-list{display:flex;flex-direction:column;gap:6px}
 .dsh-wb-platform-group{display:flex;align-items:baseline;gap:7px;min-width:0}
 .dsh-wb-platform-group b{font-size:10px;font-weight:600;color:var(--dsw-alias-label-secondary);white-space:nowrap}
 .dsh-wb-platform-group span{font-size:9.5px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -2469,70 +2542,43 @@ window.__ModuleLoader__.load({
    并统一页面留白、卡片、表格、按钮、头像、进度条等组件尺寸与配色。
    ========================================================================= */
 .dsh-wb-page,.dsh-wb-navbar,.dsh-wb-auth,.dsh-wb-start,.dsh-wb-overlay,.dsh-wb-dialog,.dsh-wb-toast-region,.dsh-wb-command-toast,.dsh-wb-rqbar{
-  --dsw-alias-bg-base:#151517;
-  --dsw-alias-bg-layer-1:#232326;
-  --dsw-alias-bg-layer-2:#2a2a2e;
-  --dsw-alias-bg-layer-3:#333338;
-  --dsw-alias-border-l1:#2b2b30;
-  --dsw-alias-border-l2:#36363c;
-  --dsw-alias-border-l3:#46474d;
-  --dsw-alias-border-selected:#6f9bf0;
-  --dsw-alias-label-primary:#ededef;
-  --dsw-alias-label-secondary:#adb0b8;
-  --dsw-alias-label-tertiary:#9a9aa2;
-  --dsw-alias-brand-primary:#6f9bf0;
-  --dsw-alias-button-primary-fill:#3563cc;
-  --dsw-alias-button-primary-hover:#3f6fd6;
-  --dsw-alias-interactive-bg-hover:#2a2a2e;
-  --dsw-alias-state-success-primary:#5cc79a;
-  --dsw-alias-state-success-secondary:rgba(92,199,154,.4);
-  --dsw-alias-state-success-tertiary:rgba(92,199,154,.14);
-  --dsw-alias-state-business-primary:#82a8f3;
-  --dsw-alias-state-business-secondary:rgba(111,155,240,.4);
-  --dsw-alias-state-business-tertiary:rgba(111,155,240,.12);
-  --dsw-alias-state-warn-label:#e2b768;
-  --dsw-alias-state-warn-secondary:rgba(226,183,104,.4);
-  --dsw-alias-state-warn-tertiary:rgba(226,183,104,.14);
-  --dsw-alias-state-error-primary:#ef8a8a;
-  --dsw-alias-state-error-secondary:rgba(239,138,138,.4);
-  --dsw-alias-state-error-tertiary:rgba(239,138,138,.14);
   --dsw-radius-sm:6px;--dsw-radius-md:8px;--dsw-radius-lg:10px;
   font-family:"Inter",-apple-system,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei",system-ui,sans-serif;
 }
-.dsh-wb-page{background:#151517;color:#ededef}
+.dsh-wb-page{background:var(--dsw-alias-bg-base, #151517);color:var(--dsw-alias-label-primary, #ededef)}
 .dsh-wb-content{padding:22px 28px 40px;max-width:1240px}
 .dsh-wb-title{font-size:22px;font-weight:600;letter-spacing:-.01em}
-.dsh-wb-title-sub{font-size:12px;color:#adb0b8}
-.dsh-wb-eyebrow{color:#9a9aa2}
-.dsh-wb-stat{background:#232326;border:1px solid #2b2b30;border-radius:8px;padding:12px 14px}
-.dsh-wb-stat-label{font-size:11px;color:#9a9aa2}
+.dsh-wb-title-sub{font-size:12px;color:var(--dsw-alias-label-secondary, #adb0b8)}
+.dsh-wb-eyebrow{color:var(--dsw-alias-label-tertiary, #9a9aa2)}
+.dsh-wb-stat{background:var(--dsw-alias-bg-layer-1, #232326);border:1px solid var(--dsw-alias-border-l1, #2b2b30);border-radius:8px;padding:12px 14px}
+.dsh-wb-stat-label{font-size:11px;color:var(--dsw-alias-label-tertiary, #9a9aa2)}
 .dsh-wb-stat-value{font-size:22px;font-weight:600;letter-spacing:-.01em}
-.dsh-wb-btn{height:32px;font-size:13px;border-radius:6px;border:1px solid #36363c;background:#2a2a2e;color:#ededef}
-.dsh-wb-btn:hover:not(:disabled){background:#333338;border-color:#46474d}
-.dsh-wb-btn--primary{background:#3563cc;border-color:#3563cc;color:#fff;font-weight:600}
-.dsh-wb-btn--primary:hover:not(:disabled){background:#3f6fd6;border-color:#3f6fd6}
-.dsh-wb-btn--ghost{background:transparent;border-color:transparent;color:#adb0b8}
-.dsh-wb-navbar{background:#151517;border-bottom:1px solid #2b2b30;min-height:52px;padding:0 24px;gap:18px}
-.dsh-wb-nav button{height:36px;font-size:13px;color:#9a9aa2}
-.dsh-wb-nav button:hover{background:#232326;color:#ededef}
-.dsh-wb-nav button.is-active{background:transparent;box-shadow:inset 0 -2px 0 #6f9bf0;border-radius:0;color:#ededef;font-weight:600}
+.dsh-wb-btn{height:32px;font-size:13px;border-radius:6px;border:1px solid var(--dsw-alias-border-l2, #36363c);background:var(--dsw-alias-bg-layer-2, #2a2a2e);color:var(--dsw-alias-label-primary, #ededef)}
+.dsh-wb-btn:hover:not(:disabled){background:var(--dsw-alias-bg-layer-3, #333338);border-color:var(--dsw-alias-border-l3, #46474d)}
+.dsh-wb-btn--primary{background:var(--dsw-alias-button-primary-fill, #3563cc);border-color:var(--dsw-alias-button-primary-fill, #3563cc);color:#fff;font-weight:600}
+.dsh-wb-btn--primary:hover:not(:disabled){background:var(--dsw-alias-button-primary-hover, #3f6fd6);border-color:var(--dsw-alias-button-primary-hover, #3f6fd6)}
+.dsh-wb-btn--ghost{background:transparent;border-color:transparent;color:var(--dsw-alias-label-secondary, #adb0b8)}
+.dsh-wb-navbar{background:var(--dsw-alias-bg-base, #151517);border-bottom:1px solid var(--dsw-alias-border-l1, #2b2b30);min-height:52px;padding:0 24px;gap:18px}
+.dsh-wb-nav button{height:36px;font-size:13px;color:var(--dsw-alias-label-tertiary, #9a9aa2)}
+.dsh-wb-nav button:hover{background:var(--dsw-alias-bg-layer-1, #232326);color:var(--dsw-alias-label-primary, #ededef)}
+.dsh-wb-nav button.is-active{background:transparent;box-shadow:inset 0 -2px 0 var(--dsw-alias-brand-primary, #6f9bf0);border-radius:0;color:var(--dsw-alias-label-primary, #ededef);font-weight:600}
 .dsh-wb-nav-logo{font-size:14px}
 .dsh-wb-iter-kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.dsh-wb-iter-table{border:1px solid #2b2b30;border-radius:8px;background:#232326}
+.dsh-wb-iter-table{border:1px solid var(--dsw-alias-border-l1, #2b2b30);border-radius:8px;background:var(--dsw-alias-bg-layer-1, #232326)}
 .dsh-wb-iter-tr{gap:10px;padding:11px 12px}
-.dsh-wb-iter-tr.is-head{background:#191919;font-size:11px;color:#9a9aa2;font-weight:500;letter-spacing:.03em}
-.dsh-wb-iter-tr.is-row:hover{background:#2a2a2e}
-.dsh-wb-iter-code,.dsh-wb-iter-dates,.dsh-wb-code{color:#9a9aa2}
-.dsh-wb-iter-name b{font-size:13px;font-weight:500;color:#ededef}
-.dsh-wb-iter-name em{font-size:11px;color:#9a9aa2}
+.dsh-wb-iter-tr.is-head{background:var(--dsw-alias-bg-layer-1, #191919);font-size:11px;color:var(--dsw-alias-label-tertiary, #9a9aa2);font-weight:500;letter-spacing:.03em}
+.dsh-wb-iter-tr.is-row:hover{background:var(--dsw-alias-bg-layer-2, #2a2a2e)}
+.dsh-wb-iter-code,.dsh-wb-iter-dates,.dsh-wb-code{color:var(--dsw-alias-label-tertiary, #9a9aa2)}
+.dsh-wb-iter-name b{font-size:13px;font-weight:500;color:var(--dsw-alias-label-primary, #ededef)}
+.dsh-wb-iter-name em{font-size:11px;color:var(--dsw-alias-label-tertiary, #9a9aa2)}
 .dsh-wb-avatar{width:20px;height:20px;background:#3d5c8f;color:#fff;border:1px solid rgba(255,255,255,.08);font-size:11px}
-.dsh-wb-progress{height:5px;background:#333338}
-.dsh-wb-progress span{background:#6f9bf0}
-.dsh-wb-seg{padding:2px;background:#2a2a2e;border:1px solid #2b2b30;border-radius:6px}
-.dsh-wb-seg button{height:26px;font-size:12px;border-radius:4px;color:#adb0b8}
-.dsh-wb-seg button.is-on{background:#232326;color:#ededef;box-shadow:0 1px 2px rgba(0,0,0,.35);font-weight:500}
+.dsh-wb-progress{height:5px;background:var(--dsw-alias-bg-layer-3, #333338)}
+.dsh-wb-progress span{background:var(--dsw-alias-brand-primary, #6f9bf0)}
+.dsh-wb-seg{padding:2px;background:var(--dsw-alias-bg-layer-2, #2a2a2e);border:1px solid var(--dsw-alias-border-l1, #2b2b30);border-radius:6px}
+.dsh-wb-seg button{height:26px;font-size:12px;border-radius:4px;color:var(--dsw-alias-label-secondary, #adb0b8)}
+.dsh-wb-seg button.is-on{background:var(--dsw-alias-bg-layer-1, #232326);color:var(--dsw-alias-label-primary, #ededef);box-shadow:0 1px 2px rgba(0,0,0,.35);font-weight:500}
 .dsh-wb-chip{height:20px;border-radius:4px;font-size:11px;font-weight:500}
-.dsh-wb-input,.dsh-wb-select{background:#232326;border:1px solid #36363c;height:32px;border-radius:6px;color:#ededef}
+.dsh-wb-input,.dsh-wb-select{background:var(--dsw-alias-bg-layer-1, #232326);border:1px solid var(--dsw-alias-border-l2, #36363c);height:32px;border-radius:6px;color:var(--dsw-alias-label-primary, #ededef)}
 `
 
     function ensureStyles() {
@@ -2547,7 +2593,6 @@ window.__ModuleLoader__.load({
       }
       const text = CSS + '\n' + DESIGN_CSS + '\n' + DESIGN_LOGIN_CSS
       if (style.textContent !== text) style.textContent = text
-      ensureDesignIcons()
     }
 
     // ---------------------------------------------------------------------
@@ -2623,8 +2668,13 @@ window.__ModuleLoader__.load({
       })
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
+      const refreshInFlight = useRef(false)
 
       const refresh = useCallback(async () => {
+        // 挂载 / BroadcastChannel / unauthorized 事件可能同时触发 refresh：加互斥，
+        // 避免同时打多份 auth/session + auth/config。
+        if (refreshInFlight.current) return
+        refreshInFlight.current = true
         try {
           const session = await api('auth/session')
           // 配置接口失败不应把已登录用户踢回登录页；保留会话结果，配置用空对象兜底。
@@ -2651,6 +2701,8 @@ window.__ModuleLoader__.load({
         } catch (reason) {
           setView(current => ({ ...current, loading: false, authenticated: false }))
           setError(reason instanceof Error ? reason.message : String(reason))
+        } finally {
+          refreshInFlight.current = false
         }
       }, [])
 
@@ -2721,6 +2773,7 @@ window.__ModuleLoader__.load({
         timer: null,
         failures: 0,
         onVisibility: null,
+        eventSource: null,
       }
     }
 
@@ -2778,9 +2831,26 @@ window.__ModuleLoader__.load({
       }
     }
 
+    // SSE：有新事件时立刻刷新一次；不可用（如桌面端无 Cookie）就靠轮询兜底。
+    function startWorkbenchStream() {
+      if (workbenchStore.eventSource || typeof EventSource !== 'function') return
+      try {
+        const es = new EventSource(`${API}events/stream`, { withCredentials: true })
+        es.addEventListener('workbench', () => { void reloadWorkbench() })
+        es.onopen = () => { workbenchStore.failures = 0 }
+        workbenchStore.eventSource = es
+      } catch (_) { /* 不支持就只轮询 */ }
+    }
+    function stopWorkbenchStream() {
+      if (!workbenchStore.eventSource) return
+      try { workbenchStore.eventSource.close() } catch (_) { /* 忽略 */ }
+      workbenchStore.eventSource = null
+    }
+
     // 切换账号（或退出登录）时清掉内存里的工作台数据和需求缓存，避免短暂显示上一个账号的内容。
     function resetDataCaches() {
       workbenchStore.requestId += 1
+      stopWorkbenchStream()
       emitStore(workbenchStore, { state: null, error: null, loading: true })
       // 预览票据绑在上一个账号上：票据会让宿主按上一个用户的 baseDir 解析
       // 本机文件。不清理，B 在 A 登出后的 120 秒内登录会看到 A 的需求目录。
@@ -2808,11 +2878,15 @@ window.__ModuleLoader__.load({
         workbenchStore.listeners.add(listener)
         workbenchStore.refs += 1
         startWorkbenchPolling()
+        startWorkbenchStream()
         listener()
         return () => {
           workbenchStore.listeners.delete(listener)
           workbenchStore.refs -= 1
-          if (workbenchStore.refs <= 0) stopWorkbenchPolling()
+          if (workbenchStore.refs <= 0) {
+            stopWorkbenchPolling()
+            stopWorkbenchStream()
+          }
         }
       }, [])
       return { ...snapshot, reload: reloadWorkbench }
@@ -2824,10 +2898,9 @@ window.__ModuleLoader__.load({
       const key = typeof sessionId === 'string' ? sessionId : ''
       let store = requirementStores.get(key)
       if (store === undefined) {
-        if (requirementStores.size >= 64) {
-          for (const [oldKey, old] of requirementStores) {
-            if (old.refs <= 0 && old.timer === null) requirementStores.delete(oldKey)
-          }
+        // 先清掉所有不再被引用的旧 store，避免频繁切换会话时堆积。
+        for (const [oldKey, old] of requirementStores) {
+          if (old.refs <= 0 && old.timer === null) requirementStores.delete(oldKey)
         }
         store = createDataStore({ sid: key, requirement: null, error: null, loading: key !== '' })
         store.key = key
@@ -2903,8 +2976,14 @@ window.__ModuleLoader__.load({
             store.pollers -= 1
             if (store.pollers <= 0) stopRequirementPolling(store)
           }
-          // 页面离开后没人再读这个会话：停掉轮询并把 store 从表里摘掉。
-          if (store.refs <= 0 && store.timer === null) requirementStores.delete(store.key)
+          // 页面离开后没人再读这个会话：延迟 5 秒回收，给频繁切换留一点余量，
+          // 期间如果又被重新进入则保留，避免反复重建轮询器。
+          if (store.refs <= 0 && store.timer === null) {
+            const dying = store
+            setTimeout(() => {
+              if (dying.refs <= 0 && dying.timer === null) requirementStores.delete(dying.key)
+            }, 5000)
+          }
         }
       }, [sessionId, poll, store])
       const current = snapshot.sid === sessionId
@@ -2963,16 +3042,12 @@ window.__ModuleLoader__.load({
       return 'idle'
     }
 
-    function statusChipTone(kind, value, meta) {
-      if (kind === 'design' && value === 'not_needed') return 'na'
-      if (kind === 'req' && ['draft', 'creating', 'backlog'].includes(value)) return 'plain'
-      return designTone(meta.tone)
-    }
-
     function StatusChip({ kind, value }) {
       const map = kind === 'design' ? DESIGN_STATUS : REQ_STATUS
       const meta = map[value] || { label: value || '未知', tone: 'idle', glyph: '·' }
-      return h('span', { className: `chip chip--${statusChipTone(kind, value, meta)} dsh-wb-chip dsh-wb-chip--${meta.tone}` },
+      // 只保留新版语义类名（dsh-wb-chip--*），去掉会覆盖它的旧 chip--* 双轨类名，
+      // 让状态色跟随宿主主题（浅色下也更协调）。
+      return h('span', { className: `dsh-wb-chip dsh-wb-chip--${meta.tone}` },
         h('span', { className: 'gl g' }, meta.glyph),
         meta.label,
       )
@@ -3235,6 +3310,7 @@ window.__ModuleLoader__.load({
 
     function CreateRequirementDialog({ ctx, state, onClose, onCreated, onToast }) {
       const [title, setTitle] = useState('')
+      const [background, setBackground] = useState('')
       const [busy, setBusy] = useState(false)
       const [step, setStep] = useState('')
       const [error, setError] = useState('')
@@ -3253,6 +3329,12 @@ window.__ModuleLoader__.load({
           setStep('创建需求记录')
           const created = await api('requirements', { method: 'POST', body: JSON.stringify({ title: value }) })
           requirement = created.requirement
+          // 选填的背景先写进需求正文，省得建完再进会话补一遍（失败不阻断创建）。
+          if (background.trim() !== '') {
+            try {
+              await api(`requirements/${encodeURIComponent(requirement.id)}/document`, { method: 'POST', body: JSON.stringify({ body: background.trim() }) })
+            } catch { /* 背景写入失败不影响需求创建 */ }
+          }
           setStep('准备迭代目录')
           const done = await finishRequirementCreation(ctx, requirement, state)
           // 建完先落在需求页，会话就在右侧坞里；不切到 DSH 的会话工作区。
@@ -3265,7 +3347,7 @@ window.__ModuleLoader__.load({
           setStep('')
           setBusy(false)
         }
-      }, [title, busy, ctx, onCreated, onToast, state])
+      }, [title, background, busy, ctx, onCreated, onToast, state])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
@@ -3281,6 +3363,19 @@ window.__ModuleLoader__.load({
             onChange: (event) => setTitle(event.target.value),
             onKeyDown: (event) => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) void submit() },
           }),
+          h('details', { className: 'dsh-wb-note', style: { marginTop: '8px' } },
+            h('summary', { style: { cursor: 'pointer' } }, '补充背景（可选）'),
+            h('textarea', {
+              className: 'dsh-wb-input',
+              rows: 3,
+              value: background,
+              maxLength: 2000,
+              disabled: busy,
+              placeholder: '一两句话说明背景，创建后会写进需求正文',
+              style: { marginTop: '6px', resize: 'vertical' },
+              onChange: (event) => setBackground(event.target.value),
+            }),
+          ),
           busy ? h('div', { className: 'dsh-wb-progress' }, h('span', { className: 'dsh-wb-spinner' }), `${step}…`) : null,
           error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
           h('div', { className: 'dsh-wb-note', style: { marginTop: '10px' } }, `顶级文件夹：${state.baseDir}`),
@@ -3383,11 +3478,20 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('')
       const codeRef = useRef(null)
       const modal = useModalBehavior(onClose, !busy)
+      const fmtDate = (value) => value.toISOString().slice(0, 10)
+      const applyWeeks = (weeks) => {
+        const start = startDate !== '' ? startDate : fmtDate(new Date())
+        const base = new Date(`${start}T00:00:00`)
+        if (Number.isNaN(base.getTime())) return
+        setStartDate(start)
+        setEndDate(fmtDate(new Date(base.getTime() + weeks * 7 * 86400000)))
+      }
+      const dateInvalid = startDate !== '' && endDate !== '' && endDate < startDate
 
       useEffect(() => { codeRef.current?.focus() }, [])
 
       const submit = useCallback(async () => {
-        if (busy || code.trim() === '') return
+        if (busy || code.trim() === '' || dateInvalid) return
         setBusy(true)
         setError('')
         let created = false
@@ -3414,7 +3518,7 @@ window.__ModuleLoader__.load({
           setError(message)
           setBusy(false)
         }
-      }, [busy, code, name, startDate, endDate, onReload, onToast, onClose, state.baseDir, state.project])
+      }, [busy, code, name, startDate, endDate, dateInvalid, onReload, onToast, onClose, state.baseDir, state.project])
 
       return h('div', { className: 'dsh-wb-overlay', ...modal.overlayProps },
         h('div', { className: 'dsh-wb-dialog', ...modal.dialogProps },
@@ -3442,12 +3546,17 @@ window.__ModuleLoader__.load({
               h('input', { className: 'dsh-wb-input', type: 'date', value: startDate, disabled: busy, onChange: (event) => setStartDate(event.target.value) }),
               h('input', { className: 'dsh-wb-input', type: 'date', value: endDate, disabled: busy, onChange: (event) => setEndDate(event.target.value) }),
             ),
+            h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+              h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: () => applyWeeks(2) }, '两周迭代'),
+              h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: () => applyWeeks(4) }, '四周迭代'),
+            ),
+            dateInvalid ? h('div', { className: 'dsh-wb-dialog-err' }, '结束日期不能早于开始日期') : null,
           ),
           error !== '' ? h('div', { className: 'dsh-wb-dialog-err' }, error) : null,
           h('div', { className: 'dsh-wb-note', style: { marginTop: '10px' } }, `顶级文件夹：${state.baseDir}`),
           h('div', { className: 'dsh-wb-dialog-actions' },
             h('button', { className: 'dsh-wb-btn', type: 'button', disabled: busy, onClick: onClose }, '取消'),
-            h('button', { className: 'dsh-wb-btn dsh-wb-btn--primary', type: 'button', disabled: busy || code.trim() === '', onClick: () => { void submit() } }, busy ? '创建中…' : '创建迭代'),
+            h('button', { className: 'dsh-wb-btn dsh-wb-btn--primary', type: 'button', disabled: busy || code.trim() === '' || dateInvalid, onClick: () => { void submit() } }, busy ? '创建中…' : '创建迭代'),
           ),
         ),
       )
@@ -3531,6 +3640,9 @@ window.__ModuleLoader__.load({
               h('div', { className: 'dsh-wb-reviewer-hint' }, '新需求会默认带这些会签人；全部通过才算评审通过。'),
             ),
           ),
+          confirmArchive
+            ? h('div', { className: 'dsh-wb-note', style: { color: 'var(--dsw-alias-state-warn-label,#8a5a00)', marginTop: '8px' } }, '确认归档后：该迭代从「切换列表」隐藏；进行中的需求与会话保留，但不再显示在当前列表；已提交的评审/排期记录不受影响。')
+            : null,
           h('div', { className: 'dsh-wb-dialog-actions' },
             iteration.archived === true
               ? h('button', { className: 'dsh-wb-btn dsh-wb-btn--ghost', type: 'button', disabled: busy !== '', onClick: () => { void archive(true) } }, '恢复迭代')
@@ -3900,14 +4012,25 @@ window.__ModuleLoader__.load({
       const [role, setRole] = useState(user.activeRole || user.roles[0] || '')
       const [selected, setSelected] = useState(() => defaultProfilePlatformIds(user, groups))
       const [folder, setFolder] = useState(user.onboarding?.topLevelFolder || state.baseDir || '~/DSH-Workbench')
+      const [folderHint, setFolderHint] = useState(null)
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
       const [saved, setSaved] = useState(false)
       const isAdmin = (user.roles ?? []).includes('admin')
       const canConfig = (user.roles ?? []).includes('lead') || isAdmin
       const toggle = id => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+      useEffect(() => {
+        const value = folder.trim()
+        if (value === '') { setFolderHint(null); return undefined }
+        const timer = setTimeout(() => {
+          api('onboarding/precheck', { method: 'POST', body: JSON.stringify({ folder: value }) })
+            .then(hint => setFolderHint(hint))
+            .catch(() => setFolderHint(null))
+        }, 400)
+        return () => clearTimeout(timer)
+      }, [folder])
       const save = async () => {
-        if (busy || folder.trim() === '' || (user.roles ?? []).length === 0) return
+        if (busy || folder.trim() === '' || (user.roles ?? []).length === 0 || (folderHint && folderHint.valid === false)) return
         setBusy(true)
         setError('')
         setSaved(false)
@@ -3932,7 +4055,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'page-head' },
           h('div', { className: 'page-actions' },
             h('button', { className: 'btn btn-sm', type: 'button', disabled: auth.busy, onClick: () => { void auth.logout() } }, '退出登录'),
-            h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy || folder.trim() === '', onClick: () => { void save() } }, busy ? '保存中…' : '保存更改'),
+            h('button', { className: 'btn btn-sm btn-primary', type: 'button', disabled: busy || folder.trim() === '' || (folderHint && folderHint.valid === false), onClick: () => { void save() } }, busy ? '保存中…' : '保存更改'),
           ),
         ),
         error !== '' ? h('div', { className: 'banner banner--mock', style: { marginBottom: '14px' } }, h(DesignIcon, { name: 'alert' }), h('span', null, error)) : null,
@@ -4015,6 +4138,11 @@ window.__ModuleLoader__.load({
                 h('div', { className: 'field', style: { marginTop: '11px', marginBottom: 0 } },
                   h('div', { className: 'label' }, '路径', h('span', { className: 'hint' }, '修改后保存')),
                   h('input', { className: 'input mono', value: folder, disabled: busy, onChange: event => setFolder(event.target.value), 'aria-label': '本地顶级文件夹' }),
+                  folderHint && folderHint.valid === false
+                    ? h('div', { className: 'field-help', style: { color: 'var(--dsw-alias-state-error-primary,#e05a5a)' } }, folderHint.reason || '路径不可用')
+                    : (folderHint && folderHint.valid
+                        ? h('div', { className: 'field-help' }, folderHint.hasHistory ? '该目录已有历史项目数据，可继续使用' : '路径可用')
+                        : null),
                   h('div', { className: 'field-help' }, '会话全文、需求草稿、原型/设计草稿都放这里；服务端只存已提交/已交付结果。修改文件夹不会移动已有目录。'),
                 ),
               ),
@@ -5285,14 +5413,17 @@ window.__ModuleLoader__.load({
 
     function IterationListView({ state, query, onQuery, filter, onFilter, onOpen, onCreate, onOpenMy, onOpenSkills, canCreate, hasProject = true }) {
       const projectId = state.project?.id ?? state.currentProjectId ?? null
-      const entries = [...(state.iterations ?? [])]
+      const uid = state.currentUser.id
+      const normalized = query.trim().toLowerCase()
+      // 重算成本集中在两次过滤 + 逐迭代统计：用 useMemo 隔离，避免弹窗/toast 等
+      // 无关状态变化时把整张列表重新算一遍。
+      const entries = useMemo(() => [...(state.iterations ?? [])]
         .filter(iteration => iteration.archived !== true)
         // 导航是 项目 → 迭代 → 需求：迭代列表只展示当前项目下的迭代。
         .filter(iteration => projectId === null || iteration.projectId === projectId)
-        .map(iteration => ({ iteration, requirements: iterationRequirements(state, iteration.id) }))
-      const uid = state.currentUser.id
-      const normalized = query.trim().toLowerCase()
-      const visible = entries.filter(({ iteration, requirements }) => {
+        .map(iteration => ({ iteration, requirements: iterationRequirements(state, iteration.id) })),
+        [state, projectId])
+      const visible = useMemo(() => entries.filter(({ iteration, requirements }) => {
         if (normalized !== '' && !`${iteration.code} ${iteration.name}`.toLowerCase().includes(normalized)) return false
         if (filter === 'mine') {
           return iteration.ownerId === uid || requirements.some(requirement =>
@@ -5305,7 +5436,7 @@ window.__ModuleLoader__.load({
         if (filter === 'active') return iteration.status === 'in_progress'
         if (filter === 'done') return iteration.status === 'done'
         return true
-      })
+      }), [entries, normalized, filter, uid])
       const ordered = visible
 
       return h('div', { className: 'page' },
@@ -5789,6 +5920,7 @@ window.__ModuleLoader__.load({
     function DesignThumbFrame({ src, title }) {
       const box = useRef(null)
       const [scale, setScale] = useState(0.075)
+      const [loaded, setLoaded] = useState(false)
       useEffect(() => {
         const node = box.current
         if (node === null) return undefined
@@ -5809,10 +5941,12 @@ window.__ModuleLoader__.load({
         return h('div', { className: 'wf' }, h('i'), h('i'), h('i'))
       }
       return h('div', { className: 'dsh-wb-shot-frame', ref: box },
+        loaded ? null : h('div', { className: 'dsh-wb-thumb-skel', 'aria-hidden': 'true' }),
         h('iframe', {
           src,
           title,
           loading: 'lazy',
+          onLoad: () => setLoaded(true),
           sandbox: 'allow-scripts allow-forms allow-modals',
           referrerPolicy: 'no-referrer',
           style: { width: '1440px', height: '1000px', transform: `scale(${scale})` },
@@ -6698,18 +6832,21 @@ window.__ModuleLoader__.load({
       const uid = state.currentUser.id
       const projectId = state.project?.id ?? state.currentProjectId ?? null
       // 我的工作台跟着当前项目走，切项目后只看这个项目里的待办。
-      const projectIterations = new Set((state.iterations ?? [])
-        .filter(iteration => projectId === null || iteration.projectId === projectId)
-        .map(iteration => iteration.id))
-      const mine = (state.requirements ?? []).filter(requirement =>
-        projectIterations.has(requirement.iterationId)
-      ).filter(requirement =>
-        requirement.ownerId === uid ||
-        requirement.designerId === uid ||
-        requirement.testerId === uid ||
-        (requirement.reviewerIds ?? []).includes(uid) ||
-        (requirement.devTasks ?? []).some(task => task.assigneeId === uid) ||
-        (requirement.sessions ?? []).some(session => session.createdBy === uid))
+      // 过滤全部需求是最贵的一步，用 useMemo 隔离，避免无关重渲染反复算。
+      const mine = useMemo(() => {
+        const projectIterations = new Set((state.iterations ?? [])
+          .filter(iteration => projectId === null || iteration.projectId === projectId)
+          .map(iteration => iteration.id))
+        return (state.requirements ?? []).filter(requirement =>
+          projectIterations.has(requirement.iterationId)
+        ).filter(requirement =>
+          requirement.ownerId === uid ||
+          requirement.designerId === uid ||
+          requirement.testerId === uid ||
+          (requirement.reviewerIds ?? []).includes(uid) ||
+          (requirement.devTasks ?? []).some(task => task.assigneeId === uid) ||
+          (requirement.sessions ?? []).some(session => session.createdBy === uid))
+      }, [state, projectId, uid])
       const todoOf = (requirement) => {
         if (requirement.designerId === uid && requirement.designStatus === 'changes_requested') return { tone: 'block', glyph: '!', label: '设计被退回' }
         if (requirement.designerId === uid && !['delivered', 'not_needed'].includes(requirement.designStatus)) return { tone: 'warn', glyph: '◷', label: '设计待交付' }
@@ -6834,9 +6971,9 @@ window.__ModuleLoader__.load({
         if (/(updated|changed|moved|delivered|reviewed|passed|started|finished)$/.test(kind)) return 'change'
         return 'system'
       }
-      const filtered = filter === 'all' ? items : filter === 'unread'
+      const filtered = useMemo(() => (filter === 'all' ? items : filter === 'unread'
         ? items.filter(item => item.read !== true)
-        : items.filter(item => category(item) === filter)
+        : items.filter(item => category(item) === filter)), [items, filter])
       const markAll = async () => {
         if (busy) return
         setBusy(true)
@@ -6942,7 +7079,6 @@ window.__ModuleLoader__.load({
       const [autoSessionTick, setAutoSessionTick] = useState(0)
       const autoSessionKeyRef = useRef('')
       const mountedRef = useRef(true)
-      const [toast, setToast] = useState(null)
       const [retrying, setRetrying] = useState('')
       const [dockWidth, setDockWidth] = useState(readDockWidth)
       const state = workbench.state
@@ -6958,16 +7094,24 @@ window.__ModuleLoader__.load({
       const dockWidthRef = useRef(dockWidth)
       const dockDownAt = useRef(0)
       const projectMenuRef = useRef(null)
-
-      useEffect(() => {
-        if (toast === null || toast.isError) return undefined
-        const timer = setTimeout(() => setToast(null), 3600)
-        return () => clearTimeout(timer)
-      }, [toast])
+      const iterationSearchRef = useRef(null)
 
       useEffect(() => {
         mountedRef.current = true
         return () => { mountedRef.current = false }
+      }, [])
+
+      // Cmd/Ctrl+K 聚焦迭代搜索：列表页最常用的「找东西」快捷键。
+      useEffect(() => {
+        const onKey = (event) => {
+          if ((event.metaKey || event.ctrlKey) && (event.key === 'k' || event.key === 'K')) {
+            event.preventDefault()
+            setView('iterations')
+            requestAnimationFrame(() => iterationSearchRef.current?.focus())
+          }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
       }, [])
 
       // 项目下拉：点外面或按 Esc 收起，不用额外铺一层遮罩挡住页面。
@@ -7070,7 +7214,9 @@ window.__ModuleLoader__.load({
         try { window.localStorage.setItem(DOCK_WIDTH_KEY, String(DOCK_WIDTH_DEFAULT)) } catch (_) { /* 本地存储不可用 */ }
       }, [])
 
-      const showToast = useCallback((message, isError) => setToast({ message, isError }), [])
+      const showToast = useCallback((message, isError) => {
+        publishCommandToast({ kind: isError ? 'error' : 'info', text: message })
+      }, [])
 
       const openSession = useCallback((sessionId) => {
         if (typeof sessionId !== 'string' || sessionId === '') return
@@ -7537,7 +7683,28 @@ window.__ModuleLoader__.load({
 
       return h('div', { className: `dsh-wb-design${flushLeft ? ' is-flush-left' : ''}`, ref: setShellNode },
         h('div', { className: 'shell' },
+          workbench.error
+            ? h('div', { className: 'dsh-wb-offline-bar', role: 'status' },
+                h('span', null, `与服务器连接中断，正在自动重连…（${workbench.error}）`),
+                h('button', { type: 'button', className: 'dsh-wb-btn', onClick: () => { void workbench.reload() } }, '立即重连'))
+            : null,
           h('header', { className: 'topbar' },
+            h('div', { className: 'dsh-wb-drawer-toggles' },
+              h('button', {
+                type: 'button',
+                className: 'dsh-wb-drawer-btn',
+                title: '迭代与需求',
+                'aria-label': '展开迭代与需求',
+                onClick: (event) => event.currentTarget.closest('.dsh-wb-design')?.classList.toggle('drawer-left-open'),
+              }, h(DesignIcon, { name: 'iter' })),
+              h('button', {
+                type: 'button',
+                className: 'dsh-wb-drawer-btn',
+                title: '详情与对话',
+                'aria-label': '展开详情与对话',
+                onClick: (event) => event.currentTarget.closest('.dsh-wb-design')?.classList.toggle('drawer-right-open'),
+              }, h(DesignIcon, { name: 'inbox' })),
+            ),
             h('div', { className: 'plugnac' },
               h('div', { className: 'plugnac-project', ref: projectMenuRef },
                 h('button', {
@@ -7599,8 +7766,9 @@ window.__ModuleLoader__.load({
               ? h('div', { className: 'search', style: { width: '220px' } },
                   h(DesignIcon, { name: 'search' }),
                   h('input', {
+                    ref: iterationSearchRef,
                     value: iterationQuery,
-                    placeholder: '搜索迭代',
+                    placeholder: '搜索迭代 (⌘K)',
                     'aria-label': '搜索迭代',
                     onChange: event => setIterationQuery(event.target.value),
                   }),
@@ -7791,19 +7959,6 @@ window.__ModuleLoader__.load({
           onReload: workbench.reload,
           onToast: showToast,
         }) : null,
-        h('div', { className: 'toast-region', 'aria-live': 'polite', 'aria-atomic': 'true' },
-          toast !== null
-            ? h('div', { className: `wb-toast${toast.isError ? ' error' : ''}`, role: toast.isError ? 'alert' : 'status' },
-                h('span', null, toast.message),
-                h('button', {
-                  className: '',
-                  type: 'button',
-                  'aria-label': '关闭提示',
-                  onClick: () => setToast(null),
-                }, '×'),
-              )
-            : null,
-        ),
       )
     }
 
@@ -8397,27 +8552,26 @@ window.__ModuleLoader__.load({
     }
 
     function CommandToast() {
-      const toast = useCommandToast()
-      const [visible, setVisible] = useState(true)
-      const seq = toast?.seq ?? null
-      useEffect(() => {
-        if (seq === null) return undefined
-        setVisible(true)
-        if (toast?.kind === 'error') return undefined
-        const timer = setTimeout(() => setVisible(false), 6000)
-        return () => clearTimeout(timer)
-      }, [seq, toast?.kind])
-      if (toast === null || !visible) return null
-      return h('div', {
-        className: `dsh-wb-toast dsh-wb-command-toast${toast.kind === 'error' ? ' is-error' : ''}`,
-        role: toast.kind === 'error' ? 'alert' : 'status',
-      },
-        h('button', { className: 'dsh-wb-toast-close', type: 'button', 'aria-label': '关闭提示', onClick: () => setVisible(false) }, '×'),
-        h('div', { className: 'dsh-wb-command-toast-head' },
-          h('code', null, `/${toast.name}`),
-          h('span', null, toast.kind === 'error' ? '执行失败' : '已完成'),
-        ),
-        h('div', { className: 'dsh-wb-command-toast-body' }, toast.text || '（无输出）'),
+      const toasts = useToasts()
+      if (!Array.isArray(toasts) || toasts.length === 0) return null
+      return h('div', { className: 'dsh-wb-toast-queue', 'aria-live': 'polite', 'aria-atomic': 'false' },
+        toasts.map((toast) => h('div', {
+          key: toast.seq,
+          className: `dsh-wb-toast dsh-wb-command-toast${toast.kind === 'error' ? ' is-error' : ''}`,
+          role: toast.kind === 'error' ? 'alert' : 'status',
+        },
+          h('button', { className: 'dsh-wb-toast-close', type: 'button', 'aria-label': '关闭提示', onClick: () => dismissToast(toast.seq) }, '×'),
+          h('div', { className: 'dsh-wb-command-toast-head' },
+            toast.name ? h('code', null, `/${toast.name}`) : null,
+            h('span', null, toast.kind === 'error' ? '出错了' : '已完成'),
+          ),
+          h('div', { className: 'dsh-wb-command-toast-body' }, toast.text || '（无输出）'),
+          toast.detail
+            ? h('details', { className: 'dsh-wb-toast-detail' },
+                h('summary', null, '详情'),
+                h('div', null, toast.detail))
+            : null,
+        )),
       )
     }
 

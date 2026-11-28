@@ -139,14 +139,76 @@ export function refreshLocal(local) {
   } catch { /* 文件不存在或暂时不可读：保留当前内存状态 */ }
 }
 
+// 用 Atomics.wait 做同步休眠，给同步文件锁的重试提供退避（不阻塞事件循环太多）。
+const sleepCell = new Int32Array(new SharedArrayBuffer(4))
+function sleepSync(ms) {
+  try { Atomics.wait(sleepCell, 0, 0, ms) } catch { /* 环境不支持时直接退化为忙等 */ }
+}
+
+// 跨进程写锁：同一台机器可能跑多个 DSH 进程，local.json 不是单写者。用 mkdir 的
+// 原子性做互斥目录；进程崩溃留下的过期锁（>10s）自动回收，避免永久卡死。
+function acquireLocalLock(lockPath, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    try {
+      fs.mkdirSync(lockPath)
+      return true
+    } catch (reason) {
+      if (!reason || reason.code !== 'EEXIST') return false
+      try {
+        const stat = fs.statSync(lockPath)
+        if (Date.now() - stat.mtimeMs > 10_000) {
+          try { fs.rmdirSync(lockPath) } catch { /* 别人刚好释放 */ }
+          continue
+        }
+      } catch { /* 锁刚被释放 */ }
+      if (Date.now() > deadline) return false
+      sleepSync(5)
+    }
+  }
+}
+
+// 假定调用方已持锁：原子写入（临时文件 + rename）并刷新 mtime 戳。
+function writeLocalLocked(file, data) {
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 })
+    fs.renameSync(tmp, file)
+    try { fs.chmodSync(file, 0o600) } catch { /* best effort */ }
+    try { localStamp = fs.statSync(file).mtimeMs } catch { localStamp = 0 }
+  } finally {
+    try { fs.unlinkSync(tmp) } catch { /* 已被 rename 或不存在 */ }
+  }
+}
+
 export function saveLocal(data) {
   const file = localFile()
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
-  const tmp = `${file}.${process.pid}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 })
-  fs.renameSync(tmp, file)
-  try { fs.chmodSync(file, 0o600) } catch { /* best effort */ }
-  try { localStamp = fs.statSync(file).mtimeMs } catch { localStamp = 0 }
+  const lockPath = `${file}.lock`
+  // 等待最多 200ms 拿锁；拿不到也照写（宁可并发写，也不能把改动丢掉）。
+  const locked = acquireLocalLock(lockPath, 200)
+  try {
+    writeLocalLocked(file, data)
+  } finally {
+    if (locked) { try { fs.rmdirSync(lockPath) } catch { /* 已被回收 */ } }
+  }
+}
+
+// 需要「读-改-写」原子性的调用方用这个：在锁内重新读取最新 local.json，再改、再写，
+// 避免两个进程各拿旧快照互相覆盖。
+export function withLocalLock(local, mutator) {
+  const file = localFile()
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
+  const lockPath = `${file}.lock`
+  const locked = acquireLocalLock(lockPath, 800)
+  try {
+    refreshLocal(local)
+    const result = mutator(local)
+    writeLocalLocked(file, local)
+    return result
+  } finally {
+    if (locked) { try { fs.rmdirSync(lockPath) } catch { /* 已被回收 */ } }
+  }
 }
 
 export function localUser(data, userId) {

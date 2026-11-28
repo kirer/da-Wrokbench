@@ -19,6 +19,8 @@
     "vendor/canvas/gallery/*.js",
     "vendor/canvas/skills/**",
     "vendor/canvas/LICENSE",
+    "vendor/canvas/SHA256SUMS",
+    "vendor/canvas/PROVENANCE.md",
     "cordis.patch.yml"
   ],
   "dsh": {
@@ -39,7 +41,9 @@
     "node": ">=20"
   },
   "scripts": {
+    "build:client": "node build.mjs",
     "check": "node --check index.js && for f in lib/*.js; do node --check \"$f\" || exit 1; done && node --check client.js && node --check client.canvas.js",
+    "test:unit": "node --test ../tests/bff-unit.mjs",
     "test:bff": "node ../tests/host-bff.mjs",
     "reset:test-data": "bash ../tools/reset-workbench-test-data.sh",
     "pack:dry": "npm pack --dry-run"
