@@ -5,8 +5,8 @@
 
 # 构建产物与运行时数据
 dist/
-server/target
-poc/server/target/
+# Rust 构建产物（任意层级的 target/）
+target/
 server/data
 runtime/
 *.db
