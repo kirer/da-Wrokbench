@@ -104,6 +104,21 @@ pub async fn init(pool: &Pool) -> Result<(), String> {
         .batch_execute(SCHEMA)
         .await
         .map_err(|error| format!("初始化 Postgres 表失败：{error}"))?;
+    // 为实体表补齐 hash 列（老库与新建库都兼容），用于内容增量写。
+    for table in [
+        "users",
+        "platform_groups",
+        "platforms",
+        "projects",
+        "iterations",
+        "skills",
+    ] {
+        let _ = client
+            .batch_execute(&format!(
+                "ALTER TABLE {table} ADD COLUMN IF NOT EXISTS hash TEXT"
+            ))
+            .await;
+    }
     migrate_legacy(&client)
         .await
         .map_err(|error| error.message)?;
@@ -249,6 +264,56 @@ fn read_err(error: tokio_postgres::Error) -> ApiError {
     internal(format!("读取 Postgres 状态失败：{error}"))
 }
 
+/// 按内容哈希对 (id,data,hash) 表做增量 upsert：未变化的行整体跳过。
+async fn save_hashed_pg<T: serde::Serialize>(
+    client: &deadpool_postgres::Client,
+    table: &str,
+    items: &[T],
+) -> Result<(), ApiError> {
+    if items.is_empty() {
+        return Ok(());
+    }
+    let mut existing: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for row in client
+        .query(&format!("SELECT id, hash FROM {table}"), &[])
+        .await
+        .map_err(read_err)?
+    {
+        let id: String = row.get(0);
+        let hash: Option<String> = row.get(1);
+        if let Some(hash) = hash {
+            existing.insert(id, hash);
+        }
+    }
+    let sql = format!(
+        "INSERT INTO {table}(id,data,hash) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=excluded.data, hash=excluded.hash"
+    );
+    for item in items {
+        let data = serde_json::to_value(item).unwrap_or(Value::Null);
+        let id = data
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if id.is_empty() {
+            continue;
+        }
+        let hash = db::hash_str(&data.to_string());
+        if existing
+            .get(&id)
+            .map(|stored| stored == &hash)
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        client
+            .execute(&sql, &[&id, &data, &hash])
+            .await
+            .map_err(write_err)?;
+    }
+    Ok(())
+}
+
 async fn load_artifacts_pg(
     client: &deadpool_postgres::Client,
 ) -> Result<Vec<ArtifactContent>, ApiError> {
@@ -290,51 +355,13 @@ async fn persist(
     snapshot: &mut Snapshot,
 ) -> Result<(), ApiError> {
     snapshot.revision += 1;
-    for user in &snapshot.users {
-        let data = serde_json::to_value(user).unwrap_or(Value::Null);
-        client
-            .execute(
-                "INSERT INTO users(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
-                &[&user.id, &data],
-            )
-            .await
-            .map_err(write_err)?;
-    }
-    for item in &snapshot.groups {
-        let data = serde_json::to_value(item).unwrap_or(Value::Null);
-        client
-            .execute("INSERT INTO platform_groups(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data", &[&item.id, &data])
-            .await
-            .map_err(write_err)?;
-    }
-    for item in &snapshot.platforms {
-        let data = serde_json::to_value(item).unwrap_or(Value::Null);
-        client
-            .execute("INSERT INTO platforms(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data", &[&item.id, &data])
-            .await
-            .map_err(write_err)?;
-    }
-    for item in &snapshot.projects {
-        let data = serde_json::to_value(item).unwrap_or(Value::Null);
-        client
-            .execute("INSERT INTO projects(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data", &[&item.id, &data])
-            .await
-            .map_err(write_err)?;
-    }
-    for item in &snapshot.iterations {
-        let data = serde_json::to_value(item).unwrap_or(Value::Null);
-        client
-            .execute("INSERT INTO iterations(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data", &[&item.id, &data])
-            .await
-            .map_err(write_err)?;
-    }
-    for item in &snapshot.skills {
-        let data = serde_json::to_value(item).unwrap_or(Value::Null);
-        client
-            .execute("INSERT INTO skills(id,data) VALUES($1,$2) ON CONFLICT(id) DO UPDATE SET data=excluded.data", &[&item.id, &data])
-            .await
-            .map_err(write_err)?;
-    }
+    // 实体表按内容哈希增量写：未变化的行跳过，避免每次改动整表重写。
+    save_hashed_pg(client, "users", &snapshot.users).await?;
+    save_hashed_pg(client, "platform_groups", &snapshot.groups).await?;
+    save_hashed_pg(client, "platforms", &snapshot.platforms).await?;
+    save_hashed_pg(client, "projects", &snapshot.projects).await?;
+    save_hashed_pg(client, "iterations", &snapshot.iterations).await?;
+    save_hashed_pg(client, "skills", &snapshot.skills).await?;
 
     // 删除已不在快照里的需求（连同其通知）。
     let kept: Vec<String> = snapshot
