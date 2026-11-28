@@ -5,7 +5,7 @@ use crate::clientip::ClientIp;
 use crate::db;
 use crate::domain::ApiError;
 use crate::gitlab;
-use crate::store_ops::{lock_sqlite, mutate, read_snapshot};
+use crate::store_ops::{mutate, read_snapshot, with_sqlite_blocking};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
@@ -17,8 +17,11 @@ async fn webhook_delivery_seen(state: &AppState, delivery: &str) -> Result<bool,
     }
     match &state.store {
         Store::Sqlite(_) => {
-            let conn = lock_sqlite(state)?;
-            Ok(db::has_webhook_delivery(&conn, delivery)?)
+            let delivery = delivery.to_string();
+            with_sqlite_blocking(state, move |conn| {
+                Ok(db::has_webhook_delivery(conn, &delivery)?)
+            })
+            .await
         }
         Store::Postgres(pool) => crate::pg::has_webhook_delivery(pool, delivery).await,
     }

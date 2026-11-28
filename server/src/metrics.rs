@@ -51,20 +51,24 @@ pub async fn track_metrics(
 ) -> axum::response::Response {
     use std::sync::atomic::Ordering;
     state.metrics.requests.fetch_add(1, Ordering::Relaxed);
+    // SSE 等长连接不按「一次请求耗时」统计，否则客户端断开就会误报慢请求。
+    let is_stream = request.uri().path().ends_with("/events/stream");
     let started = std::time::Instant::now();
     let response = next.run(request).await;
-    let elapsed_ms = started.elapsed().as_millis() as u64;
-    state
-        .metrics
-        .duration_ms_sum
-        .fetch_add(elapsed_ms, Ordering::Relaxed);
-    if elapsed_ms > slow_threshold_ms() {
-        state.metrics.slow_requests.fetch_add(1, Ordering::Relaxed);
-        tracing::warn!(
-            "慢请求：{} ms（阈值 {} ms）",
-            elapsed_ms,
-            slow_threshold_ms()
-        );
+    if !is_stream {
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        state
+            .metrics
+            .duration_ms_sum
+            .fetch_add(elapsed_ms, Ordering::Relaxed);
+        if elapsed_ms > slow_threshold_ms() {
+            state.metrics.slow_requests.fetch_add(1, Ordering::Relaxed);
+            tracing::warn!(
+                "慢请求：{} ms（阈值 {} ms）",
+                elapsed_ms,
+                slow_threshold_ms()
+            );
+        }
     }
     if response.status().is_server_error() {
         state

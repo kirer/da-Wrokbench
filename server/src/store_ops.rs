@@ -6,20 +6,6 @@ use crate::domain::ApiError;
 use crate::models::{Event, Notification};
 use axum::http::StatusCode;
 
-pub(crate) fn lock_sqlite(
-    state: &AppState,
-) -> Result<std::sync::MutexGuard<'_, rusqlite::Connection>, ApiError> {
-    match &state.store {
-        Store::Sqlite(db) => db
-            .lock()
-            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效")),
-        Store::Postgres(_) => Err(ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "服务端配置错误：Postgres 后端不能使用 SQLite 连接",
-        )),
-    }
-}
-
 pub(crate) async fn read_snapshot(state: &AppState) -> Result<Snapshot, ApiError> {
     match &state.store {
         Store::Sqlite(db) => {

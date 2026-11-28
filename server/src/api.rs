@@ -6,9 +6,8 @@ use crate::domain::{self, ApiError};
 use crate::gitlab;
 use crate::models::*;
 use crate::store_ops::{
-    events_since, latest_event_id, lock_sqlite, mark_notifications_read, mutate,
-    notification_watermark, notifications_for, read_snapshot, state_revision, unread_notifications,
-    with_sqlite_blocking,
+    events_since, latest_event_id, mark_notifications_read, mutate, notification_watermark,
+    notifications_for, read_snapshot, state_revision, unread_notifications, with_sqlite_blocking,
 };
 use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
@@ -377,13 +376,13 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     };
     // 只做数据库连通性探测，不读取整份快照，避免健康检查随数据量放大开销。
     let probe: Result<(), ApiError> = match &state.store {
-        Store::Sqlite(db) => db
-            .lock()
-            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "服务端状态锁失效"))
-            .and_then(|conn| {
+        Store::Sqlite(_) => {
+            with_sqlite_blocking(&state, |conn| {
                 conn.query_row("SELECT 1", [], |_row| Ok(()))
                     .map_err(ApiError::from)
-            }),
+            })
+            .await
+        }
         Store::Postgres(pool) => crate::pg::ping(pool).await,
     };
     match probe {
@@ -1249,8 +1248,8 @@ async fn get_artifact(
     let artifact = domain::artifact_for(&snapshot, &actor, &id)?;
     let content = match &state.store {
         Store::Sqlite(_) => {
-            let conn = lock_sqlite(&state)?;
-            db::artifact_content(&conn, &id)?
+            let id = id.clone();
+            with_sqlite_blocking(&state, move |conn| Ok(db::artifact_content(conn, &id)?)).await?
         }
         Store::Postgres(pool) => {
             let (_, full) = crate::pg::load(pool, true).await?;
@@ -2281,6 +2280,9 @@ async fn events_stream(
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             match events_since(&state, cursor, 200).await {
                 Ok(mut items) if !items.is_empty() => {
+                    // 先记录本批最大 id 作为下一游标：即使整批都被权限过滤掉，游标也要前进，
+                    // 否则非管理员会卡在同一批、且大量受限事件会把后续业务事件挤出 LIMIT 窗口。
+                    let next_cursor = items.last().map(|event| event.id).unwrap_or(cursor);
                     if !is_admin {
                         items.retain(|event| {
                             !event.kind.starts_with("admin.")
@@ -2289,11 +2291,13 @@ async fn events_stream(
                         });
                     }
                     if items.is_empty() {
-                        return Some((Ok(Event::default().comment("ping")), cursor));
+                        return Some((Ok(Event::default().comment("ping")), next_cursor));
                     }
-                    let last = items.last().map(|event| event.id).unwrap_or(cursor);
                     let data = serde_json::to_string(&items).unwrap_or_else(|_| "[]".to_string());
-                    Some((Ok(Event::default().event("workbench").data(data)), last))
+                    Some((
+                        Ok(Event::default().event("workbench").data(data)),
+                        next_cursor,
+                    ))
                 }
                 _ => Some((Ok(Event::default().comment("ping")), cursor)),
             }
